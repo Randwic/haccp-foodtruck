@@ -1,5 +1,5 @@
-import { useId, useState, type FormEvent } from 'react'
-import { Button } from '../../ui/components/index.ts'
+import { useState, type FormEvent } from 'react'
+import { Button, Notice, TextField } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -16,54 +16,11 @@ function validate(v: Record<Field, string>): Errors {
   return e
 }
 
-function TextField(props: {
-  label: string
-  hint?: string
-  value: string
-  error?: string
-  onChange: (v: string) => void
-  mono?: boolean
-  autoFocus?: boolean
-}) {
-  const id = useId()
-  const hintId = `${id}-hint`
-  const errId = `${id}-err`
-  return (
-    <div>
-      <label htmlFor={id} className="mb-2 block text-xl font-semibold text-white">
-        {props.label}
-      </label>
-      {props.hint && (
-        <p id={hintId} className="mb-2 text-base text-slate-300">
-          {props.hint}
-        </p>
-      )}
-      <input
-        id={id}
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-        autoFocus={props.autoFocus}
-        autoComplete="off"
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        aria-invalid={props.error ? true : undefined}
-        aria-describedby={[props.hint ? hintId : '', props.error ? errId : ''].filter(Boolean).join(' ') || undefined}
-        className={`min-h-16 w-full rounded-2xl bg-slate-800 px-4 text-xl text-white ring-2 placeholder:text-slate-400 ${
-          props.error ? 'ring-red-400' : 'ring-slate-600'
-        } ${props.mono ? 'font-mono text-lg' : ''}`}
-      />
-      {props.error && (
-        <p id={errId} className="mt-2 text-lg font-semibold text-red-300">
-          {props.error}
-        </p>
-      )}
-    </div>
-  )
-}
-
-/** Enrôlement de l'appareil : à faire une seule fois, avec les informations fournies par le gérant. */
-export function EnrollScreen({ onEnrolled }: { onEnrolled: () => void }) {
+/**
+ * Configuration avancée : enrôlement manuel avec un identifiant + jeton d'appareil déjà créés
+ * (dépannage). Le parcours normal est SetupFlow (connexion gérant → enrôlement automatique).
+ */
+export function EnrollScreen({ onEnrolled, onBack }: { onEnrolled: () => void; onBack?: () => void }) {
   const core = useCore()
   const [values, setValues] = useState<Record<Field, string>>({ name: '', device_id: '', device_token: '' })
   const [errors, setErrors] = useState<Errors>({})
@@ -94,19 +51,22 @@ export function EnrollScreen({ onEnrolled }: { onEnrolled: () => void }) {
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-8 sm:py-12">
-      <h1 className="text-3xl font-bold text-white sm:text-4xl">Enregistrer cet appareil</h1>
+      {onBack && (
+        <Button variant="ghost" onClick={onBack} className="mb-6">
+          ← Retour
+        </Button>
+      )}
+      <h1 className="text-3xl font-bold text-white sm:text-4xl">Configuration avancée</h1>
       <p className="mt-3 text-lg text-slate-200">
-        À faire une seule fois. Le gérant crée l’appareil depuis son compte et vous donne un <strong>identifiant</strong> et un <strong>jeton</strong> à coller ici.
-        Une connexion Internet est nécessaire.
+        Enregistrement manuel de cet appareil avec un <strong>identifiant</strong> et un <strong>jeton</strong> d’appareil déjà créés par le gérant
+        (dépannage). Une connexion Internet est nécessaire.
       </p>
       <form onSubmit={submit} noValidate className="mt-8 space-y-6" aria-describedby={submitError ? 'enroll-error' : undefined}>
         <TextField label="Nom de l’appareil" hint="Ex. « iPad cuisine », « iPhone du gérant »." value={values.name} onChange={set('name')} error={errors.name} />
         <TextField label="Identifiant d’appareil" value={values.device_id} onChange={set('device_id')} error={errors.device_id} mono />
         <TextField label="Jeton d’appareil" hint="Il n’est affiché qu’une fois chez le gérant : ne le partagez pas." value={values.device_token} onChange={set('device_token')} error={errors.device_token} mono />
         {submitError && (
-          <div id="enroll-error" role="alert" className="rounded-2xl bg-red-950 px-5 py-4 text-lg font-semibold text-red-100 ring-2 ring-red-400">
-            {submitError}
-          </div>
+          <Notice id="enroll-error">{submitError}</Notice>
         )}
         <Button type="submit" size="lg" block disabled={busy}>
           {busy ? 'Vérification…' : 'Enregistrer l’appareil'}

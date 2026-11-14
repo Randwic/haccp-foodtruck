@@ -1,0 +1,225 @@
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { hashPin } from '../../core/index.ts'
+import { errorText, type ManagedStaff } from '../../manager/api.ts'
+import { useManager } from '../../manager/ManagerContext.tsx'
+import { Badge, Button, Modal, Notice, PinSetup, TextField } from '../../ui/components/index.ts'
+import { initials } from '../../ui/format.ts'
+import { ConfirmModal, SectionTitle, useManagement } from './common.tsx'
+
+type Dialog = { kind: 'add' } | { kind: 'pin'; s: ManagedStaff } | { kind: 'deactivate'; s: ManagedStaff } | { kind: 'reactivate'; s: ManagedStaff } | null
+
+/** Gestion › Équipe : liste, ajout avec PIN, désactivation/réactivation, changement de PIN. */
+export function StaffSection() {
+  const manager = useManager()
+  const { run, meId } = useManagement()
+  const [items, setItems] = useState<ManagedStaff[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [dialog, setDialog] = useState<Dialog>(null)
+
+  const load = useCallback(async () => {
+    try {
+      setItems(await manager.listStaff())
+      setLoadError(null)
+    } catch (err) {
+      setLoadError(errorText(err))
+    }
+  }, [manager])
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const active = items?.filter((s) => s.active) ?? []
+  const inactive = items?.filter((s) => !s.active) ?? []
+  const activeManagers = active.filter((s) => s.role === 'manager').length
+  const close = () => setDialog(null)
+  const after = async () => {
+    close()
+    await load()
+  }
+
+  const card = (s: ManagedStaff) => {
+    const me = s.id === meId
+    const lastManager = s.role === 'manager' && activeManagers <= 1
+    return (
+      <li key={s.id} className={`flex flex-col gap-4 rounded-3xl p-5 ring-1 sm:flex-row sm:items-center ${s.active ? 'bg-slate-800 ring-slate-600' : 'bg-slate-900 ring-slate-800'}`}>
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <span aria-hidden="true" className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-black ${s.active ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
+            {initials(s.display_name)}
+          </span>
+          <div className="min-w-0">
+            <h3 className={`break-words text-xl font-bold ${s.active ? 'text-white' : 'text-slate-300'}`}>
+              {s.display_name}
+              {me && <span className="ml-2 text-base font-semibold text-sky-200">(vous)</span>}
+            </h3>
+            <div className="mt-1 flex flex-wrap gap-2">
+              <Badge tone={s.role === 'manager' ? 'info' : 'neutral'}>{s.role === 'manager' ? 'Gérant' : 'Équipier'}</Badge>
+              {!s.active && <Badge tone="warn">Désactivé</Badge>}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {s.active ? (
+            <>
+              <Button variant="secondary" onClick={() => setDialog({ kind: 'pin', s })} aria-label={`Changer le PIN – ${s.display_name}`}>
+                Changer le PIN
+              </Button>
+              {!me && !lastManager && (
+                <Button variant="ghost" onClick={() => setDialog({ kind: 'deactivate', s })} aria-label={`Désactiver – ${s.display_name}`}>
+                  Désactiver
+                </Button>
+              )}
+            </>
+          ) : (
+            <Button variant="secondary" onClick={() => setDialog({ kind: 'reactivate', s })} aria-label={`Réactiver – ${s.display_name}`}>
+              Réactiver
+            </Button>
+          )}
+        </div>
+      </li>
+    )
+  }
+
+  return (
+    <section aria-labelledby="staff-title">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <h2 id="staff-title" className="sr-only">
+          Équipe
+        </h2>
+        <p className="max-w-xl text-lg text-slate-300">Chaque personne déverrouille l’app avec son code PIN : ses saisies portent son nom.</p>
+        <Button onClick={() => setDialog({ kind: 'add' })} icon={<span aria-hidden="true">＋</span>}>
+          Ajouter un employé
+        </Button>
+      </div>
+      {loadError && <Notice>{loadError}</Notice>}
+      {items === null && !loadError && <p className="text-lg text-slate-300">Chargement…</p>}
+      {items !== null && (
+        <>
+          <SectionTitle count={active.length}>Actifs</SectionTitle>
+          <ul className="grid gap-4 lg:grid-cols-2">{active.map(card)}</ul>
+          {inactive.length > 0 && (
+            <>
+              <SectionTitle count={inactive.length}>Désactivés</SectionTitle>
+              <ul className="grid gap-4 lg:grid-cols-2">{inactive.map(card)}</ul>
+            </>
+          )}
+        </>
+      )}
+
+      {dialog?.kind === 'add' && <AddStaffModal onClose={close} onDone={after} />}
+      {dialog?.kind === 'pin' && <ChangePinModal s={dialog.s} me={dialog.s.id === meId} onClose={close} onDone={after} />}
+      {dialog?.kind === 'deactivate' && (
+        <ConfirmModal
+          open
+          title="Désactiver ce compte ?"
+          confirmLabel="Désactiver"
+          danger
+          onClose={close}
+          onConfirm={() => run(() => manager.updateStaff(dialog.s.id, { active: false }), `${dialog.s.display_name} est désactivé`).then(load)}
+        >
+          <p>
+            <strong>{dialog.s.display_name}</strong> ne pourra plus déverrouiller l’app. Ses saisies passées restent dans le registre, à son nom. Vous pourrez le réactiver.
+          </p>
+        </ConfirmModal>
+      )}
+      {dialog?.kind === 'reactivate' && (
+        <ConfirmModal
+          open
+          title="Réactiver ce compte ?"
+          confirmLabel="Réactiver"
+          onClose={close}
+          onConfirm={() => run(() => manager.updateStaff(dialog.s.id, { active: true }), `${dialog.s.display_name} est réactivé`).then(load)}
+        >
+          <p>
+            <strong>{dialog.s.display_name}</strong> pourra de nouveau déverrouiller l’app avec son ancien code PIN.
+          </p>
+        </ConfirmModal>
+      )}
+    </section>
+  )
+}
+
+function AddStaffModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const manager = useManager()
+  const { run } = useManagement()
+  const [step, setStep] = useState<'name' | 'pin'>('name')
+  const [name, setName] = useState('')
+  const [fieldError, setFieldError] = useState<string>()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const next = (e: FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return setFieldError('Indiquez le prénom (et le nom si besoin).')
+    setStep('pin')
+  }
+  const save = async (pin: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const hashed = await hashPin(pin)
+      await run(() => manager.addStaff({ display_name: name.trim(), role: 'staff', ...hashed }), `${name.trim()} a été ajouté à l’équipe`)
+      onDone()
+    } catch (err) {
+      setError(errorText(err))
+      setBusy(false)
+      setStep('pin')
+    }
+  }
+
+  return (
+    <Modal open title="Ajouter un employé" onClose={onClose}>
+      {step === 'name' ? (
+        <form onSubmit={next} noValidate className="space-y-6">
+          <TextField label="Prénom et nom" hint="Tel qu’il apparaîtra sur l’écran de verrouillage et les registres." value={name} onChange={(v) => { setName(v); setFieldError(undefined) }} error={fieldError} autoCapitalize="words" autoFocus />
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button variant="secondary" onClick={onClose}>
+              Annuler
+            </Button>
+            <Button type="submit">Continuer</Button>
+          </div>
+        </form>
+      ) : (
+        <div className="space-y-4">
+          <PinSetup minLength={4} maxLength={6} onComplete={save} disabled={busy} who={name.trim()} />
+          {busy && <p className="text-center text-lg text-slate-300">Enregistrement…</p>}
+          {error && <Notice>{error}</Notice>}
+          <div className="text-center">
+            <Button variant="ghost" onClick={() => setStep('name')} disabled={busy}>
+              ← Modifier le nom
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+function ChangePinModal({ s, me, onClose, onDone }: { s: ManagedStaff; me: boolean; onClose: () => void; onDone: () => void }) {
+  const manager = useManager()
+  const { run } = useManagement()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const isManager = s.role === 'manager'
+  const save = async (pin: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const hashed = await hashPin(pin)
+      await run(() => manager.updateStaff(s.id, hashed), me ? 'Votre code PIN a été changé' : `Code PIN de ${s.display_name} changé`)
+      onDone()
+    } catch (err) {
+      setError(errorText(err))
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal open title={me ? 'Changer mon code PIN' : `Changer le PIN – ${s.display_name}`} onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-base text-slate-300">L’ancien code ne fonctionnera plus sur les appareils dès leur prochaine synchronisation.</p>
+        <PinSetup minLength={isManager ? 6 : 4} maxLength={6} onComplete={save} disabled={busy} who={me ? undefined : s.display_name} />
+        {busy && <p className="text-center text-lg text-slate-300">Enregistrement…</p>}
+        {error && <Notice>{error}</Notice>}
+      </div>
+    </Modal>
+  )
+}

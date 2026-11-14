@@ -11,12 +11,15 @@ const UPCOMING = [
 ] as const
 
 /** Accueil « Aujourd'hui » : tuiles des modules. */
-export function TodayScreen({ onOpenSystemTest }: { onOpenSystemTest: () => void }) {
+export function TodayScreen({ onOpenSystemTest, onOpenManagement }: { onOpenSystemTest: () => void; onOpenManagement?: () => void }) {
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-5 sm:py-6">
       <h1 className="mb-5 text-3xl font-bold text-white">Aujourd’hui</h1>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Tile title="Test d’enregistrement" icon="✅" description="Vérifier saisie et synchro" onClick={onOpenSystemTest} className="col-span-2 lg:col-span-1" />
+        {onOpenManagement && (
+          <Tile title="Gestion" icon="🛠️" description="Équipements, équipe, réglages" onClick={onOpenManagement} />
+        )}
+        <Tile title="Test d’enregistrement" icon="✅" description="Vérifier saisie et synchro" onClick={onOpenSystemTest} className={onOpenManagement ? '' : 'col-span-2 lg:col-span-1'} />
         {UPCOMING.map((m) => (
           <Tile key={m.title} title={m.title} icon={m.icon} description={m.description} disabled />
         ))}

@@ -76,8 +76,8 @@ export const DEMO_THRESHOLDS: Threshold[] = [
   { id: '6f1c2a4e-0000-4000-8000-000000000302', equipment_id: DEMO_EQUIPMENT[1].id, check_type: 'temperature_check', min_c: null, max_c: 4, tolerance_minutes: 20, updated_at: T0 },
   { id: '6f1c2a4e-0000-4000-8000-000000000303', equipment_id: DEMO_EQUIPMENT[2].id, check_type: 'temperature_check', min_c: null, max_c: -18, tolerance_minutes: 30, updated_at: T0 },
   { id: '6f1c2a4e-0000-4000-8000-000000000304', equipment_id: null, check_type: 'hot_holding', min_c: 63, max_c: null, tolerance_minutes: 0, updated_at: T0 },
-  { id: '6f1c2a4e-0000-4000-8000-000000000305', equipment_id: null, check_type: 'cooling', min_c: null, max_c: 10, tolerance_minutes: 0, updated_at: T0 },
-  { id: '6f1c2a4e-0000-4000-8000-000000000306', equipment_id: null, check_type: 'reheating', min_c: 63, max_c: null, tolerance_minutes: 0, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000305', equipment_id: null, check_type: 'cooling', min_c: null, max_c: 10, tolerance_minutes: 120, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000306', equipment_id: null, check_type: 'reheating', min_c: 63, max_c: null, tolerance_minutes: 60, updated_at: T0 },
   { id: '6f1c2a4e-0000-4000-8000-000000000307', equipment_id: null, check_type: 'cooking_check', min_c: 70, max_c: null, tolerance_minutes: 0, updated_at: T0 },
 ]
 

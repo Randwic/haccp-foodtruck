@@ -83,7 +83,7 @@ describe('Refroidissement rapide', () => {
   it('hors délai : non conforme, action corrective obligatoire liée à la clôture, alerte d’échéance', async () => {
     const core = setup({ initialRecords: [seed('cooling', '2026-11-14T06:00:00.000Z', { batch_id: B1, step: 'start', product: 'Riz', value_c: 80, source: 'manual' })] })
     expect(await screen.findByRole('button', { name: 'Refroidissement : 1 en cours · dépassé de 30 min' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /1 refroidissement en cours · dépassé de 30 min/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '1 refroidissement en cours · dépassé de 30 min — Riz' })).toBeInTheDocument()
     // Échéance passée, app ouverte : sans permission de notification → toast.
     expect(await screen.findByText('Refroidissement rapide : délai dépassé — Riz')).toBeInTheDocument()
 
@@ -118,7 +118,7 @@ describe('Refroidissement rapide', () => {
     minutesLater(48)
     renderWithCore(core)
     expect(await screen.findByRole('button', { name: 'Refroidissement : 1 en cours · 1 h 12 restante' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Lots en cours' })).toHaveTextContent('1 refroidissement en cours · 1 h 12 restante — Bolognaise')
+    expect(screen.getByRole('button', { name: '1 refroidissement en cours · 1 h 12 restante — Bolognaise' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /1 refroidissement en cours/ }))
     expect(await screen.findByRole('article', { name: 'Bolognaise, 1 h 12 restante' })).toBeInTheDocument()
   })

@@ -12,7 +12,8 @@ L'interface ne dépend que de `CoreApi` (`app/src/core/api.ts`, via `useCore()`)
 | `?demo=…`, `?sync=…`, `?staff=…` | `createFakeCore()` | mock « seeded », déjà connecté |
 
 Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|error|stale|rejected|offline`, `?staff=empty`,
-`&releves=demo` (7 jours de relevés, une correction, une action corrective) ou `&releves=alerte` (+ relevé hors seuil sans action ce matin).
+`&releves=demo` (7 jours de relevés, une correction, une action corrective) ou `&releves=alerte` (+ relevé hors seuil sans action ce matin),
+`&procedes=demo` (lots en cours, cuissons, décongélations, historique avec correction et action) ou `&procedes=alerte` (+ refroidissement en retard, cuisson hors seuil sans action).
 Équipiers factices : Gérant `123456`, Équipier `654321` (blocage 5 min après 5 erreurs).
 
 ## Écrans (`app/src/features/`)
@@ -20,9 +21,10 @@ Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|erro
 |---|---|---|
 | Premier lancement | `setup/SetupFlow.tsx` | si `getDevice()` est null. Hors-ligne → « Connectez l’appareil à Internet pour la première configuration ». `needs_bootstrap` → `BootstrapScreen` (4 étapes : vous, compte email + mot de passe ×2 ≥ 12 car. avec force, PIN 6 chiffres ×2, nom de l’appareil deviné « iPad »/« iPhone » + avertissement « inscription fermée définitivement ») → bootstrap → connexion → `device-enroll` → `core.enrollDevice` → `syncNow`. Sinon `ManagerLoginScreen` (email, mot de passe, nom d’appareil). 409 → bascule vers la connexion (email prérempli) ; 429, 422, mauvais mot de passe : messages lisibles |
 | Configuration avancée | `enrollment/EnrollScreen.tsx` | ancien enrôlement manuel (identifiant + jeton), lien en bas de la connexion gérant |
-| Gestion | `management/ManagementScreen.tsx` | tuile « Gestion » sur l’accueil si l’équipier déverrouillé est `manager`. Exige Internet + session gérant (sinon mot de passe redemandé, aussi si la session expire). Onglets **Équipements** (`EquipmentSection` : ajout nom + type, seuils préremplis frigo ≤ 4 °C / congélateur ≤ −18 °C « à confirmer selon votre PMS », renommer, retirer/remettre en service, seuils min/max/tolérance avec bouton ±), **Équipe** (`StaffSection` : ajout + PIN ×2, changer le PIN, désactiver/réactiver ; impossible de se désactiver soi-même), **Réglages** (`SettingsSection` : nom, heures des relevés `daily_check_times` 1 à 6 « HH:MM » sans doublon, verrouillage auto 1–30 min, déconnexion gérant). Confirmation pour chaque action sensible ; `core.syncNow()` après chaque écriture |
+| Gestion | `management/ManagementScreen.tsx` | tuile « Gestion » sur l’accueil si l’équipier déverrouillé est `manager`. Exige Internet + session gérant (sinon mot de passe redemandé, aussi si la session expire). Onglets **Équipements** (`EquipmentSection` : ajout nom + type, seuils préremplis frigo ≤ 4 °C / congélateur ≤ −18 °C « à confirmer selon votre PMS », renommer, retirer/remettre en service, seuils min/max/tolérance avec bouton ±), **Équipe** (`StaffSection` : ajout + PIN ×2, changer le PIN, désactiver/réactiver ; impossible de se désactiver soi-même), **Réglages** (`SettingsSection` : nom, heures des relevés `daily_check_times` 1 à 6 « HH:MM » sans doublon, verrouillage auto 1–30 min, interrupteur « Créneau oublié la veille reste à faire » (`missed_slot_carry_over`), « DLC après décongélation (jours) » 0–30 (`thaw_dlc_days`), déconnexion gérant). Confirmation pour chaque action sensible ; `core.syncNow()` après chaque écriture |
 | Verrouillage | `lock/LockScreen.tsx` | tuiles équipiers (initiales), pavé PIN, « PIN incorrect », « Bloqué, réessayez dans 4 min 32 s » ; équipe vide → message + « Réessayer » (`syncNow()`), rechargement auto sur `onSyncStatusChange` |
-| Aujourd'hui | `today/TodayScreen.tsx` | bandeau rouge si relevé hors seuil sans action corrective ; tuile **Températures** avec compteur réel (« 2 relevés à faire » ambre, « Tout est fait » vert, « 1 action corrective manquante » rouge, toujours avec icône) ; autres modules « Bientôt » ; outils |
+| Aujourd'hui | `today/TodayScreen.tsx` | bandeaux rouges (relevé ou procédé hors seuil sans action corrective) ; rappel des lots chronométrés en cours (« 1 refroidissement en cours · 1 h 12 restante », ambre puis rouge) ; tuiles **Températures**, **Refroidissement**, **Remise en température**, **Cuisson & maintien**, **Décongélation** avec compteurs réels (icône + texte) ; autres modules « Bientôt » ; outils |
+| Procédés | `processes/` | voir « Module Procédés » ci-dessous |
 | Températures | `temperatures/TemperaturesScreen.tsx` | voir « Module Températures » ci-dessous |
 | Test d'enregistrement | `system-test/SystemTestPanel.tsx` | `addRecord('system_test')`, 20 derniers enregistrements (heure, auteur, statut) |
 
@@ -48,6 +50,25 @@ Enchaînement, en-tête et verrouillage auto : `app/src/ui/AppShell.tsx`, `AppHe
   `features/corrective-action/CorrectiveActionFlow.tsx` (`relatedRecordId`, `subject`, `detail`, `onDone`) et
   `actions.ts` (libellés des 6 actions du contrat).
 
+## Module Procédés (`app/src/features/processes/`)
+- **Calcul pur** (testé dans `processes.test.ts`) : `thresholds.ts` (seuil générique `equipment_id` null du `check_type`,
+  sinon `DEFAULT_PROCESS_THRESHOLDS` ; durée max = `tolerance_minutes`, 0 → défaut), `entries.ts` (enregistrements
+  d'origine + corrections en chaîne + actions correctives ; lots reconstruits par `batch_id` : ils survivent au
+  rechargement), `timing.ts` (`evaluateEnd` : `in_range` et `duration_min` calculés par l'app, minutes arrondies au-dessus,
+  bornées à 1440 ; chronomètre ok → ambre dans le dernier quart du délai (≥ 15 min) → rouge une fois dépassé, échéance
+  incluse ; DLC par défaut = date locale de fin + `settings.thaw_dlc_days`), `notifications.ts` (échéance signalée une
+  fois par lot : `Notification` via le service worker si permise — demandée au démarrage d'un lot —, sinon toast + vibration).
+- **Données** : `useProcessData.ts` (équipements, seuils, réglages, 9 jours de `cooling`/`reheating`/`thawing`/
+  `hot_holding`/`cooking_check`/`correction`/`corrective_action`, rechargés à chaque synchro) ; `DeadlineWatcher`
+  monté dans `AppShell` tant qu'un équipier est connecté.
+- **Écrans** : `TimedProcessScreen` (refroidissement et remise en température : lots en cours avec chronomètre et barre,
+  démarrage — avertissement si départ < 63 °C —, mesure intermédiaire, clôture avec aperçu « objectif / délai »,
+  action corrective obligatoire liée à l'étape `end`, historique par lot, correction d'une étape), `CookingScreen`
+  (cuisson à cœur et maintien au chaud, suggestions des produits récents, équipement `hot_holding` facultatif),
+  `ThawingScreen` (produit + frigo actif, décongélations en cours, fin avec DLC modifiable et raccourcis J+n,
+  correction de la DLC). Corrections : `CorrectionForms.tsx` (motif obligatoire, remplacement complet, original barré).
+  Tous les payloads passent par `validatePayload` avant `addRecord`.
+
 ## Synchro et PWA (`app/src/ui/`)
 - `SyncIndicator.tsx` + `syncState.ts` : vert « Tout est synchronisé », orange « N saisies en attente »,
   rouge si erreur, saisies refusées ou attente > 24 h ; détail + « Synchroniser maintenant » au toucher.
@@ -65,7 +86,10 @@ Thème clair/sombre automatique, contrastes AA, focus cyan visible, zones sûres
 ## Tests
 `cd app && npx vitest run` — premier lancement (création complète avec vrai core, 409, 429, mauvais mot de passe, hors-ligne, serveur injoignable), configuration avancée, Gestion (accès, session expirée, équipements, seuils, équipe, réglages, répercussion dans la base locale), PIN OK/KO/bloqué, équipe vide, verrouillage auto, synchro, enregistrement test, températures (saisie conforme, hors seuil →
 action corrective obligatoire, action manquante signalée après rechargement, correction avec original barré, correction
-hors seuil → action, compteur de l'accueil), créneaux (Europe/Paris, changements d'heure), heures de relevé (Réglages).
+hors seuil → action, compteur de l'accueil), créneaux (Europe/Paris, changements d'heure, report du créneau oublié
+désactivable), heures de relevé, report et DLC après décongélation (Réglages), procédés (refroidissement conforme, hors délai →
+action corrective, lot en cours après rechargement, remise en température, cuisson hors seuil, décongélation avec DLC,
+correction d'une étape, compteurs de l'accueil).
 
 ## Identité visuelle (Space Diner)
 - **Jetons** : `app/src/ui/theme.css` — variables CSS (`--canvas`, `--surface`, `--elevated`, `--pressed`, `--sunken`,

@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from 'react'
 import type { HaccpRecord, RecordType } from '../../../../shared/types.ts'
 import { LIMITS, validatePayload, type PayloadContext } from '../../../../shared/validation.ts'
-import { Badge, Button, Notice, TextField, useToast } from '../../ui/components/index.ts'
+import { Badge, Button, Notice, TextField } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { formatTime } from '../../ui/format.ts'
 import { IconCheck, IconChevronLeft, IconEdit, IconError, IconOk, IconSyncPending, IconWarn } from '../../ui/icons.tsx'
@@ -249,4 +249,3 @@ export function useAuthorName(staff: readonly { id: string; display_name: string
   return (id: string) => staff.find((s) => s.id === id)?.display_name ?? 'Ancien membre'
 }
 
-export { useToast }

@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import type { HotHoldingPayload } from '../../../../shared/payloads.ts'
 import type { HaccpRecord } from '../../../../shared/types.ts'
-import { Button, Notice, TemperatureInput } from '../../ui/components/index.ts'
+import { Button, Notice, TemperatureInput, useToast } from '../../ui/components/index.ts'
 import { formatTime } from '../../ui/format.ts'
 import { IconCheck, IconCooking, IconEdit, IconError, IconFlame, IconHistory, IconPlus } from '../../ui/icons.tsx'
 import { describeThreshold, formatTemperature, isInRange } from '../../ui/temperature.ts'
@@ -26,14 +26,14 @@ import {
   entryRecords,
   useAuthorName,
   useRecordSaver,
-  useToast,
+
 } from './common.tsx'
 import { TemperatureCorrection } from './CorrectionForms.tsx'
 import { recentProducts, type SpotEntry } from './entries.ts'
 import type { SpotKind } from './thresholds.ts'
 import { PROCESS_HISTORY_DAYS, useProcessStatus, type ProcessData } from './useProcessData.ts'
 
-export const SPOT_LABELS: Record<SpotKind, { title: string; short: string; hint: string; defaults: readonly string[] }> = {
+const SPOT_LABELS: Record<SpotKind, { title: string; short: string; hint: string; defaults: readonly string[] }> = {
   cooking_check: {
     title: 'Cuisson à cœur',
     short: 'Cuisson',

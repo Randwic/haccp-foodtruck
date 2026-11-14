@@ -19,10 +19,10 @@ import {
   IconThawing,
   IconTimer,
 } from '../../ui/icons.tsx'
-import { TIMED_LABELS } from '../processes/TimedProcessScreen.tsx'
+import { TIMED_LABELS } from '../processes/labels.ts'
 import type { TimedKind, TimedRule } from '../processes/thresholds.ts'
 import { describeThreshold } from '../../ui/temperature.ts'
-import { formatMinutes, remainingLabel, type TimedSummary } from '../processes/timing.ts'
+import { formatMinutes, plainSpaces, remainingLabel, type TimedSummary } from '../processes/timing.ts'
 import { useProcessStatus, type ProcessSummary } from '../processes/useProcessData.ts'
 import { plural, type TemperatureSummary } from '../temperatures/schedule.ts'
 import { useTemperatureStatus } from '../temperatures/useTemperatureData.ts'
@@ -124,7 +124,7 @@ function tileTone(lines: StatusLine[] | null): 'danger' | 'warn' | undefined {
   return undefined
 }
 
-const ariaOf = (title: string, lines: StatusLine[] | null) => (lines ? `${title} : ${lines.map((l) => l.text).join(', ')}` : title)
+const ariaOf = (title: string, lines: StatusLine[] | null) => (lines ? plainSpaces(`${title} : ${lines.map((l) => l.text).join(', ')}`) : title)
 
 /** Rappel des lots chronométrés en cours (ambre si l'échéance approche, rouge si dépassée). */
 function RunningReminder({ kind, summary, onOpen }: { kind: TimedKind; summary: TimedSummary; onOpen: () => void }) {
@@ -137,6 +137,7 @@ function RunningReminder({ kind, summary, onOpen }: { kind: TimedKind; summary: 
     <button
       type="button"
       onClick={onOpen}
+      aria-label={plainSpaces(`${text} — ${summary.next.batch.product}`)}
       className={`flex min-h-16 w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-[background-color,transform] active:scale-[0.99] active:bg-pressed sm:px-5 ${cls}`}
     >
       {u === 'overdue' ? <IconError size={22} className={`shrink-0 ${iconCls}`} /> : <IconTimer size={22} className={`shrink-0 ${iconCls}`} />}

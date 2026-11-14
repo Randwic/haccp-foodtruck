@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useToast } from '../../ui/components/index.ts'
 import { loadNotified, newlyOverdue, saveNotified, showSystemNotification, vibrate } from './notifications.ts'
-import { TIMED_LABELS } from './TimedProcessScreen.tsx'
+import { TIMED_LABELS } from './labels.ts'
 import type { TimedKind } from './thresholds.ts'
 import { formatMinutes } from './timing.ts'
 import { useProcessStatus } from './useProcessData.ts'

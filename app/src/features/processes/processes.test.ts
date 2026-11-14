@@ -20,6 +20,8 @@ const th = (check_type: Threshold['check_type'], min_c: number | null, max_c: nu
   tolerance_minutes,
   updated_at: '',
 })
+// Libellés comparés avec des espaces ordinaires (les insécables évitent les coupures à l’écran).
+const lbl = (c: Parameters<typeof remainingLabel>[0]) => remainingLabel(c).replace(/\u00a0/g, ' ')
 const B1 = '11111111-1111-4111-8111-111111111111'
 
 describe('seuils des procédés', () => {
@@ -53,13 +55,19 @@ describe('délais et conformité', () => {
     const start = '2026-11-14T10:00:00.000Z'
     const at = (iso: string) => countdown(start, rule, new Date(iso))
     expect(at('2026-11-14T10:48:00.000Z')).toMatchObject({ urgency: 'ok', progress: 0.4 })
-    expect(remainingLabel(at('2026-11-14T10:48:00.000Z'))).toBe('1 h 12 restante')
+    expect(lbl(at('2026-11-14T10:48:00.000Z'))).toBe('1 h 12 restante')
     expect(at('2026-11-14T11:31:00.000Z').urgency).toBe('soon')
-    expect(remainingLabel(at('2026-11-14T11:31:00.000Z'))).toBe('29 min restantes')
-    expect(remainingLabel(at('2026-11-14T10:00:00.000Z'))).toBe('2 h restantes')
+    expect(lbl(at('2026-11-14T11:31:00.000Z'))).toBe('29 min restantes')
+    expect(lbl(at('2026-11-14T10:00:00.000Z'))).toBe('2 h restantes')
     expect(at('2026-11-14T12:08:00.000Z')).toMatchObject({ urgency: 'overdue', progress: 1 })
-    expect(remainingLabel(at('2026-11-14T12:08:00.000Z'))).toBe('dépassé de 8 min')
-    expect(formatMinutes(90 * 60_000)).toBe('1 h 30')
+    expect(lbl(at('2026-11-14T12:08:00.000Z'))).toBe('dépassé de 8 min')
+    expect(formatMinutes(90 * 60_000)).toBe('1\u00a0h\u00a030')
+    // Écoulé + restant = délai, avec les minutes arrondies au-dessus (comme duration_min).
+    const mid = at('2026-11-14T10:47:30.000Z')
+    expect([mid.elapsedMin, lbl(mid)]).toEqual([48, '1 h 12 restante'])
+    expect(at('2026-11-14T12:00:00.000Z').urgency).toBe('soon') // échéance incluse
+    expect(lbl(at('2026-11-14T12:00:00.000Z'))).toBe('moins d’1 min restante')
+    expect(lbl(at('2026-11-14T12:00:20.000Z'))).toBe('dépassé de 1 min')
   })
 
   it('DLC par défaut : date locale de fin + N jours', () => {

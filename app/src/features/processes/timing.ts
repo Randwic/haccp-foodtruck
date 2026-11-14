@@ -35,6 +35,9 @@ export interface Countdown {
   deadline: Date
   /** Millisecondes écoulées depuis le début. */
   elapsedMs: number
+  /** Minutes écoulées, arrondies au-dessus : la valeur qui sera enregistrée en `duration_min`. */
+  elapsedMin: number
+  maxMinutes: number
   /** Millisecondes restantes avant l'échéance (négatif si dépassée). */
   remainingMs: number
   /** Avancement 0..1 (plafonné à 1). */
@@ -52,8 +55,9 @@ export function countdown(startedAt: string, rule: Pick<TimedRule, 'maxMinutes'>
   const deadline = new Date(start + rule.maxMinutes * MIN)
   const elapsedMs = Math.max(0, now.getTime() - start)
   const remainingMs = deadline.getTime() - now.getTime()
-  const urgency: Urgency = remainingMs <= 0 ? 'overdue' : remainingMs <= soonThresholdMinutes(rule.maxMinutes) * MIN ? 'soon' : 'ok'
-  return { deadline, elapsedMs, remainingMs, progress: Math.min(1, elapsedMs / (rule.maxMinutes * MIN)), urgency }
+  // Échéance incluse : clôturer à 2 h 00 pile reste dans le délai.
+  const urgency: Urgency = remainingMs < 0 ? 'overdue' : remainingMs <= soonThresholdMinutes(rule.maxMinutes) * MIN ? 'soon' : 'ok'
+  return { deadline, elapsedMs, elapsedMin: Math.ceil(elapsedMs / MIN), maxMinutes: rule.maxMinutes, remainingMs, progress: Math.min(1, elapsedMs / (rule.maxMinutes * MIN)), urgency }
 }
 
 /** « 1 h 12 », « 2 h », « 45 min », « 0 min » (minutes entières, arrondi en dessous). */
@@ -61,17 +65,30 @@ export function formatMinutes(ms: number): string {
   const total = Math.max(0, Math.floor(ms / MIN))
   const h = Math.floor(total / 60)
   const m = total % 60
-  if (h === 0) return `${m} min`
-  if (m === 0) return `${h} h`
-  return `${h} h ${String(m).padStart(2, '0')}`
+  // Espaces insécables : « 12 min » ou « 1 h 12 » ne se coupent jamais en fin de ligne.
+  if (h === 0) return `${m}\u00a0min`
+  if (m === 0) return `${h}\u00a0h`
+  return `${h}\u00a0h\u00a0${String(m).padStart(2, '0')}`
 }
 
 /** « 1 h 12 restante », « dépassé de 8 min ». */
 export function remainingLabel(c: Countdown): string {
-  if (c.remainingMs <= 0) return `dépassé de ${formatMinutes(-c.remainingMs)}`
-  const t = Math.ceil(c.remainingMs / MIN)
-  const h = Math.floor(t / 60)
-  return `${formatMinutes(t * MIN)} restante${h >= 2 || (h === 0 && t >= 2) ? 's' : ''}`
+  // Tout part des minutes écoulées arrondies au-dessus (comme duration_min) : écoulé + restant = délai.
+  const left = c.maxMinutes - c.elapsedMin
+  if (c.urgency === 'overdue') return `dépassé de ${formatMinutes(Math.max(1, -left) * MIN)}`
+  if (left <= 0) return 'moins d’1\u00a0min restante'
+  const h = Math.floor(left / 60)
+  return `${formatMinutes(left * MIN)} restante${h >= 2 || (h === 0 && left >= 2) ? 's' : ''}`
+}
+
+/** Texte pour un aria-label : espaces insécables remplacés (noms accessibles homogènes). */
+export function plainSpaces(s: string): string {
+  return s.replace(/\u00a0/g, ' ')
+}
+
+/** Minutes écoulées affichées par le chronomètre (arrondi au-dessus, comme duration_min). */
+export function elapsedLabel(c: Countdown): string {
+  return formatMinutes(c.elapsedMin * MIN)
 }
 
 // ---------- DLC après décongélation ----------

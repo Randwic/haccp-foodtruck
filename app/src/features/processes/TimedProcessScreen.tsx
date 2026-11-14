@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import type { CoolingPayload } from '../../../../shared/payloads.ts'
 import type { HaccpRecord } from '../../../../shared/types.ts'
-import { Badge, Button, Notice, TemperatureInput } from '../../ui/components/index.ts'
+import { Badge, Button, Notice, TemperatureInput, useToast } from '../../ui/components/index.ts'
 import { formatTime } from '../../ui/format.ts'
 import { IconCheck, IconCooling, IconDue, IconEdit, IconError, IconFinish, IconHistory, IconReheating, IconStart, IconTemperature, IconTimer, IconWarn } from '../../ui/icons.tsx'
 import { describeThreshold, formatTemperature, isInRange } from '../../ui/temperature.ts'
@@ -26,40 +26,18 @@ import {
   entryRecords,
   useAuthorName,
   useRecordSaver,
-  useToast,
+
 } from './common.tsx'
 import { TemperatureCorrection } from './CorrectionForms.tsx'
 import { lastValue, recentProducts, type Entry, type TimedBatch } from './entries.ts'
+import { objectiveLabel, TIMED_LABELS } from './labels.ts'
 import { requestDeadlineNotifications } from './notifications.ts'
 import type { TimedKind, TimedRule } from './thresholds.ts'
-import { countdown, evaluateEnd, formatMinutes, remainingLabel, type Countdown } from './timing.ts'
+import { countdown, elapsedLabel, plainSpaces, evaluateEnd, formatMinutes, remainingLabel, type Countdown } from './timing.ts'
 import { batchesOf, PROCESS_HISTORY_DAYS, useProcessStatus, type ProcessData } from './useProcessData.ts'
-
-export const TIMED_LABELS: Record<TimedKind, { title: string; one: string; many: string; startHint: string; defaults: readonly string[] }> = {
-  cooling: {
-    title: 'Refroidissement rapide',
-    one: 'refroidissement en cours',
-    many: 'refroidissements en cours',
-    startHint: 'Mesurez à cœur dès la sortie de cuisson, avant la mise en cellule ou au froid.',
-    defaults: ['Chili con carne', 'Sauce bolognaise', 'Riz', 'Pommes de terre'],
-  },
-  reheating: {
-    title: 'Remise en température',
-    one: 'remise en température en cours',
-    many: 'remises en température en cours',
-    startHint: 'Mesurez à cœur à la sortie du froid, juste avant de réchauffer.',
-    defaults: ['Chili con carne', 'Sauce bolognaise', 'Soupe'],
-  },
-}
 
 export function TimedIcon({ kind, size = 22 }: { kind: TimedKind; size?: number }) {
   return kind === 'cooling' ? <IconCooling size={size} /> : <IconReheating size={size} />
-}
-
-/** « De ≥ 63 °C à ≤ 10 °C en 2 h maximum ». */
-export function objectiveLabel(rule: TimedRule): string {
-  const d = formatMinutes(rule.maxMinutes * 60_000)
-  return rule.start ? `De ${describeThreshold(rule.start)} à ${describeThreshold(rule.target)} en ${d} maximum` : `${describeThreshold(rule.target)} à cœur en ${d} maximum`
 }
 
 const STEP_LABEL = { start: 'Début', check: 'Mesure', end: 'Fin' } as const
@@ -239,10 +217,10 @@ export function BatchChrono({ batch, rule, now, tz }: { batch: TimedBatch; rule:
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
         <div>
           <div className="text-[13px] font-semibold tracking-[0.06em] text-fg-subtle uppercase">Écoulé</div>
-          <div className="text-[30px] leading-none font-semibold tracking-[-0.02em] text-fg tabular-nums">{formatMinutes(c.elapsedMs)}</div>
+          <div className="text-[30px] leading-none font-semibold tracking-[-0.02em] text-fg tabular-nums">{elapsedLabel(c)}</div>
         </div>
         <div className="text-right">
-          <div className={`text-[19px] leading-tight font-semibold tabular-nums ${tone}`}>{remainingLabel(c)}</div>
+          <div className={`text-[19px] leading-tight font-semibold tabular-nums first-letter:uppercase ${tone}`}>{remainingLabel(c)}</div>
           <div className="text-[14px] text-fg-muted tabular-nums">Échéance {formatTime(c.deadline, tz)}</div>
         </div>
       </div>
@@ -358,7 +336,7 @@ function RunningCard({ batch, rule, data, now, onMeasure }: { batch: TimedBatch;
   const tz = data.timeZone
   return (
     <article
-      aria-label={`${batch.product}, ${remainingLabel(c)}`}
+      aria-label={plainSpaces(`${batch.product}, ${remainingLabel(c)}`)}
       className={`flex h-full flex-col gap-4 rounded-2xl border bg-surface p-4 shadow-card sm:p-5 ${c.urgency === 'overdue' ? 'border-danger/60' : c.urgency === 'soon' ? 'border-warn/60' : 'border-line'}`}
     >
       <div className="flex items-start gap-3">
@@ -633,9 +611,9 @@ function BatchHistoryCard({ batch, data, onCorrect, onCorrectiveAction }: { batc
   return (
     <article aria-label={`Lot ${batch.product} de ${formatTime(batch.startedAt, tz)}`} className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-3.5 sm:px-5">
-        <h3 className="min-w-0 flex-1 text-[18px] font-semibold text-fg">
+        <h3 className="min-w-0 basis-full text-[18px] font-semibold text-fg sm:flex-1 sm:basis-auto">
           {batch.product}
-          <span className="ml-2 text-[15px] font-normal text-fg-muted tabular-nums">
+          <span className="block text-[15px] font-normal text-fg-muted tabular-nums sm:ml-2 sm:inline">
             {formatTime(batch.startedAt, tz)}
             {batch.endedAt ? ` → ${formatTime(batch.endedAt, tz)} · ${formatMinutes((batch.durationMin ?? 0) * 60_000)}` : ''}
           </span>
@@ -679,6 +657,7 @@ function BatchHistoryCard({ batch, data, onCorrect, onCorrectiveAction }: { batc
               </div>
               <Button
                 variant="secondary"
+                className="max-sm:ml-20"
                 onClick={() => onCorrect(s)}
                 icon={<IconEdit size={18} />}
                 aria-label={`Corriger ${STEP_LABEL[s.payload.step].toLowerCase()} de ${formatTime(s.time, tz)} (${batch.product})`}

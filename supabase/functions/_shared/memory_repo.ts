@@ -1,6 +1,8 @@
-// Dépôt en mémoire pour les tests : reproduit les contraintes utiles de la base
-// (clé primaire records.id, unique(device_id, device_seq), server_time posé par le serveur).
+// Dépôt en mémoire pour les tests : reproduit le comportement utile de la base (trigger
+// d'insertion « filet de sécurité » avec messages `HACCP: …`, clé primaire records.id,
+// unique(device_id, device_seq), server_time / clock_suspect imposés, ancres de purge).
 import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
+import { classifyDbError, isClockSuspect } from './repo.ts'
 import type {
   ChainHead,
   DeviceRow,
@@ -26,7 +28,11 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo {
   thresholds: Threshold[] = []
   establishment: Establishment | null = null
   settings: Settings | null = null
-  records: (NewRecordRow & { server_time: string })[] = []
+  records: (NewRecordRow & { server_time: string; clock_suspect: boolean })[] = []
+  /** record_chain_anchors : dernier maillon d'un appareil dont tous les enregistrements ont été purgés. */
+  anchors: { device_id: string; device_seq: number; hash: string }[] = []
+  /** Toutes les lignes envoyées à insertRecord (y compris refusées). */
+  inserted: NewRecordRow[] = []
   managers = new Set<string>()
   jwts = new Map<string, string>() // jwt -> user id
   serverClock: () => Date = () => new Date()
@@ -56,8 +62,13 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo {
   }
   async getChainHead(deviceId: string): Promise<ChainHead | null> {
     this.count('getChainHead')
-    const mine = this.records.filter((r) => r.device_id === deviceId).sort((a, b) => b.device_seq - a.device_seq)
-    return mine[0] ? { device_seq: mine[0].device_seq, hash: mine[0].hash } : null
+    // Comme device_chain_head() : dernier enregistrement, ou l'ancre de purge s'il n'en reste aucun.
+    const candidates: ChainHead[] = [
+      ...this.records.filter((r) => r.device_id === deviceId),
+      ...this.anchors.filter((a) => a.device_id === deviceId),
+    ].map((x) => ({ device_seq: x.device_seq, hash: x.hash }))
+    candidates.sort((a, b) => b.device_seq - a.device_seq)
+    return candidates[0] ?? null
   }
   async getRecordsByIds(ids: string[]): Promise<StoredRecord[]> {
     this.count('getRecordsByIds')
@@ -72,6 +83,7 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo {
         supersedes_id: r.supersedes_id,
         server_time: r.server_time,
         clock_suspect: r.clock_suspect,
+        quarantine_reason: r.quarantine_reason,
       }))
   }
   async getStaffStatus(staffId: string) {
@@ -82,17 +94,37 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo {
   async equipmentExists(equipmentId: string): Promise<boolean> {
     return this.equipment.some((e) => e.id === equipmentId)
   }
+  /** Reproduit le trigger haccp_records_before_insert puis les contraintes d'unicité. */
   async insertRecord(row: NewRecordRow): Promise<InsertResult> {
     this.count('insertRecord')
+    this.inserted.push(structuredClone(row))
     this.beforeInsert?.(row)
     const refusal = this.rejectInsert?.(row)
-    if (refusal) return { ok: false, kind: 'rejected', detail: refusal }
-    if (this.records.some((r) => r.id === row.id || (r.device_id === row.device_id && r.device_seq === row.device_seq))) {
-      return { ok: false, kind: 'unique_violation' }
+    if (refusal) return classifyDbError('23514', refusal)
+    const raise = (code: string, msg: string) => classifyDbError(code, msg)
+
+    const serverTime = this.serverClock()
+    if (this.devices.find((d) => d.id === row.device_id)?.revoked_at) return raise('23514', `HACCP: device_revoked — appareil ${row.device_id} révoqué`)
+    if (row.quarantine_reason === null) {
+      if (!this.staff.some((s) => s.id === row.author_id)) return raise('23503', `HACCP: unknown_author — membre ${row.author_id} inconnu`)
+      if (row.supersedes_id !== null && !this.records.some((r) => r.id === row.supersedes_id)) {
+        return raise('23503', `HACCP: supersedes_not_found — enregistrement corrigé ${row.supersedes_id} introuvable`)
+      }
     }
-    const server_time = this.serverClock().toISOString()
-    this.records.push({ ...structuredClone(row), server_time })
-    return { ok: true, server_time }
+    if (row.device_seq > 1) {
+      const prev =
+        this.records.find((r) => r.device_id === row.device_id && r.device_seq === row.device_seq - 1) ??
+        this.anchors.find((a) => a.device_id === row.device_id && a.device_seq === row.device_seq - 1)
+      if (!prev) return raise('23514', `HACCP: seq_gap — maillon ${row.device_seq - 1} absent`)
+      if (prev.hash !== row.prev_hash) return raise('23514', `HACCP: broken_chain — prev_hash ne correspond pas au maillon ${row.device_seq - 1}`)
+    }
+    if (this.records.some((r) => r.id === row.id || (r.device_id === row.device_id && r.device_seq === row.device_seq))) {
+      return raise('23505', 'duplicate key value violates unique constraint')
+    }
+    const server_time = serverTime.toISOString()
+    const clock_suspect = isClockSuspect(serverTime, new Date(row.device_time), this.settings?.clock_suspect_minutes)
+    this.records.push({ ...structuredClone(row), server_time, clock_suspect })
+    return { ok: true, server_time, clock_suspect }
   }
 
   async getEstablishment() {

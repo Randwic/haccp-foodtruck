@@ -6,7 +6,9 @@ import {
   SUPPORTED_RECORD_TYPES,
   isCanonicalIsoTime,
   validatePayload,
+  validateRecordSemantics,
   validateRecordShape,
+  validateRecordStructure,
 } from './validation.ts'
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
@@ -108,6 +110,33 @@ describe('validateRecordShape', () => {
   })
   it('refuse server_time non textuel', () => {
     expectFail(validateRecordShape(baseRecord({ server_time: 5 })))
+  })
+})
+
+describe('validateRecordStructure / validateRecordSemantics (serveur : quarantaine)', () => {
+  it('un type hors contrat reste stockable (structure ok) mais refusé en sémantique', () => {
+    const r = baseRecord({ type: 'pizza' })
+    expect(validateRecordStructure(r)).toEqual({ ok: true })
+    expectFail(validateRecordSemantics(r as { type: string; supersedes_id: null }), 'unknown_type')
+  })
+  it('un type non identifiant n’est pas stockable', () => {
+    expectFail(validateRecordStructure(baseRecord({ type: 'Pizza !' })), 'invalid_payload', /^type/)
+    expectFail(validateRecordStructure(baseRecord({ type: 'x'.repeat(41) })), 'invalid_payload', /^type/)
+  })
+  it('supersedes_id incohérent avec le type : stockable, refusé en sémantique', () => {
+    const r = baseRecord({ supersedes_id: U(9) })
+    expect(validateRecordStructure(r).ok).toBe(true)
+    expectFail(validateRecordSemantics(r as { type: string; supersedes_id: string }), 'invalid_payload', /supersedes_id/)
+    expectFail(validateRecordSemantics({ type: 'correction', supersedes_id: null }), 'invalid_payload', /supersedes_id/)
+  })
+  it('un payload que jsonb ne peut pas stocker n’est pas stockable', () => {
+    expectFail(validateRecordStructure(baseRecord({ payload: { note: 'a\u0000' } })), 'invalid_payload', /nul/)
+    expectFail(validateRecordStructure(baseRecord({ payload: { a: 'x'.repeat(20_000) } })), 'invalid_payload', /volumineux/)
+  })
+  it('les champs de chaîne restent absolus', () => {
+    expectFail(validateRecordStructure(baseRecord({ hash: 'x' })), 'invalid_hash')
+    expectFail(validateRecordStructure(baseRecord({ device_seq: 0 })))
+    expectFail(validateRecordStructure(baseRecord({ supersedes_id: 'abc' })))
   })
 })
 

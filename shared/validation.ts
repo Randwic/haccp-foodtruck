@@ -114,18 +114,24 @@ const RECORD_KEYS = new Set([
 ])
 
 /**
- * Vérifie la structure d'un HaccpRecord (sans regarder le contenu du payload).
- * Raisons possibles : `unknown_type`, `invalid_hash` (format du hash), `invalid_payload` (le reste).
+ * Contrôle « stockable et chaînable » : tout ce qu'il faut pour recalculer le hash, vérifier la
+ * chaîne et insérer la ligne en base (colonnes uuid / timestamptz / jsonb). Le type n'a qu'à être
+ * un identifiant court : un type inconnu reste stockable (le serveur le met alors en quarantaine).
+ * Raisons possibles : `invalid_hash` (format du hash) ou `invalid_payload`.
  */
-export function validateRecordShape(r: unknown): ValidationResult {
+export function validateRecordStructure(r: unknown): ValidationResult {
   if (!isPlainObject(r)) return fail('enregistrement : objet attendu')
   for (const k of Object.keys(r)) {
-    if (!RECORD_KEYS.has(k)) return fail(`champ inconnu : ${k}`)
+    if (!RECORD_KEYS.has(k)) return fail(`champ inconnu : ${k.slice(0, 40)}`)
   }
   if (!isUuidV4(r.id)) return fail('id : uuid v4 en minuscules attendu')
-  if (typeof r.type !== 'string') return fail('type : chaîne attendue')
-  if (!(RECORD_TYPES as readonly string[]).includes(r.type)) return fail(`type inconnu : ${r.type.slice(0, 40)}`, 'unknown_type')
+  if (typeof r.type !== 'string' || !/^[a-z][a-z0-9_]{0,39}$/.test(r.type)) {
+    return fail('type : identifiant attendu ([a-z0-9_], 40 caractères max)')
+  }
   if (!isPlainObject(r.payload)) return fail('payload : objet attendu')
+  const safe = checkJsonSafe(r.payload, 'payload', 0)
+  if (safe) return fail(safe)
+  if (JSON.stringify(r.payload).length > LIMITS.payloadMaxChars) return fail('payload : trop volumineux')
   if (!isUuid(r.author_id)) return fail('author_id : uuid en minuscules attendu')
   if (!isUuid(r.device_id)) return fail('device_id : uuid en minuscules attendu')
   if (typeof r.device_seq !== 'number' || !Number.isSafeInteger(r.device_seq) || r.device_seq < 1) {
@@ -136,13 +142,34 @@ export function validateRecordShape(r: unknown): ValidationResult {
   }
   if (!isHex64(r.prev_hash)) return fail('prev_hash : 64 caractères hexadécimaux minuscules attendus')
   if (!isHex64(r.hash)) return fail('hash : 64 caractères hexadécimaux minuscules attendus', 'invalid_hash')
+  if (r.supersedes_id !== null && !isUuid(r.supersedes_id)) return fail('supersedes_id : null ou uuid en minuscules attendu')
+  if (r.server_time !== undefined && typeof r.server_time !== 'string') return fail('server_time : chaîne attendue')
+  return ok
+}
+
+/** Règles de contenu de l'enveloppe : type du contrat, supersedes_id cohérent avec le type. */
+export function validateRecordSemantics(r: { type: string; supersedes_id: string | null }): ValidationResult {
+  if (!(RECORD_TYPES as readonly string[]).includes(r.type)) return fail(`type inconnu : ${r.type.slice(0, 40)}`, 'unknown_type')
   if (r.type === 'correction') {
-    if (!isUuid(r.supersedes_id)) return fail('supersedes_id : obligatoire (uuid) pour une correction')
+    if (r.supersedes_id === null) return fail('supersedes_id : obligatoire (uuid) pour une correction')
   } else if (r.supersedes_id !== null) {
     return fail('supersedes_id : doit être null hors correction')
   }
-  if (r.server_time !== undefined && typeof r.server_time !== 'string') return fail('server_time : chaîne attendue')
   return ok
+}
+
+/**
+ * Forme complète d'un HaccpRecord (structure + règles de l'enveloppe), hors contenu du payload.
+ * Raisons possibles : `unknown_type`, `invalid_hash` (format du hash), `invalid_payload` (le reste).
+ * Utilisée par l'app avant mise en file d'envoi.
+ */
+export function validateRecordShape(r: unknown): ValidationResult {
+  if (isPlainObject(r) && typeof r.type === 'string' && !(RECORD_TYPES as readonly string[]).includes(r.type)) {
+    return fail(`type inconnu : ${r.type.slice(0, 40)}`, 'unknown_type')
+  }
+  const s = validateRecordStructure(r)
+  if (!s.ok) return s
+  return validateRecordSemantics(r as { type: string; supersedes_id: string | null })
 }
 
 // ---------- Contrôles génériques du payload ----------

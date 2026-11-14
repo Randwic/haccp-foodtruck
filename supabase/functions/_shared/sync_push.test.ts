@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { GENESIS_HASH, type SyncPushResponse } from '../../../shared/types.ts'
 import type { MemoryRepo } from './memory_repo.ts'
+import { classifyDbError, isClockSuspect } from './repo.ts'
 import { createSyncPushHandler, PUSH_LIMITS } from './sync_push.ts'
 import {
   ChainBuilder,
@@ -190,18 +191,18 @@ describe('sync-push — chaîne', () => {
     const recs = await new ChainBuilder(DEVICE_ID, { device_seq: 0, hash: 'a'.repeat(64) }).many(1)
     expect((await push(recs)).rejected[0].reason).toBe('broken_chain')
   })
-  it('lot partiellement rejeté : les acceptés restent, les suivants sont rejetés, un renvoi corrigé passe', async () => {
+  it('lot partiellement rejeté (intégrité) : les acceptés restent, les suivants sont rejetés, un renvoi corrigé passe', async () => {
     const chain = new ChainBuilder()
-    const [r1, r2] = await chain.many(2)
-    const bad = await chain.next({ payload: { note: 'x'.repeat(501) } })
-    const [r4, r5] = await chain.many(2)
-    const out = await push([r1, r2, bad, r4, r5])
+    const [r1, r2, r3, r4, r5] = await chain.many(5)
+    const tampered = { ...r3, payload: { note: 'modifié après hachage' } }
+    const out = await push([r1, r2, tampered, r4, r5])
     expect(out.accepted.map((a) => a.id)).toEqual([r1.id, r2.id])
     expect(out.rejected.map((x) => [x.id, x.reason])).toEqual([
-      [bad.id, 'invalid_payload'],
+      [r3.id, 'invalid_hash'],
       [r4.id, 'broken_chain'],
       [r5.id, 'broken_chain'],
     ])
+    expect(repo.records).toHaveLength(2)
     expect(out.last_device_seq).toBe(2)
     // L'app reconstruit la suite de sa chaîne à partir de la tête serveur.
     const fixed = new ChainBuilder(DEVICE_ID, { device_seq: 2, hash: r2.hash })
@@ -219,12 +220,104 @@ describe('sync-push — chaîne', () => {
     const out = await push([42])
     expect(out.rejected).toEqual([{ id: '', reason: 'invalid_payload', detail: expect.any(String) }])
   })
-  it('type inconnu → unknown_type ; type du contrat pas encore défini → unknown_type', async () => {
+  it('type non stockable (pas un identifiant) → invalid_payload sans stockage', async () => {
+    const [r] = await new ChainBuilder().many(1)
+    const out = await push([{ ...r, type: 'Pizza Margherita!' }])
+    expect(out.rejected[0]).toMatchObject({ reason: 'invalid_payload', detail: expect.stringMatching(/^type/) })
+    expect(repo.records).toHaveLength(0)
+  })
+})
+
+describe('sync-push — quarantaine (chaîne intègre, contenu refusé)', () => {
+  const Q = (reason: string) => expect.stringMatching(new RegExp(`^quarantaine\\[${reason}\\]`))
+
+  it('auteur désactivé pendant une tournée : saisie en quarantaine, la saisie suivante est acceptée', async () => {
     const chain = new ChainBuilder()
-    const [r] = await chain.many(1)
-    expect((await push([{ ...r, type: 'pizza' }])).rejected[0].reason).toBe('unknown_type')
-    const cooling = await new ChainBuilder().next({ type: 'cooling', payload: {} })
-    expect((await push([cooling])).rejected[0].reason).toBe('unknown_type')
+    const byFormer = await chain.next({ author_id: INACTIVE_STAFF_ID })
+    const next = await chain.next()
+    const out = await push([byFormer, next])
+    expect(out.rejected).toEqual([{ id: byFormer.id, reason: 'unknown_author', detail: Q('unknown_author') }])
+    expect(out.accepted.map((a) => a.id)).toEqual([next.id])
+    expect(out.last_device_seq).toBe(2)
+    expect(repo.records.map((r) => [r.id, r.quarantine_reason])).toEqual([
+      [byFormer.id, 'unknown_author'],
+      [next.id, null],
+    ])
+    // Les envois suivants chaînent normalement sur la saisie en quarantaine.
+    expect((await push(await chain.many(1))).accepted).toHaveLength(1)
+  })
+  it('rejeu d’une saisie en quarantaine : même réponse, pas de doublon, chaîne inchangée', async () => {
+    const chain = new ChainBuilder()
+    const recs = [await chain.next({ author_id: newId() }), await chain.next()]
+    const first = await push(recs)
+    const second = await push(recs)
+    expect(second.rejected.map((r) => [r.id, r.reason])).toEqual([[recs[0].id, 'unknown_author']])
+    expect(second.accepted).toEqual(first.accepted)
+    expect(second.last_device_seq).toBe(2)
+    expect(repo.records).toHaveLength(2)
+  })
+  it('type hors contrat → quarantaine unknown_type (stocké tel quel)', async () => {
+    const chain = new ChainBuilder()
+    const pizza = await chain.next({ type: 'pizza' as never })
+    const cooling = await chain.next({ type: 'cooling', payload: {} })
+    const out = await push([pizza, cooling])
+    expect(out.rejected.map((r) => [r.reason, r.detail])).toEqual([
+      ['unknown_type', Q('unknown_type')],
+      ['unknown_type', Q('unknown_type')],
+    ])
+    expect(repo.records.map((r) => [r.type, r.quarantine_reason])).toEqual([
+      ['pizza', 'unknown_type'],
+      ['cooling', 'unknown_type'],
+    ])
+    expect(out.last_device_seq).toBe(2)
+  })
+  it('payload invalide → quarantaine invalid_payload, la suite du lot passe', async () => {
+    const chain = new ChainBuilder()
+    const [r1] = await chain.many(1)
+    const bad = await chain.next({ payload: { note: 'x'.repeat(501) } })
+    const [r3] = await chain.many(1)
+    const out = await push([r1, bad, r3])
+    expect(out.accepted.map((a) => a.id)).toEqual([r1.id, r3.id])
+    expect(out.rejected).toEqual([{ id: bad.id, reason: 'invalid_payload', detail: Q('invalid_payload') }])
+    expect(repo.records.find((r) => r.id === bad.id)?.quarantine_reason).toBe('invalid_payload')
+  })
+  it('correction vers un id inexistant → quarantaine supersedes_not_found (raison client : invalid_payload)', async () => {
+    const corr = await new ChainBuilder().next({ type: 'correction', supersedes_id: newId(), payload: { reason: 'r', replacement: { note: 'x' } } })
+    const out = await push([corr])
+    expect(out.rejected).toEqual([{ id: corr.id, reason: 'invalid_payload', detail: Q('supersedes_not_found') }])
+    expect(repo.records[0].quarantine_reason).toBe('supersedes_not_found')
+    expect(out.last_device_seq).toBe(1)
+  })
+  it('supersedes_id sur un type autre que correction → quarantaine invalid_payload', async () => {
+    const r = await new ChainBuilder().next({ supersedes_id: newId() })
+    expect((await push([r])).rejected[0]).toMatchObject({ reason: 'invalid_payload', detail: Q('invalid_payload') })
+    expect(repo.records[0].quarantine_reason).toBe('invalid_payload')
+  })
+  it('l’horloge suspecte est aussi calculée pour une saisie en quarantaine', async () => {
+    const r = await new ChainBuilder().next({ author_id: newId(), device_time: new Date(NOW.getTime() - 3600_000).toISOString() })
+    await push([r])
+    expect(repo.records[0]).toMatchObject({ quarantine_reason: 'unknown_author', clock_suspect: true })
+  })
+  it('une saisie en quarantaine refusée par la base → refus d’intégrité, rien de stocké, suite bloquée', async () => {
+    repo.rejectInsert = (row) => (row.type === 'pizza' ? 'violates check constraint "records_type_check"' : null)
+    const chain = new ChainBuilder()
+    const pizza = await chain.next({ type: 'pizza' as never })
+    const [after] = await chain.many(1)
+    const out = await push([pizza, after])
+    expect(out.rejected.map((r) => [r.id, r.reason])).toEqual([
+      [pizza.id, 'invalid_payload'],
+      [after.id, 'broken_chain'],
+    ])
+    expect(repo.records).toHaveLength(0)
+    expect(out.last_device_seq).toBe(0)
+  })
+  it('les refus d’intégrité ne sont jamais mis en quarantaine', async () => {
+    const chain = new ChainBuilder()
+    const [r1, r2] = await chain.many(2)
+    for (const bad of [{ ...r1, hash: 'f'.repeat(64) }, r2, await rehash({ ...r1, prev_hash: 'e'.repeat(64) })]) {
+      await push([bad])
+    }
+    expect(repo.records).toHaveLength(0)
   })
 })
 
@@ -285,7 +378,7 @@ describe('sync-push — concurrence (violation d’unicité)', () => {
     // Juste avant notre insertion, « l'autre requête » insère exactement les mêmes lignes.
     repo.beforeInsert = (row) => {
       const r = recs.find((x) => x.id === row.id)!
-      if (!repo.records.some((x) => x.id === r.id)) repo.records.push({ ...row, server_time: '2026-11-14T09:59:59.000Z' })
+      if (!repo.records.some((x) => x.id === r.id)) repo.records.push({ ...row, clock_suspect: false, server_time: '2026-11-14T09:59:59.000Z' })
     }
     const out = await push(recs)
     expect(out.rejected).toEqual([])
@@ -301,7 +394,7 @@ describe('sync-push — concurrence (violation d’unicité)', () => {
     repo.beforeInsert = () => {
       if (once) return
       once = true
-      repo.records.push({ ...rival, clock_suspect: false, server_time: NOW.toISOString() })
+      repo.records.push({ ...rival, quarantine_reason: null, clock_suspect: false, server_time: NOW.toISOString() })
     }
     const out = await push([r1, r2])
     expect(out.accepted).toEqual([])
@@ -313,7 +406,7 @@ describe('sync-push — concurrence (violation d’unicité)', () => {
   it('même id pris en parallèle avec un autre contenu → id_conflict', async () => {
     const [r1] = await new ChainBuilder().many(1)
     repo.beforeInsert = (row) => {
-      if (!repo.records.length) repo.records.push({ ...row, device_seq: 99, hash: 'b'.repeat(64), server_time: NOW.toISOString() })
+      if (!repo.records.length) repo.records.push({ ...row, device_seq: 99, hash: 'b'.repeat(64), clock_suspect: false, server_time: NOW.toISOString() })
     }
     const out = await push([r1])
     expect(out.rejected[0].reason).toBe('id_conflict')
@@ -325,6 +418,90 @@ describe('sync-push — concurrence (violation d’unicité)', () => {
     expect(out.rejected[0]).toEqual({ id: recs[0].id, reason: 'invalid_payload', detail: 'refusé par la base de données' })
     expect(out.rejected[1].reason).toBe('broken_chain')
   })
+  it('ne transmet jamais server_time ni clock_suspect à l’insertion (imposés par le trigger)', async () => {
+    await push(await new ChainBuilder().many(1))
+    expect(repo.inserted[0]).not.toHaveProperty('server_time')
+    expect(repo.inserted[0]).not.toHaveProperty('clock_suspect')
+  })
+})
+
+describe('sync-push — filet de sécurité de la base (exceptions HACCP: …)', () => {
+  it('HACCP: seq_gap (tête lue périmée) → refus seq_gap, rien de stocké, pas de 500', async () => {
+    const stale = { device_seq: 5, hash: 'c'.repeat(64) }
+    repo.getChainHead = async () => (repo.records.length ? null : stale)
+    const recs = await new ChainBuilder(DEVICE_ID, stale).many(2)
+    const out = await push(recs)
+    expect(out.rejected.map((r) => r.reason)).toEqual(['seq_gap', 'broken_chain'])
+    expect(repo.records).toHaveLength(0)
+  })
+  it('HACCP: broken_chain → refus broken_chain', async () => {
+    const [r1] = await new ChainBuilder().many(1)
+    await push([r1])
+    const wrongHead = { device_seq: 1, hash: 'd'.repeat(64) }
+    const realHead = repo.getChainHead.bind(repo)
+    repo.getChainHead = async (id) => (repo.calls.insertRecord === 1 ? wrongHead : realHead(id))
+    const next = await new ChainBuilder(DEVICE_ID, wrongHead).next()
+    const out = await push([next])
+    expect(out.rejected[0]).toMatchObject({ id: next.id, reason: 'broken_chain' })
+    expect(out.last_device_seq).toBe(1)
+  })
+  it('HACCP: device_revoked (révoqué pendant la requête) → refus device_revoked', async () => {
+    const recs = await new ChainBuilder().many(2)
+    repo.beforeInsert = () => {
+      repo.devices[0].revoked_at = NOW.toISOString()
+    }
+    const out = await push(recs)
+    expect(out.rejected.map((r) => r.reason)).toEqual(['device_revoked', 'broken_chain'])
+    expect(repo.records).toHaveLength(0)
+  })
+  it('HACCP: unknown_author (auteur supprimé entre contrôle et insertion) → réinsertion en quarantaine', async () => {
+    const recs = await new ChainBuilder().many(2)
+    repo.getStaffStatus = async (id) => ({ id, active: true })
+    repo.staff = []
+    const out = await push(recs)
+    expect(out.rejected.map((r) => [r.reason, r.detail])).toEqual([
+      ['unknown_author', expect.stringMatching(/^quarantaine\[unknown_author\]/)],
+      ['unknown_author', expect.stringMatching(/^quarantaine\[unknown_author\]/)],
+    ])
+    expect(repo.records.map((r) => r.quarantine_reason)).toEqual(['unknown_author', 'unknown_author'])
+    expect(out.last_device_seq).toBe(2)
+  })
+  it('HACCP: supersedes_not_found côté base → quarantaine supersedes_not_found', async () => {
+    const chain = new ChainBuilder()
+    const orig = await chain.next()
+    await push([orig])
+    const corr = await chain.next({ type: 'correction', supersedes_id: orig.id, payload: { reason: 'r', replacement: { note: 'v2' } } })
+    repo.beforeInsert = () => {
+      repo.records = repo.records.filter((r) => r.id !== orig.id) // « disparu » (purge) entre-temps
+      repo.anchors = [{ device_id: DEVICE_ID, device_seq: 1, hash: orig.hash }]
+    }
+    const out = await push([corr])
+    expect(out.rejected[0]).toMatchObject({ reason: 'invalid_payload', detail: expect.stringMatching(/^quarantaine\[supersedes_not_found\]/) })
+    expect(repo.records[0].quarantine_reason).toBe('supersedes_not_found')
+  })
+  it('classifyDbError reconnaît les messages HACCP et l’unicité', () => {
+    expect(classifyDbError('23514', 'HACCP: seq_gap — maillon 3 absent')).toMatchObject({ kind: 'integrity', reason: 'seq_gap' })
+    expect(classifyDbError('23514', 'HACCP: broken_chain — x')).toMatchObject({ kind: 'integrity', reason: 'broken_chain' })
+    expect(classifyDbError('23514', 'HACCP: device_revoked — x')).toMatchObject({ kind: 'integrity', reason: 'device_revoked' })
+    expect(classifyDbError('23503', 'HACCP: unknown_author — x')).toMatchObject({ kind: 'content', quarantine: 'unknown_author' })
+    expect(classifyDbError('23503', 'HACCP: supersedes_not_found — x')).toMatchObject({ kind: 'content', quarantine: 'supersedes_not_found' })
+    expect(classifyDbError('23505', 'duplicate key')).toEqual({ ok: false, kind: 'unique_violation' })
+    expect(classifyDbError('23514', 'violates check constraint "records_genesis"')).toMatchObject({ kind: 'rejected' })
+  })
+})
+
+describe('sync-push — ancre de purge', () => {
+  it('après purge totale, la chaîne continue depuis l’ancre (device_chain_head)', async () => {
+    const anchor = { device_seq: 42, hash: 'a'.repeat(64) }
+    repo.anchors.push({ device_id: DEVICE_ID, ...anchor })
+    const out = await push(await new ChainBuilder(DEVICE_ID, anchor).many(2))
+    expect(out.rejected).toEqual([])
+    expect(out.last_device_seq).toBe(44)
+    expect((await push(await new ChainBuilder().many(1))).rejected[0].reason).toBe('seq_gap')
+  })
+})
+
+describe('sync-push — erreurs', () => {
   it('erreur inattendue → 500 générique, sans fuite du message interne', async () => {
     repo.getChainHead = async () => {
       throw new Error('password=hunter2 connection failed')
@@ -342,11 +519,13 @@ describe('sync-push — auteur', () => {
   it('auteur inconnu → unknown_author', async () => {
     const r = await new ChainBuilder().next({ author_id: newId() })
     const out = await push([r])
-    expect(out.rejected).toEqual([{ id: r.id, reason: 'unknown_author', detail: 'auteur inconnu' }])
+    expect(out.rejected).toEqual([{ id: r.id, reason: 'unknown_author', detail: expect.stringMatching(/^quarantaine\[unknown_author\].*auteur inconnu$/) }])
+    expect(repo.records[0].quarantine_reason).toBe('unknown_author')
   })
-  it('auteur désactivé → unknown_author', async () => {
+  it('auteur désactivé → unknown_author (quarantaine aussi)', async () => {
     const r = await new ChainBuilder().next({ author_id: INACTIVE_STAFF_ID })
-    expect((await push([r])).rejected[0]).toMatchObject({ reason: 'unknown_author', detail: 'auteur désactivé' })
+    expect((await push([r])).rejected[0]).toMatchObject({ reason: 'unknown_author', detail: expect.stringMatching(/auteur désactivé$/) })
+    expect(repo.records[0].quarantine_reason).toBe('unknown_author')
   })
   it('met en cache la recherche d’auteur sur un lot', async () => {
     await push(await new ChainBuilder().many(10))
@@ -450,11 +629,20 @@ describe('sync-push — horloge', () => {
     const r = await new ChainBuilder().next({ device_time: new Date(NOW.getTime() - 30 * 60_000).toISOString() })
     expect((await push([r])).accepted[0].clock_suspect).toBe(false)
   })
-  it('sans ligne settings : repli à 5 minutes et avertissement', async () => {
-    repo.settings = null
-    const r = await new ChainBuilder().next({ device_time: new Date(NOW.getTime() - 6 * 60_000).toISOString() })
+  it('la réponse reprend la valeur relue en base (trigger), pas un calcul local', async () => {
+    const r = await new ChainBuilder().next()
+    const real = repo.insertRecord.bind(repo)
+    repo.insertRecord = async (row) => {
+      const res = await real(row)
+      return res.ok ? { ...res, clock_suspect: true } : res
+    }
     expect((await push([r])).accepted[0].clock_suspect).toBe(true)
-    expect(logger.lines.some((l) => l.event === 'settings_missing')).toBe(true)
+  })
+  it('isClockSuspect : même règle que le trigger (5 min par défaut sans settings)', () => {
+    const later = new Date(NOW.getTime() + 5 * 60_000 + 1)
+    expect(isClockSuspect(later, NOW, null)).toBe(true)
+    expect(isClockSuspect(new Date(NOW.getTime() + 5 * 60_000), NOW, undefined)).toBe(false)
+    expect(isClockSuspect(later, NOW, 10)).toBe(false)
   })
 })
 

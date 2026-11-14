@@ -1,8 +1,9 @@
 // Adaptateur Deno : implémente les interfaces Repo avec supabase-js (clé service_role).
 // Seul endroit (avec les index.ts) qui dépend de Deno / npm. Non couvert par Vitest.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import type { Equipment, Establishment, RecordType, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
+import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import { jsonLogger, parseAllowedOrigins, type HttpEnv } from '../_shared/http.ts'
+import { classifyDbError } from '../_shared/repo.ts'
 import type {
   ChainHead,
   DeviceRow,
@@ -12,6 +13,7 @@ import type {
   NewRecordRow,
   PullRepo,
   PushRepo,
+  QuarantineReason,
   StoredRecord,
 } from '../_shared/repo.ts'
 
@@ -80,19 +82,20 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo 
     for (let i = 0; i < ids.length; i += IN_CHUNK) {
       const { data, error } = await this.db
         .from('records')
-        .select('id, type, hash, device_id, device_seq, supersedes_id, server_time, clock_suspect')
+        .select('id, type, hash, device_id, device_seq, supersedes_id, server_time, clock_suspect, quarantine_reason')
         .in('id', ids.slice(i, i + IN_CHUNK))
       if (error) throw new DbError('records.select', error)
       for (const r of data ?? []) {
         out.push({
           id: r.id,
-          type: r.type as RecordType,
+          type: r.type,
           hash: r.hash,
           device_id: r.device_id,
           device_seq: Number(r.device_seq),
           supersedes_id: r.supersedes_id,
           server_time: isoReq(r.server_time),
           clock_suspect: Boolean(r.clock_suspect),
+          quarantine_reason: (r.quarantine_reason ?? null) as QuarantineReason | null,
         })
       }
     }
@@ -109,13 +112,15 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo 
     return data !== null
   }
   async insertRecord(row: NewRecordRow): Promise<InsertResult> {
-    const { data, error } = await this.db.from('records').insert(row).select('server_time').single()
-    if (!error) return { ok: true, server_time: isoReq(data.server_time) }
+    // server_time / clock_suspect : jamais envoyés, imposés par le trigger, relus ici.
+    const { data, error } = await this.db.from('records').insert(row).select('server_time, clock_suspect').single()
+    if (!error) return { ok: true, server_time: isoReq(data.server_time), clock_suspect: Boolean(data.clock_suspect) }
     const code = error.code ?? ''
-    if (code === '23505') return { ok: false, kind: 'unique_violation' }
-    // 22xxx (données invalides), 23xxx (contraintes), P0001 (RAISE dans un trigger) : refus définitif.
-    if (code.startsWith('22') || code.startsWith('23') || code === 'P0001') {
-      return { ok: false, kind: 'rejected', detail: `${code} ${error.message}` }
+    const message = error.message ?? ''
+    // Messages des triggers (`HACCP: …`), 22xxx (données invalides), 23xxx (contraintes),
+    // P0001 (RAISE sans errcode) : réponses métier. Le reste (réseau, droits…) remonte en 500.
+    if (message.startsWith('HACCP:') || code.startsWith('22') || code.startsWith('23') || code === 'P0001') {
+      return classifyDbError(code, message)
     }
     throw new DbError('records.insert', error)
   }

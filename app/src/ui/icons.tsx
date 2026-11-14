@@ -5,7 +5,9 @@ import type { ComponentType } from 'react'
 import {
   ArrowLeft,
   ArrowRightLeft,
+  Ban,
   Box,
+  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -28,11 +30,15 @@ import {
   Flame,
   FolderOpen,
   History,
+  ImageOff,
   Info,
   Lock,
   LogOut,
   Minus,
+  Mail,
   Package,
+  PackageMinus,
+  PackageX,
   Pencil,
   Play,
   Phone,
@@ -43,6 +49,8 @@ import {
   SlidersHorizontal,
   Snowflake,
   SprayCan,
+  Store,
+  Truck,
   SquarePlus,
   Tag,
   Thermometer,
@@ -137,3 +145,13 @@ export const IconBox = make(Box, 'IconBox')
 export const IconUsers = make(Users, 'IconUsers')
 export const IconSettings = make(Settings, 'IconSettings')
 export const IconSliders = make(SlidersHorizontal, 'IconSliders')
+
+// Réception & traçabilité (lot 3)
+export const IconCamera = make(Camera, 'IconCamera')
+export const IconImageOff = make(ImageOff, 'IconImageOff')
+export const IconSupplier = make(Store, 'IconSupplier')
+export const IconTruck = make(Truck, 'IconTruck')
+export const IconRefused = make(PackageX, 'IconRefused')
+export const IconWaste = make(PackageMinus, 'IconWaste')
+export const IconBan = make(Ban, 'IconBan')
+export const IconMail = make(Mail, 'IconMail')

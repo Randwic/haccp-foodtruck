@@ -109,7 +109,8 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('haccp-chain:' || new.device_id::text, 0));
 
   if new.device_seq = 1 then
-    v_prev_hash := repeat('0', 64);
+    -- Genèse : la contrainte records_genesis impose prev_hash = GENESIS_HASH.
+    return new;
   else
     select r.hash into v_prev_hash
       from public.records r

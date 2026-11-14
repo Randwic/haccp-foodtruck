@@ -35,15 +35,15 @@ select tests.throws('prev_hash mal formé',       'service_role', null, tests.re
 select tests.throws('payload tableau',           'service_role', null, tests.rec_sql(p_payload => '''[1,2]'''),  '%records_payload_object%');
 select tests.throws('payload chaîne',            'service_role', null, tests.rec_sql(p_payload => '''"x"'''),    '%records_payload_object%');
 select tests.throws('payload null',              'service_role', null, tests.rec_sql(p_payload => 'null'),       '%null value%payload%');
-select tests.throws('type inconnu',              'service_role', null, tests.rec_sql(p_type => 'hacked'),        '%record_type%');
+select tests.throws('type inconnu',              'service_role', null, tests.rec_sql(p_type => 'hacked'),        '%records_type_check%');
 select tests.throws('correction sans supersedes_id', 'service_role', null, tests.rec_sql(p_type => 'correction'), '%records_correction_link%');
 select tests.throws('supersedes_id sans type correction', 'service_role', null,
   tests.rec_sql(p_supersedes => quote_literal((select id from public.records where device_seq = 1 and device_id = tests.device1()))),
   '%records_correction_link%');
 select tests.throws('supersedes_id inexistant',  'service_role', null,
-  tests.rec_sql(p_type => 'correction', p_supersedes => quote_literal(gen_random_uuid())), '%foreign key%');
+  tests.rec_sql(p_type => 'correction', p_supersedes => quote_literal(gen_random_uuid())), '%HACCP: supersedes_not_found%');
 select tests.throws('auteur inconnu', 'service_role', null,
-  replace(tests.rec_sql(), tests.staff1()::text, gen_random_uuid()::text), '%foreign key%');
+  replace(tests.rec_sql(), tests.staff1()::text, gen_random_uuid()::text), '%HACCP: unknown_author%');
 
 -- Correction valide
 select tests.value_as('service_role', null,

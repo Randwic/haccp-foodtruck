@@ -75,7 +75,7 @@ select tests.assert_eq((select device_seq from public.device_chain_head(tests.de
 select tests.throws('après purge : prev_hash faux refusé', 'service_role', null,
   format('insert into public.records (type, payload, author_id, device_id, device_seq, device_time, prev_hash, hash) values (''system_test'', ''{}'', %L, ''000000d3-0000-4000-8000-000000000003'', 3, now(), %L, repeat(''6'', 64))',
     tests.staff1(), repeat('4', 64)), '%HACCP: broken_chain%');
-select tests.throws('après purge : trou après l''''ancre refusé', 'service_role', null,
+select tests.throws('après purge : trou après l''ancre refusé', 'service_role', null,
   format('insert into public.records (type, payload, author_id, device_id, device_seq, device_time, prev_hash, hash) values (''system_test'', ''{}'', %L, ''000000d3-0000-4000-8000-000000000003'', 4, now(), %L, repeat(''6'', 64))',
     tests.staff1(), repeat('5', 64)), '%HACCP: seq_gap%');
 select tests.exec_as('service_role', null,

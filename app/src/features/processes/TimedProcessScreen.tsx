@@ -438,7 +438,7 @@ function StartBatch({ kind, data, onStarted }: { kind: TimedKind; data: ProcessD
           {lowStart && (
             <div className="mt-1 max-w-sm">
               <Notice tone="warn">
-                <span className="font-semibold">Départ sous {describeThreshold(rule.start!).replace('≥ ', '')}.</span> Le refroidissement rapide part d’un produit qui sort de cuisson. Vérifiez
+                <span className="font-semibold">Départ sous {formatTemperature(rule.start!.min_c ?? 0)}.</span> Le refroidissement rapide part d’un produit qui sort de cuisson. Vérifiez
                 la mesure : le lot peut être démarré, l’écart restera visible dans l’historique.
               </Notice>
             </div>

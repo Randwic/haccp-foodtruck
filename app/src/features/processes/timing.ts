@@ -76,7 +76,7 @@ export function remainingLabel(c: Countdown): string {
 
 // ---------- DLC après décongélation ----------
 
-/** Délai par défaut de la DLC après décongélation (J+3), À CONFIRMER selon le PMS. */
+/** Délai par défaut de la DLC après décongélation (J+3) si le réglage `thaw_dlc_days` est absent. */
 export const DEFAULT_THAW_DLC_DAYS = 3
 
 export function isoDate(d: LocalDate): string {

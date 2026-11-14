@@ -5,7 +5,7 @@ import { useNow } from '../../ui/hooks/useNow.ts'
 import { DEFAULT_TIMEZONE, startOfLocalDay } from '../temperatures/schedule.ts'
 import { buildSpotChecks, buildThawBatches, buildTimedBatches, PROCESS_RECORD_TYPES, type SpotEntry, type ThawBatch, type TimedBatch } from './entries.ts'
 import { spotRule, timedRule, type SpotRule, type TimedKind, type TimedRule } from './thresholds.ts'
-import { summarizeSpot, summarizeThaw, summarizeTimed, type TimedSummary } from './timing.ts'
+import { DEFAULT_THAW_DLC_DAYS, summarizeSpot, summarizeThaw, summarizeTimed, type TimedSummary } from './timing.ts'
 
 /** Historique affiché : aujourd'hui + 7 jours ; chargement avec une marge (fuseaux, lots longs). */
 export const PROCESS_HISTORY_DAYS = 7
@@ -15,6 +15,8 @@ export interface ProcessData {
   equipment: Equipment[]
   thresholds: Threshold[]
   timeZone: string
+  /** Réglage `thaw_dlc_days` : DLC proposée après décongélation (jours après la fin). */
+  thawDlcDays: number
   staff: StaffMember[]
   records: HaccpRecord[]
   cooling: TimedBatch[]
@@ -50,14 +52,15 @@ export function useProcessData() {
   const reload = useCallback(async () => {
     try {
       const since = new Date(Date.now() - LOAD_WINDOW_MS).toISOString()
-      const [equipment, thresholds, establishment, staff, ...lists] = await Promise.all([
+      const [equipment, thresholds, settings, establishment, staff, ...lists] = await Promise.all([
         core.listEquipment(),
         core.listThresholds(),
+        core.getSettings(),
         core.getEstablishment(),
         core.listStaff(),
         ...PROCESS_RECORD_TYPES.map((type) => core.listRecords({ type, since })),
       ])
-      setData(buildProcessData({ equipment, thresholds, timeZone: establishment?.timezone || DEFAULT_TIMEZONE, staff, records: lists.flat() }))
+      setData(buildProcessData({ equipment, thresholds, timeZone: establishment?.timezone || DEFAULT_TIMEZONE, thawDlcDays: settings?.thaw_dlc_days ?? DEFAULT_THAW_DLC_DAYS, staff, records: lists.flat() }))
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

@@ -38,7 +38,7 @@ function CorrectionShell({ title, summary, left, right }: { title: string; summa
 }
 
 /** Correction d'une température (étape de lot, maintien au chaud, cuisson). */
-export function TemperatureCorrection<P extends Record<string, unknown>>(
+export function TemperatureCorrection<P extends object>(
   props: BaseProps<P> & {
     value_c: number
     threshold?: TemperatureThreshold
@@ -100,7 +100,7 @@ export function TemperatureCorrection<P extends Record<string, unknown>>(
 }
 
 /** Correction de la DLC d'une décongélation terminée. */
-export function DlcCorrection<P extends Record<string, unknown>>(props: BaseProps<P> & { dlc: string; min: string; replacementFor: (dlc: string) => P }) {
+export function DlcCorrection<P extends object>(props: BaseProps<P> & { dlc: string; min: string; replacementFor: (dlc: string) => P }) {
   const toast = useToast()
   const { save, busy, error } = useRecordSaver()
   const [dlc, setDlc] = useState(props.dlc)

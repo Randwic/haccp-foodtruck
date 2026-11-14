@@ -67,6 +67,8 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
       clock_suspect_minutes: settings.clock_suspect_minutes,
       email_alerts: settings.email_alerts,
       daily_check_times: [...settings.daily_check_times],
+      missed_slot_carry_over: settings.missed_slot_carry_over ?? true,
+      thaw_dlc_days: settings.thaw_dlc_days ?? 3,
     },
     deleted,
   }

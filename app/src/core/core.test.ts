@@ -569,7 +569,7 @@ describe('session PIN', () => {
 
   it('auto-lock après auto_lock_minutes d’inactivité ; notifyActivity repousse l’échéance', async () => {
     const { core, clock, server } = makeHarness()
-    server.setSettings({ retention_years: 3, auto_lock_minutes: 2, clock_suspect_minutes: 5, email_alerts: false, daily_check_times: ['08:00', '18:00'] })
+    server.setSettings({ retention_years: 3, auto_lock_minutes: 2, clock_suspect_minutes: 5, email_alerts: false, daily_check_times: ['08:00', '18:00'], missed_slot_carry_over: true, thaw_dlc_days: 3 })
     await enrollAndUnlock(core)
     const sessions: (string | null)[] = []
     core.onSessionChange((s) => sessions.push(s?.id ?? null))

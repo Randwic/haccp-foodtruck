@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { SyncPullResponse } from '../../../shared/types.ts'
 import type { MemoryRepo } from './memory_repo.ts'
 import { createSyncPullHandler, PULL_OVERLAP_MS } from './sync_pull.ts'
-import { FRIDGE_ID, INACTIVE_STAFF_ID, NOW, STAFF_ID, TOKEN, memoryLogger, seededRepo } from './test_helpers.ts'
+import { FRIDGE_ID, INACTIVE_STAFF_ID, NOW, STAFF_ID, SUPPLIER_ID, TOKEN, memoryLogger, seededRepo } from './test_helpers.ts'
 
 let repo: MemoryRepo
 let handler: (req: Request) => Promise<Response>
@@ -79,6 +79,19 @@ describe('sync-pull', () => {
     ;(repo.staff[0] as unknown as Record<string, unknown>).email = 'secret@example.com'
     const out = await pull()
     expect(Object.keys(out.staff[0]).sort()).toEqual(['active', 'display_name', 'id', 'pin_hash', 'pin_salt', 'role', 'updated_at'])
+  })
+  it('fournisseurs : actifs seulement, champs du contrat, désactivés dans deleted (lot 3)', async () => {
+    const OLD = '00000000-0000-4000-8000-0000000000b2'
+    repo.suppliers.push({ id: OLD, name: 'Ancien grossiste', phone: null, email: 'contact@example.test', active: false, updated_at: '2026-11-12T00:00:00.000Z' })
+    ;(repo.suppliers[0] as unknown as Record<string, unknown>).siret = '123'
+    const all = await pull()
+    expect(all.suppliers).toEqual([
+      { id: SUPPLIER_ID, name: 'Boucherie Martin', phone: '0102030405', email: null, active: true, updated_at: '2026-11-01T00:00:00.000Z' },
+    ])
+    expect(all.deleted).toEqual([])
+    const since = await pull('2026-11-05T00:00:00.000Z')
+    expect(since.suppliers).toEqual([])
+    expect(since.deleted).toContainEqual({ table: 'suppliers', id: OLD })
   })
   it('400 si since n’est pas une date', async () => {
     const res = await handler(pullReq('hier'))

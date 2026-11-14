@@ -21,12 +21,13 @@ export function parseSince(raw: string | null): Date | null {
 export async function processPull(since: Date | null, repo: PullRepo, now: Date): Promise<SyncPullResponse> {
   const serverNow = now.toISOString() // capturé AVANT les lectures
   const from = since ? new Date(since.getTime() - PULL_OVERLAP_MS).toISOString() : null
-  const [establishment, settings, staff, equipment, thresholds] = await Promise.all([
+  const [establishment, settings, staff, equipment, thresholds, suppliers] = await Promise.all([
     repo.getEstablishment(),
     repo.getSettings(),
     repo.listStaff(from),
     repo.listEquipment(from),
     repo.listThresholds(from),
+    repo.listSuppliers(from),
   ])
   if (!establishment || !settings) throw new HttpError(503, 'not_configured', 'établissement ou paramètres absents')
 
@@ -34,6 +35,7 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
   if (since) {
     for (const s of staff) if (!s.active) deleted.push({ table: 'staff', id: s.id })
     for (const e of equipment) if (!e.active) deleted.push({ table: 'equipment', id: e.id })
+    for (const s of suppliers) if (!s.active) deleted.push({ table: 'suppliers', id: s.id })
   }
   return {
     server_now: serverNow,
@@ -70,6 +72,9 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
       missed_slot_carry_over: settings.missed_slot_carry_over ?? true,
       thaw_dlc_days: settings.thaw_dlc_days ?? 3,
     },
+    suppliers: suppliers
+      .filter((s) => s.active)
+      .map((s) => ({ id: s.id, name: s.name, phone: s.phone ?? null, email: s.email ?? null, active: s.active, updated_at: s.updated_at })),
     deleted,
   }
 }
@@ -90,6 +95,7 @@ export function createSyncPullHandler(deps: SyncPullDeps): (req: Request) => Pro
       staff: res.staff.length,
       equipment: res.equipment.length,
       thresholds: res.thresholds.length,
+      suppliers: res.suppliers.length,
       deleted: res.deleted.length,
     })
     return jsonResponse(200, res)

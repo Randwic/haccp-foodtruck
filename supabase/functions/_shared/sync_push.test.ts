@@ -15,6 +15,7 @@ import {
   TOKEN,
   memoryLogger,
   newId,
+  SUPPLIER_ID,
   rehash,
   seededRepo,
 } from './test_helpers.ts'
@@ -772,5 +773,109 @@ describe('sync-push — journalisation', () => {
     const summary = logger.lines.find((l) => l.event === 'sync_push')!
     expect(summary.fields).toMatchObject({ fn: 'sync-push', device_id: DEVICE_ID, received: 2, accepted: 2, rejected: 0 })
     expect(JSON.stringify(logger.lines)).not.toContain(TOKEN)
+  })
+})
+
+describe('sync-push — lot 3 (réception, pertes)', () => {
+  const photo = (dev: string, n: number) => `${dev}/00000000-0000-4000-8000-${String(n).padStart(12, '0')}.webp`
+  const reception = (over: Record<string, unknown> = {}) => ({
+    supplier_id: SUPPLIER_ID,
+    vehicle_ok: true,
+    packaging_ok: true,
+    items: [{ product: 'Steak haché', lot: 'L1', dlc: '2026-11-20', temperature_c: 2.5, storage: 'fridge', accepted: true, photo_paths: [photo(DEVICE_ID, 1)] }],
+    photo_paths: [photo(DEVICE_ID, 2)],
+    ...over,
+  })
+  it('accepte une réception et une perte valides (photos pas encore envoyées : non exigé)', async () => {
+    const chain = new ChainBuilder()
+    const rec = await chain.next({ type: 'reception', payload: reception() })
+    const waste = await chain.next({ type: 'waste', payload: { product: 'Crème', reason: 'other', comment: 'pot gonflé', related_record_id: rec.id, photo_paths: [photo(DEVICE_ID, 3)] } })
+    const out = await push([rec, waste])
+    expect(out.rejected).toEqual([])
+    expect(out.accepted.map((a) => a.id)).toEqual([rec.id, waste.id])
+  })
+  it('fournisseur désactivé mais existant : accepté (saisie hors réseau)', async () => {
+    repo.suppliers[0].active = false
+    const r = await new ChainBuilder().next({ type: 'reception', payload: reception() })
+    expect((await push([r])).rejected).toEqual([])
+  })
+  it('fournisseur inconnu → quarantaine invalid_payload, la chaîne avance', async () => {
+    const chain = new ChainBuilder()
+    const bad = await chain.next({ type: 'reception', payload: reception({ supplier_id: newId() }) })
+    const ok = await chain.next()
+    const out = await push([bad, ok])
+    expect(out.rejected).toEqual([{ id: bad.id, reason: 'invalid_payload', detail: expect.stringMatching(/fournisseur inconnu/), quarantined: true }])
+    expect(out.accepted.map((a) => a.id)).toEqual([ok.id])
+    expect(out.last_device_seq).toBe(2)
+    expect(repo.records[0].quarantine_reason).toBe('invalid_payload')
+  })
+  it('photo d’un autre appareil → quarantaine invalid_payload (réception, ligne, perte)', async () => {
+    const chain = new ChainBuilder()
+    const top = await chain.next({ type: 'reception', payload: reception({ photo_paths: [photo(OTHER_DEVICE_ID, 9)] }) })
+    const line = await chain.next({
+      type: 'reception',
+      payload: reception({ items: [{ product: 'Pain', storage: 'ambient', accepted: true, photo_paths: [photo(DEVICE_ID, 1), photo(OTHER_DEVICE_ID, 8)] }] }),
+    })
+    const waste = await chain.next({ type: 'waste', payload: { product: 'Pain', reason: 'damaged', photo_paths: [photo(OTHER_DEVICE_ID, 7)] } })
+    const out = await push([top, line, waste])
+    expect(out.rejected.map((r) => [r.reason, r.quarantined])).toEqual([
+      ['invalid_payload', true],
+      ['invalid_payload', true],
+      ['invalid_payload', true],
+    ])
+    expect(out.rejected[1].detail).toMatch(new RegExp(`${OTHER_DEVICE_ID}/.*n’appartient pas à cet appareil`))
+    expect(out.last_device_seq).toBe(3)
+  })
+  it('payload invalide (réception sans ligne, refus sans motif, perte « other » sans commentaire) → quarantaine', async () => {
+    const chain = new ChainBuilder()
+    const empty = await chain.next({ type: 'reception', payload: reception({ items: [] }) })
+    const refused = await chain.next({ type: 'reception', payload: reception({ items: [{ product: 'Glace', storage: 'freezer', accepted: false }] }) })
+    const waste = await chain.next({ type: 'waste', payload: { product: 'Pain', reason: 'other' } })
+    const out = await push([empty, refused, waste])
+    expect(out.rejected.map((r) => r.reason)).toEqual(['invalid_payload', 'invalid_payload', 'invalid_payload'])
+    expect(out.rejected[1].detail).toMatch(/refusal_reason/)
+    expect(out.rejected[2].detail).toMatch(/comment/)
+  })
+  it('correction d’une réception : remplacement validé, fournisseur vérifié', async () => {
+    const chain = new ChainBuilder()
+    const orig = await chain.next({ type: 'reception', payload: reception() })
+    const good = await chain.next({ type: 'correction', supersedes_id: orig.id, payload: { reason: 'lot', replacement: reception({ comment: 'lot corrigé' }) } })
+    const badSup = await chain.next({ type: 'correction', supersedes_id: good.id, payload: { reason: 'r', replacement: reception({ supplier_id: newId() }) } })
+    const badItems = await chain.next({ type: 'correction', supersedes_id: orig.id, payload: { reason: 'r', replacement: reception({ items: [] }) } })
+    const out = await push([orig, good, badSup, badItems])
+    expect(out.accepted.map((a) => a.id)).toEqual([orig.id, good.id])
+    expect(out.rejected.map((r) => [r.id, r.reason])).toEqual([
+      [badSup.id, 'invalid_payload'],
+      [badItems.id, 'invalid_payload'],
+    ])
+    expect(out.rejected[0].detail).toMatch(/fournisseur inconnu/)
+    expect(out.rejected[1].detail).toMatch(/reception.*items/)
+  })
+  it('correction depuis un autre appareil : reprend les photos de l’enregistrement corrigé, n’en ajoute pas d’étrangères', async () => {
+    const orig = await new ChainBuilder().next({ type: 'reception', payload: reception() })
+    expect((await push([orig])).accepted).toHaveLength(1)
+    const other = new ChainBuilder(OTHER_DEVICE_ID)
+    // Reprend une photo de DEVICE_ID (héritée) et en ajoute une de l'appareil qui corrige.
+    const keep = await other.next({
+      type: 'correction',
+      supersedes_id: orig.id,
+      payload: { reason: 'DLC', replacement: reception({ photo_paths: [photo(DEVICE_ID, 2), photo(OTHER_DEVICE_ID, 5)] }) },
+    })
+    // Correction de correction : héritage à travers toute la chaîne de corrections.
+    const keep2 = await other.next({ type: 'correction', supersedes_id: keep.id, payload: { reason: 'r', replacement: reception() } })
+    const foreign = await other.next({
+      type: 'correction',
+      supersedes_id: orig.id,
+      payload: { reason: 'r', replacement: reception({ photo_paths: [photo(DEVICE_ID, 99)] }) },
+    })
+    const out = await push([keep, keep2, foreign], OTHER_DEVICE_ID, OTHER_TOKEN)
+    expect(out.accepted.map((a) => a.id)).toEqual([keep.id, keep2.id])
+    expect(out.rejected).toEqual([{ id: foreign.id, reason: 'invalid_payload', detail: expect.stringMatching(/n’appartient pas/), quarantined: true }])
+  })
+  it('met en cache le contrôle du fournisseur dans un lot', async () => {
+    const chain = new ChainBuilder()
+    const recs = [await chain.next({ type: 'reception', payload: reception() }), await chain.next({ type: 'reception', payload: reception() })]
+    expect((await push(recs)).accepted).toHaveLength(2)
+    expect(repo.calls.supplierExists).toBe(1)
   })
 })

@@ -1,6 +1,7 @@
 // Adaptateur Deno : implémente les interfaces Repo avec supabase-js (clé service_role).
 // Seul endroit (avec les index.ts) qui dépend de Deno / npm. Non couvert par Vitest.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import type { Supplier } from '../../../shared/payloads.ts'
 import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import { jsonLogger, parseAllowedOrigins, type HttpEnv } from '../_shared/http.ts'
 import { classifyDbError } from '../_shared/repo.ts'
@@ -126,6 +127,20 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
     if (error) throw new DbError('equipment.select', error)
     return data !== null
   }
+  async supplierExists(supplierId: string): Promise<boolean> {
+    const { data, error } = await this.db.from('suppliers').select('id').eq('id', supplierId).maybeSingle()
+    if (error) throw new DbError('suppliers.select', error)
+    return data !== null
+  }
+  async getPayloadsByIds(ids: string[]): Promise<{ id: string; type: string; payload: unknown }[]> {
+    const out: { id: string; type: string; payload: unknown }[] = []
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      const { data, error } = await this.db.from('records').select('id, type, payload').in('id', ids.slice(i, i + IN_CHUNK))
+      if (error) throw new DbError('records.select_payload', error)
+      for (const r of data ?? []) out.push({ id: r.id, type: r.type, payload: r.payload })
+    }
+    return out
+  }
   async insertRecord(row: NewRecordRow): Promise<InsertResult> {
     // server_time : jamais envoyé, imposé par le trigger. clock_suspect : envoyé seulement à true (lot
     // suspect) ; le trigger fait un OU avec son calcul. Valeurs relues ici. Clés absentes non envoyées.
@@ -174,6 +189,14 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
       max_c: t.max_c === null ? null : Number(t.max_c),
       updated_at: isoReq(t.updated_at),
     }))
+  }
+
+  async listSuppliers(since: string | null): Promise<Supplier[]> {
+    let q = this.db.from('suppliers').select('id, name, phone, email, active, updated_at')
+    if (since) q = q.gte('updated_at', since)
+    const { data, error } = await q.order('name')
+    if (error) throw new DbError('suppliers.list', error)
+    return (data ?? []).map((s) => ({ ...s, updated_at: isoReq(s.updated_at) }))
   }
 
   // ---- enrôlement ----

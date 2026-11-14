@@ -1,7 +1,10 @@
 // Dépôt en mémoire pour les tests : reproduit le comportement utile de la base (trigger
 // d'insertion « filet de sécurité » avec messages `HACCP: …`, clé primaire records.id,
 // unique(device_id, device_seq), server_time / clock_suspect imposés, ancres de purge).
+import type { Supplier } from '../../../shared/payloads.ts'
 import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
+import type { PhotoStore } from './photo_upload.ts'
+import type { PhotoRemover, PurgePhotosRepo } from './purge_photos.ts'
 import { classifyDbError, isClockSuspect } from './repo.ts'
 import type {
   BootstrapManagerResult,
@@ -30,6 +33,7 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   staff: StaffMember[] = []
   equipment: Equipment[] = []
   thresholds: Threshold[] = []
+  suppliers: Supplier[] = []
   establishment: Establishment | null = null
   settings: Settings | null = null
   records: (Omit<NewRecordRow, 'clock_suspect'> & { server_time: string; clock_suspect: boolean })[] = []
@@ -113,6 +117,14 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   async equipmentExists(equipmentId: string): Promise<boolean> {
     return this.equipment.some((e) => e.id === equipmentId)
   }
+  async supplierExists(supplierId: string): Promise<boolean> {
+    this.count('supplierExists')
+    return this.suppliers.some((s) => s.id === supplierId)
+  }
+  async getPayloadsByIds(ids: string[]) {
+    this.count('getPayloadsByIds')
+    return this.records.filter((r) => ids.includes(r.id)).map((r) => ({ id: r.id, type: r.type, payload: structuredClone(r.payload) }))
+  }
   /** Reproduit le trigger haccp_records_before_insert puis les contraintes d'unicité. */
   async insertRecord(row: NewRecordRow): Promise<InsertResult> {
     this.count('insertRecord')
@@ -163,6 +175,9 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   }
   async listThresholds(since: string | null) {
     return this.since(this.thresholds, since)
+  }
+  async listSuppliers(since: string | null) {
+    return this.since(this.suppliers, since)
   }
 
   async getUserIdFromJwt(jwt: string) {
@@ -231,5 +246,51 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
 
   async ping() {
     if (this.pingFails) throw new Error('connexion refusée')
+  }
+}
+
+/** Bucket `photos` en mémoire (photo-upload, purge-photos). */
+export class MemoryPhotoStore implements PhotoStore, PhotoRemover {
+  objects = new Map<string, { bytes: Uint8Array; contentType: string }>()
+  writes = 0
+  /** Appelé juste avant l'écriture : permet de simuler un envoi concurrent. */
+  beforeCreate: ((path: string) => void) | null = null
+  /** Chemins dont la suppression échoue. */
+  failRemove = new Set<string>()
+  async stat(path: string) {
+    const o = this.objects.get(path)
+    return o ? { size: o.bytes.byteLength } : null
+  }
+  async create(path: string, bytes: Uint8Array, contentType: string): Promise<'created' | 'exists'> {
+    this.beforeCreate?.(path)
+    if (this.objects.has(path)) return 'exists'
+    this.writes++
+    this.objects.set(path, { bytes: bytes.slice(), contentType })
+    return 'created'
+  }
+  async remove(paths: string[]): Promise<string[]> {
+    const removed: string[] = []
+    for (const p of paths) {
+      if (this.failRemove.has(p) || !this.objects.delete(p)) continue
+      removed.push(p)
+    }
+    return removed
+  }
+}
+
+/** photos_to_purge() / record_photo_purge() en mémoire : `purgeable` liste les chemins expirés non référencés. */
+export class MemoryPurgeRepo implements PurgePhotosRepo {
+  private readonly store: MemoryPhotoStore
+  purgeable: string[]
+  constructor(store: MemoryPhotoStore, purgeable: string[] = []) {
+    this.store = store
+    this.purgeable = purgeable
+  }
+  logs: { deleted: number; failed: number }[] = []
+  async listPurgeablePhotos(limit: number) {
+    return this.purgeable.filter((p) => this.store.objects.has(p)).slice(0, limit)
+  }
+  async recordPhotoPurge(deleted: number, failed: number) {
+    this.logs.push({ deleted, failed })
   }
 }

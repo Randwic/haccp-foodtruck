@@ -12,6 +12,8 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 | `…0600_quarantine.sql` | Quarantaine des enregistrements refusés pour leur contenu |
 | `…0700_manager_bootstrap.sql` | `staff.user_id`, inscription unique du gérant (`bootstrap_manager()`), compteur anti-abus |
 | `…0800_lot2_temperatures.sql` | `settings.daily_check_times`, seuils génériques des procédés, `records.device_now` et nouveau calcul de `clock_suspect` |
+| `…0900_reglages_procedes.sql` | `settings.missed_slot_carry_over`, `settings.thaw_dlc_days` |
+| `…1000_lot3_reception.sql` | Fournisseurs, bucket privé `photos` et ses politiques, `photos_to_purge()`, `record_photo_purge()` (idempotente, rejouée par les tests) |
 
 ## Tables
 
@@ -22,6 +24,7 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 - `staff.user_id` (null, unique, → `auth.users`, `on delete set null`) : relie le compte Supabase du gérant à sa fiche équipier.
 - `bootstrap_attempts` (table interne) : échecs d'inscription du gérant (horodatage + raison courte, aucune donnée personnelle). RLS sans politique, aucun privilège : accès seulement par les fonctions ci-dessous.
 - `record_chain_anchors` (table interne) : dernier maillon supprimé par la purge pour chaque appareil, pour que la chaîne puisse continuer et rester vérifiable.
+- `suppliers` (lot 3) : `name` 1–80 (non blanc), `phone` 1–30 ou null, `email` plausible ou null, `active`. Référence comme les autres (RLS gérant, audit, `updated_at` forcé, `service_role` en lecture seule). **Aucune suppression**, pour personne, propriétaire compris (trigger, TRUNCATE aussi) : les réceptions référencent `supplier_id` dans leur payload jsonb, sans clé étrangère possible → désactiver. Index `records_supplier_idx` pour la traçabilité amont.
 
 ## Règles de sécurité
 
@@ -64,13 +67,18 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
    - `bootstrap_failure_count(minutes)` et `bootstrap_record_failure(reason)` : compteur anti-abus (lignes de plus de 24 h supprimées à chaque nouvel échec).
 9. **Paramétrage par le gérant via l'API REST** (supabase-js + JWT) : `select`/`insert`/`update` (donc aussi `upsert`) sur `equipment`, `thresholds`, `staff` (PIN compris), `settings`, `establishment`. Vérifié par `85_manager_rest.sql` ; aucun changement de RLS n'a été nécessaire. Non-gérant : refus RLS ; anon : `permission denied`. Pas de DELETE (désactiver avec `active = false`).
 
+10. **Photos (lot 3)** : bucket Storage `photos` créé par migration (`public = false`, 1 Mo, `image/webp`).
+   - Politiques `storage.objects` : lecture par le gérant (`is_manager()`) ; politiques **restrictives** qui, même si une politique large est ajoutée plus tard, interdisent toute écriture/suppression du bucket à `anon` et `authenticated` et sa lecture à tout autre que le gérant. Seule l'Edge Function `photo-upload` (clé `service_role`) écrit.
+   - **Purge — choix** : `purge_expired_records()` n'est pas modifiée. Sur Supabase un `DELETE` SQL dans `storage.objects` est bloqué (`storage.protect_delete()`) et laisserait le fichier en place ; la suppression passe donc par l'API Storage dans l'Edge Function `purge-photos`. La base désigne les objets : `photos_to_purge(limit)` renvoie les photos **plus vieilles que `retention_years` ET référencées par aucun enregistrement présent** (toute chaîne `<uuid>/<uuid>.webp` du payload : `photo_paths`, `items[].photo_paths`, remplacements des corrections, quarantaine comprise). Une correction conservée garde son original, donc ses photos ; une photo orpheline part après la durée de conservation. `record_photo_purge(deleted, failed)` écrit un résumé `PURGE_PHOTOS` dans `audit_log`. Les deux fonctions : `service_role` seulement.
+
 Limite connue : le propriétaire de la base (rôle `postgres` de Supabase) peut toujours désactiver un trigger par une commande DDL. La protection vise l'API et les rôles applicatifs. Il faut protéger l'accès au tableau de bord Supabase (mot de passe fort et 2FA).
 
 ## Mise en place sur Supabase
 
 1. Lier le projet et pousser les migrations : `supabase link` puis `supabase db push`. Appliquer ensuite `seed.sql` une seule fois.
 2. Activer pg_cron (Database > Extensions). Si pg_cron a été activé après la migration, relancer la commande de planification indiquée en tête de `…0500_cron_purge.sql`.
-3. Laisser l'inscription libre désactivée. Le gérant crée son compte depuis l'app au premier lancement (Edge Function `bootstrap-manager`, une seule fois). En secours : créer l'utilisateur dans Auth puis `insert into public.managers (user_id) values ('<uuid>');`.
+3. Photos : planifier `purge-photos` une fois par jour (voir `backend-logic.md`).
+4. Laisser l'inscription libre désactivée. Le gérant crée son compte depuis l'app au premier lancement (Edge Function `bootstrap-manager`, une seule fois). En secours : créer l'utilisateur dans Auth puis `insert into public.managers (user_id) values ('<uuid>');`.
 
 Les types du lot 2 (`cooling`, `reheating`, `thawing`, `hot_holding`, `cooking_check`) figuraient déjà dans `haccp_known_record_type()` : aucune modification.
 
@@ -84,8 +92,8 @@ Prérequis : PostgreSQL 16 (`/usr/lib/postgresql/16/bin`, modifiable avec `PGBIN
 
 Le script :
 - crée un cluster jetable sur un port libre ;
-- installe les stubs Supabase (`supabase/tests/supabase_stubs.sql` : rôles, `auth.users`, `auth.uid()`, privilèges par défaut) ;
-- applique les migrations et le seed (deux fois, pour vérifier l'idempotence), puis `helpers.sql` ;
+- installe les stubs Supabase (`supabase/tests/supabase_stubs.sql` : rôles, `auth.users`, `auth.uid()`, privilèges par défaut, schéma `storage` minimal avec RLS et le blocage du `DELETE` direct) ;
+- applique les migrations (celle du lot 3 deux fois) et le seed (deux fois), pour vérifier l'idempotence, puis `helpers.sql` ;
 - exécute chaque `supabase/tests/sql/*.sql` dans une base clonée neuve ;
 - vérifie la concurrence de `bootstrap_manager()` avec deux sessions `psql` simultanées (une seule réussit) ;
 - détruit le cluster.

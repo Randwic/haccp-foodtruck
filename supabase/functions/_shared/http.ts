@@ -69,15 +69,15 @@ export function jsonResponse(status: number, body: unknown, headers: Record<stri
 }
 
 /**
- * Lit un corps JSON en refusant au-delà de `maxBytes` (sans tout charger en mémoire si le
- * client ment sur Content-Length ou envoie en chunked).
+ * Lit le corps brut en refusant au-delà de `maxBytes` (sans tout charger en mémoire si le
+ * client ment sur Content-Length ou envoie en chunked). Corps absent → tableau vide.
  */
-export async function readJsonBody(req: Request, maxBytes: number): Promise<unknown> {
+export async function readBodyBytes(req: Request, maxBytes: number): Promise<Uint8Array> {
   const declared = req.headers.get('content-length')
   if (declared !== null && Number(declared) > maxBytes) {
     throw new HttpError(413, 'payload_too_large', `corps limité à ${maxBytes} octets`)
   }
-  if (!req.body) throw new HttpError(400, 'invalid_json', 'corps vide')
+  if (!req.body) return new Uint8Array(0)
   const reader = req.body.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
@@ -97,6 +97,13 @@ export async function readJsonBody(req: Request, maxBytes: number): Promise<unkn
     bytes.set(c, off)
     off += c.byteLength
   }
+  return bytes
+}
+
+/** Lit un corps JSON borné à `maxBytes` (voir readBodyBytes). */
+export async function readJsonBody(req: Request, maxBytes: number): Promise<unknown> {
+  const bytes = await readBodyBytes(req, maxBytes)
+  if (bytes.byteLength === 0) throw new HttpError(400, 'invalid_json', 'corps vide')
   let text: string
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)

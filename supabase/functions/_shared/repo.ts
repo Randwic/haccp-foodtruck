@@ -122,3 +122,39 @@ export interface EnrollRepo {
 export interface HealthRepo {
   ping(): Promise<void>
 }
+
+/** Résultat de la création d'un utilisateur via l'API admin Supabase Auth. */
+export type CreateAuthUserResult =
+  | { ok: true; user_id: string }
+  /** Refus « métier » d'Auth : e-mail déjà pris, mot de passe jugé trop faible, autre refus de validation. */
+  | { ok: false; kind: 'email_exists' | 'weak_password' | 'rejected' }
+
+/** Résultat de `bootstrap_manager()` (transaction SQL sérialisée par verrou). */
+export type BootstrapManagerResult =
+  | { ok: true; staff_id: string }
+  /** `HACCP: already_bootstrapped` : un gérant existe déjà (y compris inscrit en concurrence). */
+  | { ok: false; kind: 'already_bootstrapped' }
+
+export interface BootstrapManagerRow {
+  user_id: string
+  display_name: string
+  pin_salt: string
+  pin_hash: string
+  establishment_name: string
+}
+
+export interface BootstrapRepo {
+  countManagers(): Promise<number>
+  /** Nom de l'établissement, null s'il n'existe pas. */
+  getEstablishmentName(): Promise<string | null>
+  /** `bootstrap_failure_count(minutes)` : échecs enregistrés dans la fenêtre. */
+  countRecentBootstrapFailures(windowMinutes: number): Promise<number>
+  /** `bootstrap_record_failure(reason)` : raison courte `[a-z_]`, jamais de donnée personnelle. */
+  recordBootstrapFailure(reason: string): Promise<void>
+  /** `auth.admin.createUser({ email, password, email_confirm: true })`. */
+  createAuthUser(email: string, password: string): Promise<CreateAuthUserResult>
+  /** `auth.admin.deleteUser(id)` : nettoyage après échec de l'étape SQL. */
+  deleteAuthUser(userId: string): Promise<void>
+  /** `bootstrap_manager(…)` ; toute autre erreur SQL est levée. */
+  bootstrapManager(row: BootstrapManagerRow): Promise<BootstrapManagerResult>
+}

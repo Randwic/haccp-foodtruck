@@ -25,7 +25,7 @@ port = 54323
 [auth]
 enabled = true
 site_url = "http://localhost:5173"
-# Les comptes gérant sont créés par l'administrateur, jamais par inscription libre.
+# Pas d'inscription libre : le gérant est créé une seule fois par l'Edge Function bootstrap-manager.
 enable_signup = false
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
@@ -48,3 +48,11 @@ verify_jwt = false
 # Enrôlement d'un appareil : réservé au gérant connecté (JWT Supabase).
 [functions.device-enroll]
 verify_jwt = true
+
+# Inscription unique du gérant depuis l'app (aucun gérant encore => pas de JWT possible).
+# Protégée par : refus 409 dès qu'un gérant existe (vérifié sous verrou en SQL) et limite anti-abus.
+[functions.bootstrap-status]
+verify_jwt = false
+
+[functions.bootstrap-manager]
+verify_jwt = false

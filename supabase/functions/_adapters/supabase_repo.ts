@@ -5,7 +5,11 @@ import type { Equipment, Establishment, Settings, StaffMember, Threshold } from 
 import { jsonLogger, parseAllowedOrigins, type HttpEnv } from '../_shared/http.ts'
 import { classifyDbError } from '../_shared/repo.ts'
 import type {
+  BootstrapManagerResult,
+  BootstrapManagerRow,
+  BootstrapRepo,
   ChainHead,
+  CreateAuthUserResult,
   DeviceRow,
   EnrollRepo,
   HealthRepo,
@@ -43,10 +47,21 @@ class DbError extends Error {
 const iso = (v: string | null): string | null => (v === null ? null : new Date(v).toISOString())
 const isoReq = (v: string): string => new Date(v).toISOString()
 
+/**
+ * Erreur Supabase Auth sans son message (qui pourrait reprendre une donnée saisie) :
+ * seuls le code et le statut HTTP partent dans les journaux.
+ */
+class AuthAdminError extends Error {
+  constructor(op: string, err: { code?: string; status?: number }) {
+    super(`${op} : ${err.status ?? '?'} ${err.code ?? ''}`.trim())
+    this.name = 'AuthAdminError'
+  }
+}
+
 /** Taille des paquets pour `.in('id', …)` (longueur d'URL PostgREST). */
 const IN_CHUNK = 100
 
-export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo {
+export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, BootstrapRepo {
   constructor(private readonly db: SupabaseClient) {}
 
   // ---- appareils ----
@@ -173,6 +188,55 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo 
     const { data, error } = await this.db.from('devices').insert(row).select('id').single()
     if (error) throw new DbError('devices.insert', error)
     return { id: data.id }
+  }
+
+  // ---- bootstrap du gérant ----
+  async countManagers(): Promise<number> {
+    const { count, error } = await this.db.from('managers').select('user_id', { count: 'exact', head: true })
+    if (error) throw new DbError('managers.count', error)
+    return count ?? 0
+  }
+  async getEstablishmentName(): Promise<string | null> {
+    const { data, error } = await this.db.from('establishment').select('name').limit(1).maybeSingle()
+    if (error) throw new DbError('establishment.select', error)
+    return data?.name ?? null
+  }
+  async countRecentBootstrapFailures(windowMinutes: number): Promise<number> {
+    const { data, error } = await this.db.rpc('bootstrap_failure_count', { p_minutes: windowMinutes })
+    if (error) throw new DbError('bootstrap_failure_count', error)
+    return Number(data ?? 0)
+  }
+  async recordBootstrapFailure(reason: string): Promise<void> {
+    const { error } = await this.db.rpc('bootstrap_record_failure', { p_reason: reason })
+    if (error) throw new DbError('bootstrap_record_failure', error)
+  }
+  async createAuthUser(email: string, password: string): Promise<CreateAuthUserResult> {
+    const { data, error } = await this.db.auth.admin.createUser({ email, password, email_confirm: true })
+    if (!error && data.user) return { ok: true, user_id: data.user.id }
+    const e = (error ?? {}) as { code?: string; status?: number }
+    if (e.code === 'email_exists' || e.code === 'user_already_exists') return { ok: false, kind: 'email_exists' }
+    if (e.code === 'weak_password') return { ok: false, kind: 'weak_password' }
+    if (e.status === 400 || e.status === 422) return { ok: false, kind: 'rejected' }
+    throw new AuthAdminError('auth.admin.createUser', e)
+  }
+  async deleteAuthUser(userId: string): Promise<void> {
+    const { error } = await this.db.auth.admin.deleteUser(userId)
+    if (error) throw new AuthAdminError('auth.admin.deleteUser', error as { code?: string; status?: number })
+  }
+  async bootstrapManager(row: BootstrapManagerRow): Promise<BootstrapManagerResult> {
+    const { data, error } = await this.db.rpc('bootstrap_manager', {
+      p_user_id: row.user_id,
+      p_display_name: row.display_name,
+      p_pin_salt: row.pin_salt,
+      p_pin_hash: row.pin_hash,
+      p_establishment_name: row.establishment_name,
+    })
+    if (error) {
+      if ((error.message ?? '').startsWith('HACCP: already_bootstrapped')) return { ok: false, kind: 'already_bootstrapped' }
+      throw new DbError('bootstrap_manager', error)
+    }
+    if (typeof data !== 'string') throw new Error('bootstrap_manager : réponse inattendue')
+    return { ok: true, staff_id: data }
   }
 
   // ---- santé ----

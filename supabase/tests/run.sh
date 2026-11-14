@@ -81,4 +81,34 @@ for f in "$HERE"/sql/*.sql; do
   total=$((total + n))
 done
 
+# -----------------------------------------------------------------------------
+# Concurrence : deux bootstrap_manager() simultanés, un seul réussit.
+# A garde sa transaction ouverte (pg_sleep) ; B démarre pendant ce temps, attend le
+# verrou consultatif puis doit voir le gérant de A et échouer (already_bootstrapped).
+# -----------------------------------------------------------------------------
+echo "==> concurrence bootstrap_manager"
+"${PSQL[@]}" -d postgres -c "create database t_bootstrap_race template haccp_template"
+U1=0000000c-0000-4000-8000-0000000000c1
+U2=0000000c-0000-4000-8000-0000000000c2
+SALT="$(python3 -c 'import base64; print(base64.b64encode(bytes(16)).decode())')"
+HASH="$(python3 -c 'import base64; print(base64.b64encode(bytes(32)).decode())')"
+"${PSQL[@]}" -d t_bootstrap_race -c "delete from public.managers; insert into auth.users (id, email) values ('$U1', 'a@example.test'), ('$U2', 'b@example.test');"
+boot_sql() { echo "set role service_role; begin; select public.bootstrap_manager('$1', 'Gérant $1', '$SALT', '$HASH', 'Camion $1'); select pg_sleep($2); commit;"; }
+"${PSQL[@]}" -d t_bootstrap_race -c "$(boot_sql "$U1" 1.5)" >"$TMP/race_a.out" 2>&1 &
+PID_A=$!
+sleep 0.4
+set +e
+"${PSQL[@]}" -d t_bootstrap_race -c "$(boot_sql "$U2" 0)" >"$TMP/race_b.out" 2>&1
+CODE_B=$?
+wait "$PID_A"
+CODE_A=$?
+set -e
+[ "$CODE_A" = 0 ] || { cat "$TMP/race_a.out"; echo "ÉCHEC : le premier bootstrap devait réussir" >&2; exit 1; }
+[ "$CODE_B" != 0 ] && grep -q 'HACCP: already_bootstrapped' "$TMP/race_b.out" \
+  || { cat "$TMP/race_b.out"; echo "ÉCHEC : le bootstrap concurrent devait être refusé (already_bootstrapped)" >&2; exit 1; }
+n="$("${PSQL[@]}" -d t_bootstrap_race -At -c "select count(*) || '|' || string_agg(user_id::text, ',') from public.managers")"
+[ "$n" = "1|$U1" ] || { echo "ÉCHEC : un seul gérant attendu, obtenu $n" >&2; exit 1; }
+echo "    ok - deux bootstrap simultanés : un seul gérant ($U1), le second refusé"
+total=$((total + 1))
+
 echo "==> TOUS LES TESTS SONT PASSÉS ($total assertions)"

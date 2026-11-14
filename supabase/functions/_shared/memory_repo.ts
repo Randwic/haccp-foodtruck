@@ -4,7 +4,11 @@
 import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import { classifyDbError, isClockSuspect } from './repo.ts'
 import type {
+  BootstrapManagerResult,
+  BootstrapManagerRow,
+  BootstrapRepo,
   ChainHead,
+  CreateAuthUserResult,
   DeviceRow,
   EnrollRepo,
   HealthRepo,
@@ -21,7 +25,7 @@ export interface MemoryDevice extends DeviceRow {
   enrolled_by?: string
 }
 
-export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo {
+export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, BootstrapRepo {
   devices: MemoryDevice[] = []
   staff: StaffMember[] = []
   equipment: Equipment[] = []
@@ -41,6 +45,21 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo {
   /** Permet de simuler un refus métier de la base. */
   rejectInsert: ((row: NewRecordRow) => string | null) | null = null
   pingFails = false
+  /** Supabase Auth (bootstrap) : utilisateurs créés via l'API admin. */
+  authUsers = new Map<string, { email: string }>()
+  /** Mots de passe reçus par createAuthUser (pour vérifier qu'ils ne fuient pas ailleurs). */
+  receivedPasswords: string[] = []
+  /** bootstrap_attempts : horodatage + raison des échecs. */
+  bootstrapFailures: { at: Date; reason: string }[] = []
+  /** Lien staff.user_id (la forme StaffMember du contrat ne le porte pas). */
+  staffUserIds = new Map<string, string>()
+  /** Force un refus de createUser. */
+  createUserRefusal: CreateAuthUserResult & { ok: false } | null = null
+  /** Simule une panne de l'étape SQL (exception) ou de la suppression d'utilisateur. */
+  bootstrapThrows = false
+  deleteUserThrows = false
+  /** Appelé juste avant la transaction SQL : permet de simuler une inscription concurrente. */
+  beforeBootstrap: ((row: BootstrapManagerRow) => void) | null = null
   calls: Record<string, number> = {}
 
   private count(name: string) {
@@ -153,6 +172,58 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo {
     const id = crypto.randomUUID()
     this.devices.push({ id, name: row.name, token_hash: row.token_hash, revoked_at: null, last_seen_at: null, enrolled_by: row.enrolled_by })
     return { id }
+  }
+
+  // ---- bootstrap du gérant ----
+  async countManagers() {
+    return this.managers.size
+  }
+  async getEstablishmentName() {
+    return this.establishment?.name ?? null
+  }
+  async countRecentBootstrapFailures(windowMinutes: number) {
+    const since = this.serverClock().getTime() - windowMinutes * 60_000
+    return this.bootstrapFailures.filter((f) => f.at.getTime() > since).length
+  }
+  async recordBootstrapFailure(reason: string) {
+    this.bootstrapFailures.push({ at: this.serverClock(), reason: /^[a-z_]{1,40}$/.test(reason) ? reason : 'other' })
+  }
+  async createAuthUser(email: string, password: string): Promise<CreateAuthUserResult> {
+    this.count('createAuthUser')
+    this.receivedPasswords.push(password)
+    if (this.createUserRefusal) return this.createUserRefusal
+    if ([...this.authUsers.values()].some((u) => u.email === email)) return { ok: false, kind: 'email_exists' }
+    const id = crypto.randomUUID()
+    this.authUsers.set(id, { email })
+    return { ok: true, user_id: id }
+  }
+  async deleteAuthUser(userId: string) {
+    this.count('deleteAuthUser')
+    if (this.deleteUserThrows) throw new Error('auth indisponible')
+    this.authUsers.delete(userId)
+  }
+  /** Reproduit public.bootstrap_manager() : revérifie l'absence de gérant puis écrit tout d'un bloc. */
+  async bootstrapManager(row: BootstrapManagerRow): Promise<BootstrapManagerResult> {
+    this.count('bootstrapManager')
+    this.beforeBootstrap?.(row)
+    if (this.bootstrapThrows) throw new Error('DbError: bootstrap_manager : 57P01 terminating connection')
+    if (this.managers.size > 0) return { ok: false, kind: 'already_bootstrapped' }
+    if (!this.authUsers.has(row.user_id)) throw new Error('DbError: bootstrap_manager : 23503 foreign key')
+    const id = crypto.randomUUID()
+    this.managers.add(row.user_id)
+    this.staff.push({
+      id,
+      display_name: row.display_name,
+      role: 'manager',
+      active: true,
+      pin_salt: row.pin_salt,
+      pin_hash: row.pin_hash,
+      updated_at: this.serverClock().toISOString(),
+    })
+    this.staffUserIds.set(id, row.user_id)
+    if (this.establishment) this.establishment = { ...this.establishment, name: row.establishment_name }
+    else this.establishment = { id: crypto.randomUUID(), name: row.establishment_name, timezone: 'Europe/Paris' }
+    return { ok: true, staff_id: id }
   }
 
   async ping() {

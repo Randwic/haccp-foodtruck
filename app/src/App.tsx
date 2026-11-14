@@ -1,7 +1,17 @@
-export default function App() {
+import type { CoreApi } from './core/api.ts'
+import { AppShell } from './ui/AppShell.tsx'
+import { ToastProvider } from './ui/components/index.ts'
+import { CoreProvider } from './ui/CoreContext.tsx'
+import { UpdatePrompt } from './ui/pwa/UpdatePrompt.tsx'
+
+/** Racine de l'interface : reçoit l'implémentation du core (voir main.tsx). */
+export default function App({ core }: { core: CoreApi }) {
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center">
-      <h1 className="text-3xl font-bold">HACCP Food Truck</h1>
-    </main>
+    <CoreProvider core={core}>
+      <ToastProvider>
+        <AppShell />
+        <UpdatePrompt />
+      </ToastProvider>
+    </CoreProvider>
   )
 }

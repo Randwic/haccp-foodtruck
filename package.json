@@ -1,0 +1,10 @@
+{
+  "name": "haccp-foodtruck",
+  "private": true,
+  "workspaces": ["app"],
+  "scripts": {
+    "test": "npm --workspace app run test",
+    "typecheck": "npm --workspace app run typecheck",
+    "build": "npm --workspace app run build"
+  }
+}

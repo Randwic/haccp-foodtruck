@@ -247,7 +247,7 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       const drift = Math.abs(Date.parse(server_time) - Date.parse(r.device_time))
       const clock_suspect = !Number.isFinite(drift) || drift > settings.clock_suspect_minutes * 60_000
       records.set(r.id, { record: { ...r, server_time }, server_time, clock_suspect, rejected: contentReject })
-      if (contentReject) res.rejected.push({ id: r.id, reason: contentReject })
+      if (contentReject) res.rejected.push({ id: r.id, reason: contentReject, quarantined: true })
       else res.accepted.push({ id: r.id, server_time, clock_suspect })
     }
     res.last_device_seq = dev.last_seq

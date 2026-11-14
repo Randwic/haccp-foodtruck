@@ -34,3 +34,17 @@ enable_refresh_token_rotation = true
 enable_signup = false
 double_confirm_changes = true
 enable_confirmations = true
+
+# Edge Functions : les appareils s'authentifient par jeton (x-device-token), pas par JWT.
+[functions.sync-push]
+verify_jwt = false
+
+[functions.sync-pull]
+verify_jwt = false
+
+[functions.health]
+verify_jwt = false
+
+# Enrôlement d'un appareil : réservé au gérant connecté (JWT Supabase).
+[functions.device-enroll]
+verify_jwt = true

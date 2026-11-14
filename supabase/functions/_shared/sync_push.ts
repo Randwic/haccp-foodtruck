@@ -21,12 +21,9 @@ export interface PushContext {
   logger: Logger
 }
 
-/**
- * Raison renvoyée au client pour un enregistrement en quarantaine. Le contrat (RejectReason)
- * n'a pas `supersedes_not_found` : on renvoie `invalid_payload`, la raison exacte est dans `detail`.
- */
+/** Raison renvoyée au client pour un enregistrement en quarantaine (marqué `quarantined: true`). */
 export function quarantineToRejectReason(q: QuarantineReason): RejectReason {
-  return q === 'supersedes_not_found' ? 'invalid_payload' : q
+  return q
 }
 
 /** Préfixe du `detail` d'un rejet par quarantaine : l'enregistrement EST stocké, la chaîne a avancé. */
@@ -96,7 +93,7 @@ export async function processPush(device: DeviceRow, rawRecords: unknown[], repo
   /** Réponse pour un enregistrement stocké (nouveau ou rejeu). */
   const respondStored = (s: StoredRecord, detailIfQuarantine: string) => {
     if (s.quarantine_reason) {
-      rejected.push({ id: s.id, reason: quarantineToRejectReason(s.quarantine_reason), detail: quarantineDetail(s.quarantine_reason, detailIfQuarantine) })
+      rejected.push({ id: s.id, reason: quarantineToRejectReason(s.quarantine_reason), detail: quarantineDetail(s.quarantine_reason, detailIfQuarantine), quarantined: true })
     } else {
       accepted.push({ id: s.id, server_time: s.server_time, clock_suspect: s.clock_suspect })
     }
@@ -118,7 +115,7 @@ export async function processPush(device: DeviceRow, rawRecords: unknown[], repo
     }
     const r = raw as unknown as HaccpRecord
     if (r.device_id !== device.id) {
-      reject(id, 'invalid_payload', 'device_id de l’enregistrement différent de l’appareil authentifié')
+      reject(id, 'invalid_record', 'device_id de l’enregistrement différent de l’appareil authentifié')
       continue
     }
 
@@ -127,7 +124,7 @@ export async function processPush(device: DeviceRow, rawRecords: unknown[], repo
     try {
       computed = await computeRecordHash(r)
     } catch {
-      reject(id, 'invalid_payload', 'contenu non hachable')
+      reject(id, 'invalid_record', 'contenu non hachable')
       continue
     }
     if (computed !== r.hash) {
@@ -201,7 +198,7 @@ export async function processPush(device: DeviceRow, rawRecords: unknown[], repo
     }
     if (ins.kind === 'rejected' || ins.kind === 'content') {
       ctx.logger.log('warn', 'db_rejected_record', { record_id: r.id, detail: ins.detail })
-      reject(id, 'invalid_payload', 'refusé par la base de données')
+      reject(id, 'invalid_record', 'refusé par la base de données')
       continue
     }
 

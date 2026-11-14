@@ -6,14 +6,14 @@ import App from './App.tsx'
 import type { CoreApi } from './core/api.ts'
 import { setActivityNotifier } from './ui/activity.ts'
 import { createFakeCore } from './ui/fakeCore.ts'
+import { createCore, createHttpTransport, createMockTransport, notifyActivity } from './core/index.ts'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POINT DE BRANCHEMENT DU CORE — le seul endroit à modifier.
-// Aujourd'hui : core factice en mémoire (démo). Pour le vrai core, remplacer par
-//   import { createCore } from './core/index.ts'
-//   const core: CoreApi = await createCore()   (ou équivalent)
-// et brancher le signal d'activité :  setActivityNotifier(notifyActivity)
-// Paramètres de démo dans l'URL : ?demo=enrolled | unlocked  et  ?sync=pending | error | stale | rejected | offline  et  ?staff=empty
+//  • URL avec ?demo=… / ?sync=… / ?staff=… → core factice de l'interface (captures, démo visuelle).
+//  • VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY définis → vrai core, vrai serveur Supabase.
+//  • sinon → vrai core + serveur simulé en mémoire (appareil de démo : voir DEMO_DEVICE,
+//    PIN Gérant 123456, Équipier 654321).
 // ─────────────────────────────────────────────────────────────────────────────
 function createDemoCore(): CoreApi {
   const params = new URLSearchParams(location.search)
@@ -35,8 +35,19 @@ function createDemoCore(): CoreApi {
     noStaffUntilSync: params.get('staff') === 'empty',
   })
 }
-const core: CoreApi = createDemoCore()
-setActivityNotifier(null) // vrai core : setActivityNotifier(notifyActivity)
+function createAppCore(): CoreApi {
+  const params = new URLSearchParams(location.search)
+  if (params.has('demo') || params.has('sync') || params.has('staff')) {
+    setActivityNotifier(null)
+    return createDemoCore()
+  }
+  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+  const transport = url && anonKey ? createHttpTransport({ baseUrl: url, anonKey }) : createMockTransport()
+  setActivityNotifier(notifyActivity)
+  return createCore({ transport })
+}
+const core: CoreApi = createAppCore()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

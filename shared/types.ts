@@ -52,7 +52,8 @@ export interface SyncPushRequest {
 export interface SyncPushResponse {
   accepted: { id: string; server_time: string; clock_suspect: boolean }[]
   // already_known : même id + même hash déjà reçu (envoi idempotent) -> compté comme accepté
-  rejected: { id: string; reason: RejectReason; detail?: string }[]
+  // quarantined = true : l'enregistrement EST stocké côté serveur (quarantaine, chaîne avancée) ; ne pas le renvoyer.
+  rejected: { id: string; reason: RejectReason; detail?: string; quarantined?: boolean }[]
   last_device_seq: number // dernier device_seq enregistré côté serveur pour cet appareil
 }
 export type RejectReason =
@@ -60,6 +61,8 @@ export type RejectReason =
   | 'broken_chain'
   | 'seq_gap'
   | 'invalid_payload'
+  | 'invalid_record' // enveloppe non stockable (uuid, date non canonique, champ inconnu…)
+  | 'supersedes_not_found' // correction visant un enregistrement inconnu
   | 'unknown_author'
   | 'unknown_type'
   | 'id_conflict' // même id, hash différent
@@ -118,7 +121,7 @@ export interface Threshold {
   min_c: number | null
   max_c: number | null
   tolerance_minutes: number // durée hors seuil avant alerte (capteurs)
-  updated_at: string
+  updated_at: string // NB : la base interdit la suppression d'un seuil (désactivation prévue au lot 2)
 }
 
 export interface Settings {

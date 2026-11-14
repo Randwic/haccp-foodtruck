@@ -120,30 +120,30 @@ const RECORD_KEYS = new Set([
  * Raisons possibles : `invalid_hash` (format du hash) ou `invalid_payload`.
  */
 export function validateRecordStructure(r: unknown): ValidationResult {
-  if (!isPlainObject(r)) return fail('enregistrement : objet attendu')
+  if (!isPlainObject(r)) return fail('enregistrement : objet attendu', 'invalid_record')
   for (const k of Object.keys(r)) {
-    if (!RECORD_KEYS.has(k)) return fail(`champ inconnu : ${k.slice(0, 40)}`)
+    if (!RECORD_KEYS.has(k)) return fail(`champ inconnu : ${k.slice(0, 40)}`, 'invalid_record')
   }
-  if (!isUuidV4(r.id)) return fail('id : uuid v4 en minuscules attendu')
+  if (!isUuidV4(r.id)) return fail('id : uuid v4 en minuscules attendu', 'invalid_record')
   if (typeof r.type !== 'string' || !/^[a-z][a-z0-9_]{0,39}$/.test(r.type)) {
-    return fail('type : identifiant attendu ([a-z0-9_], 40 caractères max)')
+    return fail('type : identifiant attendu ([a-z0-9_], 40 caractères max)', 'invalid_record')
   }
-  if (!isPlainObject(r.payload)) return fail('payload : objet attendu')
+  if (!isPlainObject(r.payload)) return fail('payload : objet attendu', 'invalid_record')
   const safe = checkJsonSafe(r.payload, 'payload', 0)
-  if (safe) return fail(safe)
-  if (JSON.stringify(r.payload).length > LIMITS.payloadMaxChars) return fail('payload : trop volumineux')
-  if (!isUuid(r.author_id)) return fail('author_id : uuid en minuscules attendu')
-  if (!isUuid(r.device_id)) return fail('device_id : uuid en minuscules attendu')
+  if (safe) return fail(safe, 'invalid_record')
+  if (JSON.stringify(r.payload).length > LIMITS.payloadMaxChars) return fail('payload : trop volumineux', 'invalid_record')
+  if (!isUuid(r.author_id)) return fail('author_id : uuid en minuscules attendu', 'invalid_record')
+  if (!isUuid(r.device_id)) return fail('device_id : uuid en minuscules attendu', 'invalid_record')
   if (typeof r.device_seq !== 'number' || !Number.isSafeInteger(r.device_seq) || r.device_seq < 1) {
-    return fail('device_seq : entier ≥ 1 attendu')
+    return fail('device_seq : entier ≥ 1 attendu', 'invalid_record')
   }
   if (!isCanonicalIsoTime(r.device_time)) {
-    return fail('device_time : format ISO UTC canonique attendu (new Date(x).toISOString())')
+    return fail('device_time : format ISO UTC canonique attendu (new Date(x).toISOString())', 'invalid_record')
   }
-  if (!isHex64(r.prev_hash)) return fail('prev_hash : 64 caractères hexadécimaux minuscules attendus')
+  if (!isHex64(r.prev_hash)) return fail('prev_hash : 64 caractères hexadécimaux minuscules attendus', 'invalid_record')
   if (!isHex64(r.hash)) return fail('hash : 64 caractères hexadécimaux minuscules attendus', 'invalid_hash')
-  if (r.supersedes_id !== null && !isUuid(r.supersedes_id)) return fail('supersedes_id : null ou uuid en minuscules attendu')
-  if (r.server_time !== undefined && typeof r.server_time !== 'string') return fail('server_time : chaîne attendue')
+  if (r.supersedes_id !== null && !isUuid(r.supersedes_id)) return fail('supersedes_id : null ou uuid en minuscules attendu', 'invalid_record')
+  if (r.server_time !== undefined && typeof r.server_time !== 'string') return fail('server_time : chaîne attendue', 'invalid_record')
   return ok
 }
 

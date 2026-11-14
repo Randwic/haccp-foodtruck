@@ -45,10 +45,10 @@ describe('validateRecordShape', () => {
     expect(validateRecordShape(baseRecord({ server_time: '2026-11-14T10:00:01.000Z' })).ok).toBe(true)
   })
   it.each([null, 42, 'x', [], new Date()])('refuse un non-objet : %s', (v) => {
-    expectFail(validateRecordShape(v))
+    expectFail(validateRecordShape(v), 'invalid_record')
   })
   it('refuse un champ inconnu', () => {
-    expectFail(validateRecordShape(baseRecord({ extra: 1 })), 'invalid_payload', /extra/)
+    expectFail(validateRecordShape(baseRecord({ extra: 1 })), 'invalid_record', /extra/)
   })
   it.each([
     ['uuid non v4', '00000000-0000-1000-8000-000000000001'],
@@ -57,11 +57,11 @@ describe('validateRecordShape', () => {
     ['pas un uuid', 'abc'],
     ['nombre', 1],
   ])('refuse un id invalide (%s)', (_l, id) => {
-    expectFail(validateRecordShape(baseRecord({ id })), 'invalid_payload', /^id/)
+    expectFail(validateRecordShape(baseRecord({ id })), 'invalid_record', /^id/)
   })
   it('refuse un type inconnu en unknown_type', () => {
     expectFail(validateRecordShape(baseRecord({ type: 'pizza' })), 'unknown_type')
-    expectFail(validateRecordShape(baseRecord({ type: 3 })))
+    expectFail(validateRecordShape(baseRecord({ type: 3 })), 'invalid_record')
   })
   it('accepte tous les types du contrat (forme seulement)', () => {
     for (const t of RECORD_TYPES) {
@@ -70,16 +70,16 @@ describe('validateRecordShape', () => {
     }
   })
   it('refuse un payload non objet', () => {
-    expectFail(validateRecordShape(baseRecord({ payload: [] })))
-    expectFail(validateRecordShape(baseRecord({ payload: null })))
+    expectFail(validateRecordShape(baseRecord({ payload: [] })), 'invalid_record')
+    expectFail(validateRecordShape(baseRecord({ payload: null })), 'invalid_record')
   })
   it('accepte author_id / device_id uuid non v4 (références de la base) mais pas en majuscules', () => {
     expect(validateRecordShape(baseRecord({ author_id: '11111111-1111-1111-1111-111111111111' })).ok).toBe(true)
-    expectFail(validateRecordShape(baseRecord({ author_id: '11111111-1111-1111-1111-11111111111A' })))
-    expectFail(validateRecordShape(baseRecord({ device_id: 'x' })))
+    expectFail(validateRecordShape(baseRecord({ author_id: '11111111-1111-1111-1111-11111111111A' })), 'invalid_record')
+    expectFail(validateRecordShape(baseRecord({ device_id: 'x' })), 'invalid_record')
   })
   it.each([0, -1, 1.5, '1', Number.MAX_SAFE_INTEGER + 1, NaN])('refuse device_seq = %s', (s) => {
-    expectFail(validateRecordShape(baseRecord({ device_seq: s })), 'invalid_payload', /device_seq/)
+    expectFail(validateRecordShape(baseRecord({ device_seq: s })), 'invalid_record', /device_seq/)
   })
   it.each([
     '2026-11-14T10:00:00Z',
@@ -91,14 +91,14 @@ describe('validateRecordShape', () => {
     '',
     1731578400000,
   ])('refuse device_time non canonique : %s', (t) => {
-    expectFail(validateRecordShape(baseRecord({ device_time: t })), 'invalid_payload', /device_time/)
+    expectFail(validateRecordShape(baseRecord({ device_time: t })), 'invalid_record', /device_time/)
   })
   it('isCanonicalIsoTime ⇔ toISOString()', () => {
     const iso = new Date(Date.UTC(2026, 10, 14, 10, 0, 0, 123)).toISOString()
     expect(isCanonicalIsoTime(iso)).toBe(true)
   })
   it('refuse prev_hash et hash mal formés', () => {
-    expectFail(validateRecordShape(baseRecord({ prev_hash: 'A'.repeat(64) })), 'invalid_payload', /prev_hash/)
+    expectFail(validateRecordShape(baseRecord({ prev_hash: 'A'.repeat(64) })), 'invalid_record', /prev_hash/)
     expectFail(validateRecordShape(baseRecord({ hash: 'a'.repeat(63) })), 'invalid_hash')
     expectFail(validateRecordShape(baseRecord({ hash: 'G'.repeat(64) })), 'invalid_hash')
     expectFail(validateRecordShape(baseRecord({ hash: undefined })), 'invalid_hash')
@@ -106,10 +106,10 @@ describe('validateRecordShape', () => {
   it('exige supersedes_id pour une correction et null sinon', () => {
     expectFail(validateRecordShape(baseRecord({ type: 'correction' })), 'invalid_payload', /supersedes_id/)
     expectFail(validateRecordShape(baseRecord({ supersedes_id: U(9) })), 'invalid_payload', /supersedes_id/)
-    expectFail(validateRecordShape(baseRecord({ supersedes_id: undefined })), 'invalid_payload', /supersedes_id/)
+    expectFail(validateRecordShape(baseRecord({ supersedes_id: undefined })), 'invalid_record', /supersedes_id/)
   })
   it('refuse server_time non textuel', () => {
-    expectFail(validateRecordShape(baseRecord({ server_time: 5 })))
+    expectFail(validateRecordShape(baseRecord({ server_time: 5 })), 'invalid_record')
   })
 })
 
@@ -120,8 +120,8 @@ describe('validateRecordStructure / validateRecordSemantics (serveur : quarantai
     expectFail(validateRecordSemantics(r as { type: string; supersedes_id: null }), 'unknown_type')
   })
   it('un type non identifiant n’est pas stockable', () => {
-    expectFail(validateRecordStructure(baseRecord({ type: 'Pizza !' })), 'invalid_payload', /^type/)
-    expectFail(validateRecordStructure(baseRecord({ type: 'x'.repeat(41) })), 'invalid_payload', /^type/)
+    expectFail(validateRecordStructure(baseRecord({ type: 'Pizza !' })), 'invalid_record', /^type/)
+    expectFail(validateRecordStructure(baseRecord({ type: 'x'.repeat(41) })), 'invalid_record', /^type/)
   })
   it('supersedes_id incohérent avec le type : stockable, refusé en sémantique', () => {
     const r = baseRecord({ supersedes_id: U(9) })
@@ -130,13 +130,13 @@ describe('validateRecordStructure / validateRecordSemantics (serveur : quarantai
     expectFail(validateRecordSemantics({ type: 'correction', supersedes_id: null }), 'invalid_payload', /supersedes_id/)
   })
   it('un payload que jsonb ne peut pas stocker n’est pas stockable', () => {
-    expectFail(validateRecordStructure(baseRecord({ payload: { note: 'a\u0000' } })), 'invalid_payload', /nul/)
-    expectFail(validateRecordStructure(baseRecord({ payload: { a: 'x'.repeat(20_000) } })), 'invalid_payload', /volumineux/)
+    expectFail(validateRecordStructure(baseRecord({ payload: { note: 'a\u0000' } })), 'invalid_record', /nul/)
+    expectFail(validateRecordStructure(baseRecord({ payload: { a: 'x'.repeat(20_000) } })), 'invalid_record', /volumineux/)
   })
   it('les champs de chaîne restent absolus', () => {
     expectFail(validateRecordStructure(baseRecord({ hash: 'x' })), 'invalid_hash')
-    expectFail(validateRecordStructure(baseRecord({ device_seq: 0 })))
-    expectFail(validateRecordStructure(baseRecord({ supersedes_id: 'abc' })))
+    expectFail(validateRecordStructure(baseRecord({ device_seq: 0 })), 'invalid_record')
+    expectFail(validateRecordStructure(baseRecord({ supersedes_id: 'abc' })), 'invalid_record')
   })
 })
 

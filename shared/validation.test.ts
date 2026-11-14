@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { CookingCheckPayload, CoolingPayload, HotHoldingPayload, ThawingPayload } from './payloads.ts'
+import type { CookingCheckPayload, CoolingPayload, HotHoldingPayload, ReceptionPayload, ThawingPayload, WastePayload } from './payloads.ts'
 import { GENESIS_HASH } from './types.ts'
 import {
   CORRECTIVE_ACTIONS,
   RECORD_TYPES,
   SUPPORTED_RECORD_TYPES,
+  LIMITS,
   isCanonicalIsoTime,
+  referencedPhotoPaths,
+  referencedSupplierId,
   referencedEquipmentId,
   validatePayload,
   validateRecordSemantics,
@@ -421,5 +424,170 @@ describe('validatePayload — garde-fous génériques', () => {
   it('refuse un payload trop volumineux', () => {
     const big = { reason: 'r', replacement: { a: 'x'.repeat(20_000) } }
     expectFail(validatePayload('correction', big), 'invalid_payload', /volumineux/)
+  })
+})
+
+// ───────────────────────────── Lot 3 : réception & pertes ─────────────────────────────
+
+const DEV = '0a1b2c3d-0000-4000-8000-00000000d001'
+const photo = (n: number) => `${DEV}/00000000-0000-4000-8000-${String(n).padStart(12, '0')}.webp`
+
+describe('validatePayload — reception', () => {
+  const item = (over: Record<string, unknown> = {}) => ({ product: 'Steak haché', storage: 'fridge', accepted: true, ...over })
+  const rec = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    supplier_id: U(20),
+    vehicle_ok: true,
+    packaging_ok: true,
+    items: [item()],
+    ...over,
+  })
+  it('accepte une réception minimale et une réception complète', () => {
+    expect(validatePayload('reception', rec())).toEqual({ ok: true })
+    const full: ReceptionPayload = {
+      supplier_id: U(20),
+      delivery_note: 'BL-2026-118',
+      vehicle_ok: false,
+      packaging_ok: true,
+      items: [
+        {
+          product: 'Steak haché 15 %',
+          lot: 'L2611A',
+          dlc: '2026-11-20',
+          ddm: '2027-02-28',
+          gtin: '3245678901234',
+          temperature_c: 2.5,
+          storage: 'fridge',
+          accepted: true,
+          photo_paths: [photo(1), photo(2)],
+        },
+        { product: 'Glace vanille', storage: 'freezer', accepted: false, refusal_reason: 'produit décongelé', temperature_c: -8 },
+      ],
+      photo_paths: [photo(3)],
+      comment: '',
+    }
+    expect(validatePayload('reception', full as unknown as Record<string, unknown>)).toEqual({ ok: true })
+  })
+  it('items : 1 à 50 lignes', () => {
+    expectFail(validatePayload('reception', rec({ items: [] })), 'invalid_payload', /items : 1/)
+    expect(validatePayload('reception', rec({ items: Array.from({ length: LIMITS.receptionItemsMax }, () => item()) })).ok).toBe(true)
+    expectFail(validatePayload('reception', rec({ items: Array.from({ length: 51 }, () => item()) })), 'invalid_payload', /50/)
+    expectFail(validatePayload('reception', rec({ items: 'x' })), 'invalid_payload', /tableau/)
+    expectFail(validatePayload('reception', rec({ items: [null] })), 'invalid_payload', /items\[0\] : objet/)
+  })
+  it('refusal_reason obligatoire (1..200, non blanc) si le produit est refusé', () => {
+    expectFail(validatePayload('reception', rec({ items: [item({ accepted: false })] })), 'invalid_payload', /items\[0\]\.refusal_reason/)
+    expectFail(validatePayload('reception', rec({ items: [item({ accepted: false, refusal_reason: '  ' })] })), 'invalid_payload', /refusal_reason/)
+    expectFail(validatePayload('reception', rec({ items: [item({ accepted: false, refusal_reason: 'x'.repeat(201) })] })), 'invalid_payload', /200/)
+    expect(validatePayload('reception', rec({ items: [item({ accepted: false, refusal_reason: 'x'.repeat(200) })] })).ok).toBe(true)
+  })
+  it('dates AAAA-MM-JJ réelles (dlc, ddm)', () => {
+    for (const bad of ['2026-02-30', '2026-13-01', '26-11-20', '2026-11-20T00:00:00Z', 20261120]) {
+      expectFail(validatePayload('reception', rec({ items: [item({ dlc: bad })] })), 'invalid_payload', /dlc/)
+      expectFail(validatePayload('reception', rec({ items: [item({ ddm: bad })] })), 'invalid_payload', /ddm/)
+    }
+    expect(validatePayload('reception', rec({ items: [item({ dlc: '2028-02-29' })] })).ok).toBe(true)
+  })
+  it('gtin : 8 à 14 chiffres (texte)', () => {
+    for (const ok of ['12345678', '12345678901234']) expect(validatePayload('reception', rec({ items: [item({ gtin: ok })] })).ok).toBe(true)
+    for (const bad of ['1234567', '123456789012345', '1234567a', 12345678, ' 12345678']) {
+      expectFail(validatePayload('reception', rec({ items: [item({ gtin: bad })] })), 'invalid_payload', /gtin/)
+    }
+  })
+  it('temperature_c : −50..300, une décimale', () => {
+    for (const ok of [-50, 300, 3.5, 0]) expect(validatePayload('reception', rec({ items: [item({ temperature_c: ok })] })).ok).toBe(true)
+    for (const bad of [-50.1, 300.5, 3.55, '3', null]) {
+      expectFail(validatePayload('reception', rec({ items: [item({ temperature_c: bad })] })), 'invalid_payload', /temperature_c/)
+    }
+  })
+  it('bornes de longueur : product, lot, delivery_note, comment', () => {
+    expectFail(validatePayload('reception', rec({ items: [item({ product: '' })] })), 'invalid_payload', /product/)
+    expectFail(validatePayload('reception', rec({ items: [item({ product: 'x'.repeat(81) })] })), 'invalid_payload', /product/)
+    expectFail(validatePayload('reception', rec({ items: [item({ lot: '' })] })), 'invalid_payload', /lot/)
+    expectFail(validatePayload('reception', rec({ items: [item({ lot: 'x'.repeat(41) })] })), 'invalid_payload', /lot/)
+    expect(validatePayload('reception', rec({ items: [item({ lot: 'x'.repeat(40) })] })).ok).toBe(true)
+    expectFail(validatePayload('reception', rec({ delivery_note: '' })), 'invalid_payload', /delivery_note/)
+    expectFail(validatePayload('reception', rec({ delivery_note: 'x'.repeat(41) })), 'invalid_payload', /delivery_note/)
+    expect(validatePayload('reception', rec({ comment: 'x'.repeat(500) })).ok).toBe(true)
+    expectFail(validatePayload('reception', rec({ comment: 'x'.repeat(501) })), 'invalid_payload', /comment/)
+  })
+  it('storage, accepted, vehicle_ok, packaging_ok, supplier_id', () => {
+    expectFail(validatePayload('reception', rec({ items: [item({ storage: 'cave' })] })), 'invalid_payload', /storage/)
+    expectFail(validatePayload('reception', rec({ items: [item({ accepted: 'oui' })] })), 'invalid_payload', /accepted/)
+    expectFail(validatePayload('reception', rec({ vehicle_ok: 1 })), 'invalid_payload', /vehicle_ok/)
+    expectFail(validatePayload('reception', rec({ packaging_ok: undefined })), 'invalid_payload')
+    expectFail(validatePayload('reception', rec({ supplier_id: 'ABC' })), 'invalid_payload', /supplier_id/)
+    const noSupplier = rec()
+    delete noSupplier.supplier_id
+    expectFail(validatePayload('reception', noSupplier), 'invalid_payload', /supplier_id : obligatoire/)
+  })
+  it('photo_paths : format PHOTO_PATH_RE, 5 maximum (réception et lignes)', () => {
+    expect(validatePayload('reception', rec({ photo_paths: [] })).ok).toBe(true)
+    expect(validatePayload('reception', rec({ photo_paths: [1, 2, 3, 4, 5].map(photo) })).ok).toBe(true)
+    expectFail(validatePayload('reception', rec({ photo_paths: [1, 2, 3, 4, 5, 6].map(photo) })), 'invalid_payload', /photo_paths/)
+    for (const bad of [`${DEV}/x.webp`, `${DEV}/${U(1)}.jpg`, `../${U(1)}.webp`, `${DEV.toUpperCase()}/${U(1)}.webp`, `${DEV}/${U(1)}.webp/`, 42]) {
+      expectFail(validatePayload('reception', rec({ photo_paths: [bad] })), 'invalid_payload', /photo_paths\[0\]/)
+      expectFail(validatePayload('reception', rec({ items: [item({ photo_paths: [bad] })] })), 'invalid_payload', /items\[0\]\.photo_paths\[0\]/)
+    }
+    expectFail(validatePayload('reception', rec({ photo_paths: photo(1) })), 'invalid_payload', /tableau/)
+  })
+  it('refuse les champs inconnus (réception et lignes)', () => {
+    expectFail(validatePayload('reception', rec({ total: 3 })), 'invalid_payload', /total : champ inconnu/)
+    expectFail(validatePayload('reception', rec({ items: [item({ price: 3 })] })), 'invalid_payload', /items\[0\]\.price : champ inconnu/)
+  })
+  it('referencedSupplierId / referencedPhotoPaths', () => {
+    const p = rec({ photo_paths: [photo(1)], items: [item({ photo_paths: [photo(2), photo(1)] }), item()] })
+    expect(referencedSupplierId('reception', p)).toBe(U(20))
+    expect(referencedSupplierId('waste', p)).toBeNull()
+    expect(referencedPhotoPaths('reception', p)).toEqual([photo(1), photo(2)])
+    expect(referencedPhotoPaths('waste', { photo_paths: [photo(4)] })).toEqual([photo(4)])
+    expect(referencedPhotoPaths('corrective_action', { photo_path: photo(4) })).toEqual([])
+  })
+  it('correction d’une réception : remplacement validé selon le type réception', () => {
+    expect(validatePayload('correction', { reason: 'lot mal saisi', replacement: rec() }, { supersededType: 'reception' }).ok).toBe(true)
+    expectFail(
+      validatePayload('correction', { reason: 'r', replacement: rec({ items: [] }) }, { supersededType: 'reception' }),
+      'invalid_payload',
+      /replacement \(reception\) : replacement\.items/,
+    )
+  })
+})
+
+describe('validatePayload — waste', () => {
+  const w = (over: Record<string, unknown> = {}): Record<string, unknown> => ({ product: 'Crème', reason: 'expired', ...over })
+  it('accepte une perte minimale et complète', () => {
+    expect(validatePayload('waste', w())).toEqual({ ok: true })
+    const full: WastePayload = {
+      product: 'Crème fraîche',
+      lot: 'L42',
+      quantity: '2 kg',
+      reason: 'other',
+      comment: 'pot gonflé',
+      related_record_id: U(30),
+      photo_paths: [photo(5)],
+    }
+    expect(validatePayload('waste', full as unknown as Record<string, unknown>)).toEqual({ ok: true })
+  })
+  it('comment obligatoire (non blanc) si reason = other', () => {
+    expectFail(validatePayload('waste', w({ reason: 'other' })), 'invalid_payload', /comment/)
+    expectFail(validatePayload('waste', w({ reason: 'other', comment: '  ' })), 'invalid_payload', /comment/)
+    expect(validatePayload('waste', w({ reason: 'recall', comment: '' })).ok).toBe(true)
+    expectFail(validatePayload('waste', w({ comment: 'x'.repeat(501) })), 'invalid_payload', /comment/)
+  })
+  it('reason hors liste, bornes product / lot / quantity, related_record_id, photo_paths', () => {
+    expectFail(validatePayload('waste', w({ reason: 'stolen' })), 'invalid_payload', /reason/)
+    expectFail(validatePayload('waste', w({ product: ' ' })), 'invalid_payload', /product/)
+    expectFail(validatePayload('waste', w({ lot: 'x'.repeat(41) })), 'invalid_payload', /lot/)
+    expectFail(validatePayload('waste', w({ quantity: '' })), 'invalid_payload', /quantity/)
+    expectFail(validatePayload('waste', w({ quantity: 'x'.repeat(41) })), 'invalid_payload', /quantity/)
+    expectFail(validatePayload('waste', w({ related_record_id: 'abc' })), 'invalid_payload', /related_record_id/)
+    expectFail(validatePayload('waste', w({ photo_paths: ['photo.webp'] })), 'invalid_payload', /photo_paths/)
+    expectFail(validatePayload('waste', w({ photo_paths: [1, 2, 3, 4, 5, 6].map(photo) })), 'invalid_payload', /photo_paths/)
+  })
+  it('refuse un champ inconnu', () => {
+    expectFail(validatePayload('waste', w({ cost: 3 })), 'invalid_payload', /cost/)
+  })
+  it('correction d’une perte', () => {
+    expect(validatePayload('correction', { reason: 'r', replacement: w() }, { supersededType: 'waste' }).ok).toBe(true)
+    expectFail(validatePayload('correction', { reason: 'r', replacement: w({ reason: 'other' }) }, { supersededType: 'waste' }), 'invalid_payload', /replacement\.comment/)
   })
 })

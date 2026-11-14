@@ -56,3 +56,12 @@ verify_jwt = false
 
 [functions.bootstrap-manager]
 verify_jwt = false
+
+# Lot 3 : envoi des photos par les appareils (jeton x-device-token, comme sync-push).
+[functions.photo-upload]
+verify_jwt = false
+
+# Purge quotidienne des photos expirées : appel planifié avec l'en-tête x-purge-secret
+# (secret PURGE_PHOTOS_SECRET), pas de JWT.
+[functions.purge-photos]
+verify_jwt = false

@@ -6,6 +6,8 @@ import {
   isPlainObject,
   isUuid,
   referencedEquipmentId,
+  referencedPhotoPaths,
+  referencedSupplierId,
   validatePayload,
   validateRecordSemantics,
   validateRecordStructure,
@@ -128,7 +130,7 @@ export async function processPush(
   const known = new Map<string, StoredRecord>()
   if (candidateIds.length > 0) for (const s of await repo.getRecordsByIds(candidateIds)) known.set(s.id, s)
 
-  const caches: ContentCaches = { staff: new Map(), equipment: new Map() }
+  const caches: ContentCaches = { staff: new Map(), equipment: new Map(), suppliers: new Map() }
   const state: { blockedBy: { id: string; reason: RejectReason } | null } = { blockedBy: null }
 
   const batchSuspect = await batchClockSuspect(deviceNow, ctx.now(), repo)
@@ -206,7 +208,7 @@ export async function processPush(
     }
 
     // 5. Contenu → quarantaine éventuelle
-    let verdict = await checkContent(r, repo, caches)
+    let verdict = await checkContent(r, device.id, repo, caches)
     let quarantine: QuarantineReason | null = verdict.ok ? null : verdict.quarantine
 
     // 6. Insertion (server_time et clock_suspect sont imposés par le trigger puis relus)
@@ -283,10 +285,11 @@ export async function processPush(
 interface ContentCaches {
   staff: Map<string, boolean | null> // null = inconnu, false = désactivé
   equipment: Map<string, boolean>
+  suppliers: Map<string, boolean>
 }
 
 /** Contrôles de contenu d'un enregistrement à la chaîne intègre. */
-async function checkContent(r: HaccpRecord, repo: PushRepo, caches: ContentCaches): Promise<ContentVerdict> {
+async function checkContent(r: HaccpRecord, deviceId: string, repo: PushRepo, caches: ContentCaches): Promise<ContentVerdict> {
   const q = (quarantine: QuarantineReason, detail: string): ContentVerdict => ({ ok: false, quarantine, detail })
 
   // Type du contrat et cohérence de supersedes_id
@@ -303,10 +306,12 @@ async function checkContent(r: HaccpRecord, repo: PushRepo, caches: ContentCache
 
   // Correction : cible existante, type d'origine
   let supersededType: RecordType | undefined
+  let correctedIds: string[] = []
   if (r.type === 'correction') {
     const res = await resolveOriginalType(r.supersedes_id as string, repo)
     if (!res.ok) return q(res.notFound ? 'supersedes_not_found' : 'invalid_payload', res.detail)
     supersededType = res.type as RecordType
+    correctedIds = res.chain
   }
 
   // Payload
@@ -324,14 +329,37 @@ async function checkContent(r: HaccpRecord, repo: PushRepo, caches: ContentCache
     if (!caches.equipment.has(eq)) caches.equipment.set(eq, await repo.equipmentExists(eq))
     if (!caches.equipment.get(eq)) return q('invalid_payload', 'equipment_id : équipement inconnu')
   }
+  // Fournisseur référencé (réception) : doit exister (même désactivé depuis : saisie hors réseau).
+  const sup = referencedSupplierId(effectiveType, effectivePayload)
+  if (sup !== null) {
+    if (!caches.suppliers.has(sup)) caches.suppliers.set(sup, await repo.supplierExists(sup))
+    if (!caches.suppliers.get(sup)) return q('invalid_payload', 'supplier_id : fournisseur inconnu')
+  }
+  // Photos : chemin `<device_id>/<uuid>.webp` de CET appareil (seul dossier où photo-upload le
+  // laisse écrire). Une correction peut reprendre les photos de l'enregistrement qu'elle corrige,
+  // même prises par un autre appareil. La présence du fichier n'est PAS exigée (envoi différé).
+  const foreign = referencedPhotoPaths(effectiveType, effectivePayload).filter((p) => !p.startsWith(`${deviceId}/`))
+  if (foreign.length > 0) {
+    const inherited = new Set<string>()
+    if (correctedIds.length > 0) {
+      for (const prev of await repo.getPayloadsByIds(correctedIds)) {
+        const isCorr = prev.type === 'correction'
+        const inner = isCorr ? (prev.payload as Record<string, unknown>).replacement : prev.payload
+        if (isPlainObject(inner)) for (const p of referencedPhotoPaths(supersededType as string, inner)) inherited.add(p)
+      }
+    }
+    const bad = foreign.find((p) => !inherited.has(p))
+    if (bad !== undefined) return q('invalid_payload', `photo_paths : ${bad} n’appartient pas à cet appareil`)
+  }
   return { ok: true }
 }
 
 async function resolveOriginalType(
   supersedesId: string,
   repo: PushRepo,
-): Promise<{ ok: true; type: string } | { ok: false; notFound: boolean; detail: string }> {
+): Promise<{ ok: true; type: string; chain: string[] } | { ok: false; notFound: boolean; detail: string }> {
   let current = supersedesId
+  const chain: string[] = []
   for (let depth = 0; depth < PUSH_LIMITS.maxCorrectionDepth; depth++) {
     const [rec] = await repo.getRecordsByIds([current])
     if (!rec) {
@@ -339,7 +367,8 @@ async function resolveOriginalType(
         ? { ok: false, notFound: true, detail: 'supersedes_id : enregistrement corrigé introuvable' }
         : { ok: false, notFound: false, detail: 'chaîne de corrections incohérente' }
     }
-    if (rec.type !== 'correction') return { ok: true, type: rec.type }
+    chain.push(rec.id)
+    if (rec.type !== 'correction') return { ok: true, type: rec.type, chain }
     if (!rec.supersedes_id) return { ok: false, notFound: false, detail: 'chaîne de corrections incohérente' }
     current = rec.supersedes_id
   }

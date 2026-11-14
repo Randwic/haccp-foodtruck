@@ -1,7 +1,8 @@
 // Validation des enregistrements du registre HACCP.
 // TS pur, sans dépendance : utilisé par l'app (avant mise en file d'envoi) et par les Edge Functions
 // (contrôle définitif côté serveur). Toute règle ajoutée ici s'applique donc des deux côtés.
-import type { MeasureSource, ProcessStep, ThawingPayload } from './payloads.ts'
+import { PHOTO_PATH_RE } from './payloads.ts'
+import type { MeasureSource, ProcessStep, ReceptionItem, ThawingPayload, WastePayload } from './payloads.ts'
 import type { RecordType, RejectReason } from './types.ts'
 
 export type ValidationResult = { ok: true } | { ok: false; reason: RejectReason; detail: string }
@@ -31,7 +32,7 @@ type _Exhaustive = Exclude<RecordType, (typeof RECORD_TYPES)[number]> extends ne
 const _exhaustive: _Exhaustive = true
 void _exhaustive
 
-/** Types dont le schéma de payload est défini (lot 1-2). Les autres sont refusés en `unknown_type`. */
+/** Types dont le schéma de payload est défini (lots 1 à 3). Les autres sont refusés en `unknown_type`. */
 export const SUPPORTED_RECORD_TYPES = [
   'system_test',
   'temperature_check',
@@ -41,6 +42,8 @@ export const SUPPORTED_RECORD_TYPES = [
   'thawing',
   'hot_holding',
   'cooking_check',
+  'reception',
+  'waste',
   'correction',
 ] as const
 
@@ -58,6 +61,9 @@ export const TEMPERATURE_SOURCES = ['manual', 'probe', 'sensor'] as const satisf
 /** Étapes des procédés suivis (cooling, reheating) ; thawing n'a que start et end. */
 export const PROCESS_STEPS = ['start', 'check', 'end'] as const satisfies readonly ProcessStep[]
 export const THAWING_STEPS = ['start', 'end'] as const satisfies readonly ThawingPayload['step'][]
+/** Lot 3 : conservation exigée d'un produit livré, motifs de perte / anomalie. */
+export const STORAGE_KINDS = ['fridge', 'freezer', 'ambient'] as const satisfies readonly ReceptionItem['storage'][]
+export const WASTE_REASONS = ['expired', 'non_compliant', 'temperature', 'damaged', 'recall', 'other'] as const satisfies readonly WastePayload['reason'][]
 
 export const LIMITS = {
   noteMax: 500,
@@ -67,6 +73,15 @@ export const LIMITS = {
   productMax: 80,
   /** duration_min des procédés (minutes depuis 'start'). */
   durationMaxMin: 1440,
+  /** Lot 3 (réception, pertes) — bornes de shared/payloads.ts. */
+  receptionItemsMax: 50,
+  photoPathsMax: 5,
+  lotMax: 40,
+  deliveryNoteMax: 40,
+  quantityMax: 40,
+  refusalReasonMax: 200,
+  receptionCommentMax: 500,
+  wasteCommentMax: 500,
   valueMinC: -50,
   valueMaxC: 300,
   /** Taille max du payload sérialisé (caractères JSON canonique, approximé par JSON.stringify). */
@@ -282,6 +297,23 @@ const photoPathField: FieldCheck = (v, name) => {
 }
 
 const productField = str({ max: LIMITS.productMax, nonEmpty: true })
+/** Chemin de photo du lot 3 : `<device_id>/<uuid>.webp` (PHOTO_PATH_RE du contrat). */
+const photoRefField: FieldCheck = (v, name) =>
+  typeof v === 'string' && PHOTO_PATH_RE.test(v) ? null : `${name} : chemin de photo <appareil>/<uuid>.webp attendu`
+const arrayOf =
+  (item: FieldCheck, opts: { min: number; max: number }): FieldCheck =>
+  (v, name) => {
+    if (!Array.isArray(v)) return `${name} : tableau attendu`
+    if (v.length < opts.min) return `${name} : ${opts.min} élément(s) minimum`
+    if (v.length > opts.max) return `${name} : ${opts.max} éléments maximum`
+    for (let i = 0; i < v.length; i++) {
+      const e = item(v[i], `${name}[${i}]`)
+      if (e) return e
+    }
+    return null
+  }
+const photoPathsField = arrayOf(photoRefField, { min: 0, max: LIMITS.photoPathsMax })
+const gtinField: FieldCheck = (v, name) => (typeof v === 'string' && /^\d{8,14}$/.test(v) ? null : `${name} : 8 à 14 chiffres attendus`)
 const durationField: FieldCheck = (v, name) =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= LIMITS.durationMaxMin
     ? null
@@ -292,6 +324,27 @@ const dateField: FieldCheck = (v, name) => {
   if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return bad
   const d = new Date(`${v}T00:00:00.000Z`)
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? null : bad
+}
+
+/** Une ligne de livraison (ReceptionItem). */
+const RECEPTION_ITEM_SCHEMA: Record<string, FieldSpec> = {
+  product: { check: productField },
+  lot: { check: str({ max: LIMITS.lotMax, nonEmpty: true }), optional: true },
+  dlc: { check: dateField, optional: true },
+  ddm: { check: dateField, optional: true },
+  gtin: { check: gtinField, optional: true },
+  temperature_c: { check: temperatureField, optional: true },
+  storage: { check: oneOf(STORAGE_KINDS) },
+  accepted: { check: boolField },
+  refusal_reason: { check: str({ max: LIMITS.refusalReasonMax, nonEmpty: true }), optional: true },
+  photo_paths: { check: photoPathsField, optional: true },
+}
+const receptionItemField: FieldCheck = (v, name) => {
+  if (!isPlainObject(v)) return `${name} : objet attendu`
+  const e = checkObject(v, RECEPTION_ITEM_SCHEMA, name)
+  if (e) return e
+  if (v.accepted === false && !has(v, 'refusal_reason')) return `${name}.refusal_reason : obligatoire si le produit est refusé`
+  return null
 }
 
 /** cooling / reheating (même forme). in_range et duration_min : facultatifs, sauf à 'end'. */
@@ -305,7 +358,17 @@ const PROCESS_SCHEMA: Record<string, FieldSpec> = {
   duration_min: { check: durationField, optional: true },
 }
 
-type SchemaType = 'system_test' | 'temperature_check' | 'corrective_action' | 'cooling' | 'reheating' | 'thawing' | 'hot_holding' | 'cooking_check'
+type SchemaType =
+  | 'system_test'
+  | 'temperature_check'
+  | 'corrective_action'
+  | 'cooling'
+  | 'reheating'
+  | 'thawing'
+  | 'hot_holding'
+  | 'cooking_check'
+  | 'reception'
+  | 'waste'
 
 const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
   system_test: {
@@ -346,6 +409,24 @@ const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
     source: { check: oneOf(TEMPERATURE_SOURCES) },
     in_range: { check: boolField },
   },
+  reception: {
+    supplier_id: { check: uuidField },
+    delivery_note: { check: str({ max: LIMITS.deliveryNoteMax, nonEmpty: true }), optional: true },
+    vehicle_ok: { check: boolField },
+    packaging_ok: { check: boolField },
+    items: { check: arrayOf(receptionItemField, { min: 1, max: LIMITS.receptionItemsMax }) },
+    photo_paths: { check: photoPathsField, optional: true },
+    comment: { check: str({ max: LIMITS.receptionCommentMax }), optional: true },
+  },
+  waste: {
+    product: { check: productField },
+    lot: { check: str({ max: LIMITS.lotMax, nonEmpty: true }), optional: true },
+    quantity: { check: str({ max: LIMITS.quantityMax, nonEmpty: true }), optional: true },
+    reason: { check: oneOf(WASTE_REASONS) },
+    comment: { check: str({ max: LIMITS.wasteCommentMax }), optional: true },
+    related_record_id: { check: uuidField, optional: true },
+    photo_paths: { check: photoPathsField, optional: true },
+  },
 }
 
 /**
@@ -357,6 +438,29 @@ export function referencedEquipmentId(type: RecordType | string, payload: Record
     return typeof payload.equipment_id === 'string' ? payload.equipment_id : null
   }
   return null
+}
+
+/** Fournisseur référencé par un payload valide (réception), ou null. */
+export function referencedSupplierId(type: RecordType | string, payload: Record<string, unknown>): string | null {
+  return type === 'reception' && typeof payload.supplier_id === 'string' ? payload.supplier_id : null
+}
+
+/**
+ * Chemins de photos (lot 3, `<device_id>/<uuid>.webp`) référencés par un payload valide :
+ * `photo_paths` (reception, waste) et `items[].photo_paths` (reception). Sans doublon.
+ * Le `photo_path` libre de corrective_action (lot 2) n'est pas concerné.
+ */
+export function referencedPhotoPaths(type: RecordType | string, payload: Record<string, unknown>): string[] {
+  if (type !== 'reception' && type !== 'waste') return []
+  const out = new Set<string>()
+  const add = (v: unknown) => {
+    if (Array.isArray(v)) for (const p of v) if (typeof p === 'string') out.add(p)
+  }
+  add(payload.photo_paths)
+  if (type === 'reception' && Array.isArray(payload.items)) {
+    for (const it of payload.items) if (isPlainObject(it)) add(it.photo_paths)
+  }
+  return [...out]
 }
 
 export interface PayloadContext {
@@ -393,6 +497,9 @@ export function validatePayload(type: RecordType | string, payload: unknown, ctx
   }
   if (type === 'thawing' && payload.step === 'end' && !has(payload, 'dlc')) {
     return fail('payload.dlc : obligatoire à l’étape « end »')
+  }
+  if (type === 'waste' && payload.reason === 'other' && (typeof payload.comment !== 'string' || payload.comment.trim() === '')) {
+    return fail('payload.comment : obligatoire quand le motif est « other »')
   }
   // Pas de contrôle de cohérence in_range / seuils : l'app calcule in_range avec le seuil en vigueur
   // au moment de la saisie (éventuellement hors réseau) ; le serveur ne peut pas le rejuger.

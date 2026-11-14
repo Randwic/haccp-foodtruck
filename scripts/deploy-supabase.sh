@@ -3,6 +3,7 @@
 # Prérequis : un jeton d'accès Supabase (sbp_…) injecté dans les requêtes vers api.supabase.com
 # (dans une session Claude Code : secret réseau ; sinon : export SUPABASE_ACCESS_TOKEN=…).
 # Usage : scripts/deploy-supabase.sh <project_ref> [db|functions|all]
+# Secrets des fonctions (une fois, hors script) : ALLOWED_ORIGIN, PURGE_PHOTOS_SECRET (≥ 32 caractères).
 set -euo pipefail
 REF=${1:?project_ref requis}; WHAT=${2:-all}
 API="https://api.supabase.com/v1/projects/$REF"
@@ -27,7 +28,7 @@ create table if not exists supabase_migrations.schema_migrations (version text p
 fi
 
 if [ "$WHAT" = functions ] || [ "$WHAT" = all ]; then
-  for spec in sync-push:false sync-pull:false health:false device-enroll:true bootstrap-status:false bootstrap-manager:false; do
+  for spec in sync-push:false sync-pull:false health:false device-enroll:true bootstrap-status:false bootstrap-manager:false photo-upload:false purge-photos:false; do
     slug=${spec%%:*}; vj=${spec#*:}; args=()
     for f in "supabase/functions/$slug/index.ts" supabase/functions/_adapters/*.ts supabase/functions/_shared/*.ts shared/*.ts; do
       case "$f" in *.test.ts|*memory_repo.ts|*test_helpers.ts) continue;; esac

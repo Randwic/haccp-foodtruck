@@ -61,6 +61,9 @@ for f in "$SUPA"/migrations/*.sql; do
   "${PSQL[@]}" -d haccp_template -f "$f"
 done
 
+echo "    (lot 3 rejoué : la migration doit être idempotente)"
+"${PSQL[@]}" -d haccp_template -f "$SUPA/migrations/20261114001000_lot3_reception.sql"
+
 echo "==> Seed"
 "${PSQL[@]}" -d haccp_template -f "$SUPA/seed.sql"
 echo "    (seed rejoué : doit être idempotent)"

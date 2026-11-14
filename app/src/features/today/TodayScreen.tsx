@@ -2,7 +2,7 @@ import { Tile } from '../../ui/components/index.ts'
 
 const UPCOMING = [
   { title: 'Températures', icon: '🌡️', description: 'Frigos, congélateur, cuisson' },
-  { title: 'Refroidissement', icon: '❄️', description: '+63 °C → +10 °C en moins de 2 h' },
+  { title: 'Refroidissement', icon: '❄️', description: 'De +63\u00a0°C à +10\u00a0°C en <\u00a02\u00a0h' },
   { title: 'Réception', icon: '📦', description: 'Livraisons, lots, DLC' },
   { title: 'Étiquettes DLC', icon: '🏷️', description: 'Impression et allergènes' },
   { title: 'Nettoyage', icon: '🧽', description: 'Plan et checklists' },
@@ -13,10 +13,10 @@ const UPCOMING = [
 /** Accueil « Aujourd'hui » : tuiles des modules. */
 export function TodayScreen({ onOpenSystemTest }: { onOpenSystemTest: () => void }) {
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-6">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-5 sm:py-6">
       <h1 className="mb-5 text-3xl font-bold text-white">Aujourd’hui</h1>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Tile title="Test d’enregistrement" icon="✅" description="Vérifier saisie et synchro" onClick={onOpenSystemTest} />
+        <Tile title="Test d’enregistrement" icon="✅" description="Vérifier saisie et synchro" onClick={onOpenSystemTest} className="col-span-2 lg:col-span-1" />
         {UPCOMING.map((m) => (
           <Tile key={m.title} title={m.title} icon={m.icon} description={m.description} disabled />
         ))}

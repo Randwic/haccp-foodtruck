@@ -69,11 +69,11 @@ export function PinPad({ value, onChange, onSubmit, minLength = 4, maxLength = 6
   }, [maxLength, minLength])
 
   const keyClass =
-    'flex h-[4.5rem] sm:h-20 items-center justify-center rounded-2xl text-4xl font-bold select-none transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+    'flex h-16 sm:h-20 items-center justify-center rounded-2xl text-4xl font-bold select-none transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
 
   return (
     <div role="group" aria-label={label} className="mx-auto w-full max-w-sm">
-      <div className="mb-5 flex h-8 items-center justify-center gap-4" aria-live="polite" aria-label={`${value.length} chiffre${value.length > 1 ? 's' : ''} saisi${value.length > 1 ? 's' : ''}`}>
+      <div className="mb-4 flex h-8 items-center justify-center gap-4" aria-live="polite" aria-label={`${value.length} chiffre${value.length > 1 ? 's' : ''} saisi${value.length > 1 ? 's' : ''}`}>
         {Array.from({ length: maxLength }, (_, i) => (
           <span
             key={i}

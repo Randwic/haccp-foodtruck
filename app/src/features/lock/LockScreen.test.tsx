@@ -65,4 +65,29 @@ describe('Écran de verrouillage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Verrouiller/ }))
     expect(await screen.findByRole('heading', { name: 'Qui êtes-vous ?' })).toBeInTheDocument()
   })
+
+  it('équipe vide (enrôlement hors-ligne) : message clair et bouton Réessayer', async () => {
+    const core = createFakeCore({ enrolled: true, noStaffUntilSync: true, sync: { online: false } })
+    renderWithCore(core)
+    expect(await screen.findByText(/Aucun équipier pour l’instant – connectez l’appareil à Internet/)).toBeInTheDocument()
+
+    // Hors-ligne : Réessayer appelle syncNow() mais l'équipe reste vide.
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }))
+    expect(await screen.findByRole('button', { name: 'Réessayer' })).toBeEnabled()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+
+    // Retour du réseau : Réessayer récupère l'équipe.
+    act(() => core.simulate.setSyncStatus({ online: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }))
+    expect(await screen.findByRole('radio', { name: /Gérant/ })).toBeInTheDocument()
+  })
+
+  it('équipe vide : se met à jour seule quand une synchro réussit', async () => {
+    const core = createFakeCore({ enrolled: true, noStaffUntilSync: true, autoSyncDelayMs: null })
+    renderWithCore(core)
+    await screen.findByText(/Aucun équipier pour l’instant/)
+    act(() => core.simulate.flush())
+    expect(await screen.findByRole('radio', { name: /Équipier/ })).toBeInTheDocument()
+    expect(screen.queryByText(/Aucun équipier/)).not.toBeInTheDocument()
+  })
 })

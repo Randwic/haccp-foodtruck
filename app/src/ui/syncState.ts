@@ -25,7 +25,7 @@ export function describeSync(s: SyncStatus, now: number = Date.now()): SyncView 
   if (s.rejected_count > 0 || stale || s.last_error) {
     let label = 'Erreur de synchronisation'
     if (s.rejected_count > 0) label = plural(s.rejected_count, 'saisie refusée', 'saisies refusées')
-    else if (stale) label = `${plural(s.pending_count, 'saisie', 'saisies')} en attente depuis + de 24 h`
+    else if (stale) label = `${plural(s.pending_count, 'saisie', 'saisies')} en attente > 24 h`
     else if (s.pending_count > 0) label = `${plural(s.pending_count, 'saisie', 'saisies')} en attente – erreur`
     return { level: 'error', label, reasons }
   }

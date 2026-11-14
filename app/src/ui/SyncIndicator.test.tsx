@@ -35,7 +35,7 @@ describe('<SyncIndicator />', () => {
     expect(screen.getByRole('button', { name: /3 saisies en attente/ })).toHaveAttribute('data-sync-level', 'pending')
 
     act(() => core.simulate.setSyncStatus({ oldest_pending_at: hoursAgo(30) }))
-    expect(screen.getByRole('button', { name: /en attente depuis \+ de 24 h/ })).toHaveAttribute('data-sync-level', 'error')
+    expect(screen.getByRole('button', { name: /en attente > 24 h/ })).toHaveAttribute('data-sync-level', 'error')
 
     act(() => core.simulate.setSyncStatus({ oldest_pending_at: hoursAgo(1), rejected_count: 2 }))
     expect(screen.getByRole('button', { name: /2 saisies refusées/ })).toHaveAttribute('data-sync-level', 'error')

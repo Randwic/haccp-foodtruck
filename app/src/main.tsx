@@ -4,6 +4,7 @@ import './index.css'
 import './ui/theme.css'
 import App from './App.tsx'
 import type { CoreApi } from './core/api.ts'
+import { setActivityNotifier } from './ui/activity.ts'
 import { createFakeCore } from './ui/fakeCore.ts'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11,7 +12,8 @@ import { createFakeCore } from './ui/fakeCore.ts'
 // Aujourd'hui : core factice en mémoire (démo). Pour le vrai core, remplacer par
 //   import { createCore } from './core/index.ts'
 //   const core: CoreApi = await createCore()   (ou équivalent)
-// Paramètres de démo dans l'URL : ?demo=enrolled | unlocked  et  ?sync=pending | error | stale | rejected | offline
+// et brancher le signal d'activité :  setActivityNotifier(notifyActivity)
+// Paramètres de démo dans l'URL : ?demo=enrolled | unlocked  et  ?sync=pending | error | stale | rejected | offline  et  ?staff=empty
 // ─────────────────────────────────────────────────────────────────────────────
 function createDemoCore(): CoreApi {
   const params = new URLSearchParams(location.search)
@@ -30,9 +32,11 @@ function createDemoCore(): CoreApi {
     unlockedStaffId: demo === 'unlocked' ? 'staff-gerant' : undefined,
     sync: sync && sync in syncPresets ? syncPresets[sync as keyof typeof syncPresets] : undefined,
     autoSyncDelayMs: sync ? null : 1200,
+    noStaffUntilSync: params.get('staff') === 'empty',
   })
 }
 const core: CoreApi = createDemoCore()
+setActivityNotifier(null) // vrai core : setActivityNotifier(notifyActivity)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

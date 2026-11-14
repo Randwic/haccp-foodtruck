@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { reportActivity } from '../activity.ts'
 
 const ACTIVITY_EVENTS = ['pointerdown', 'touchstart', 'keydown', 'wheel'] as const
 
@@ -32,6 +33,7 @@ export function useAutoLock(minutes: number | null | undefined, onIdle: () => vo
     const onActivity = () => {
       if (fired) return
       lastActivity = Date.now()
+      reportActivity()
       arm()
     }
     const onVisibility = () => {

@@ -1,5 +1,6 @@
 import { act, fireEvent, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setActivityNotifier } from '../activity.ts'
 import { createFakeCore } from '../fakeCore.ts'
 import { renderWithCore } from '../testUtils.tsx'
 import { useAutoLock } from './useAutoLock.ts'
@@ -32,6 +33,16 @@ describe('useAutoLock', () => {
     expect(onIdle).not.toHaveBeenCalled()
     vi.advanceTimersByTime(25_000)
     expect(onIdle).toHaveBeenCalledTimes(1)
+  })
+
+  it('signale chaque activité au point unique reportActivity (futur notifyActivity du core)', () => {
+    const notify = vi.fn()
+    setActivityNotifier(notify)
+    renderHook(() => useAutoLock(2, vi.fn()))
+    fireEvent.touchStart(window)
+    fireEvent.keyDown(window, { key: '1' })
+    expect(notify).toHaveBeenCalledTimes(2)
+    setActivityNotifier(null)
   })
 
   it('ne fait rien si désactivé', () => {

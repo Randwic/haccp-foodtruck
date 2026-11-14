@@ -78,14 +78,15 @@ export function SystemTestPanel({ onBack, timeZone }: { onBack: () => void; time
       ) : (
         <ul aria-label="Derniers enregistrements" className="divide-y divide-slate-800 overflow-hidden rounded-3xl bg-slate-900 ring-1 ring-slate-700">
           {records.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-4">
-              <span className="w-32 text-lg font-bold tabular-nums text-white">{formatDateTime(r.device_time, timeZone)}</span>
-              <span className="min-w-0 flex-1 text-lg text-slate-100">
-                {author(r.author_id)}
-                <span className="block text-base text-slate-400">
+            <li key={r.id} className="flex items-center gap-4 px-5 py-4">
+              <div className="min-w-0 flex-1">
+                <div className="text-lg font-bold tabular-nums text-white">
+                  {formatDateTime(r.device_time, timeZone)} · {author(r.author_id)}
+                </div>
+                <div className="text-base text-slate-300">
                   {r.type === 'system_test' ? 'Test système' : r.type} · n° {r.device_seq}
-                </span>
-              </span>
+                </div>
+              </div>
               {r.server_time ? <Badge tone="ok">✓ Synchronisé</Badge> : <Badge tone="warn">En attente</Badge>}
             </li>
           ))}

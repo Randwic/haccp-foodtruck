@@ -32,6 +32,8 @@ export interface FakeCoreOptions {
   /** Délai simulé des appels (défaut 0). */
   latencyMs?: number
   settings?: Partial<Settings>
+  /** Simule un enrôlement hors-ligne : listStaff() renvoie [] jusqu'à la prochaine synchro réussie. */
+  noStaffUntilSync?: boolean
 }
 
 export interface FakeCore extends CoreApi {
@@ -86,6 +88,7 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
   const syncListeners = new Set<(s: SyncStatus) => void>()
   const autoSyncDelay = options.autoSyncDelayMs === undefined ? 1200 : options.autoSyncDelayMs
   const latency = options.latencyMs ?? 0
+  let staffSynced = !options.noStaffUntilSync
 
   let status: SyncStatus = {
     online: true,
@@ -111,6 +114,7 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
   const flush = () => {
     const now = NOW()
     for (const r of records) if (!r.server_time) r.server_time = now
+    staffSynced = true
     setStatus({ pending_count: 0, oldest_pending_at: null, last_success_at: now, last_error: null })
   }
 
@@ -140,6 +144,7 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
 
     async listStaff() {
       await wait()
+      if (!staffSynced) return []
       return staff.filter((s) => s.active).map((s) => ({ ...s }))
     },
 

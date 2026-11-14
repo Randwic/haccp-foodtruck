@@ -11,10 +11,15 @@ function fill(name: string, id: string, token: string) {
   fireEvent.change(screen.getByLabelText('Jeton d’appareil'), { target: { value: token } })
 }
 
-describe('Enrôlement de l’appareil', () => {
-  it('affiche l’écran d’enrôlement quand l’appareil n’est pas enrôlé et valide les champs', async () => {
+async function openAdvanced() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Configuration avancée' }))
+  await screen.findByRole('heading', { name: 'Configuration avancée' })
+}
+
+describe('Configuration avancée (enrôlement manuel)', () => {
+  it('s’ouvre depuis la connexion gérant et valide les champs', async () => {
     renderWithCore(createFakeCore())
-    expect(await screen.findByRole('heading', { name: 'Enregistrer cet appareil' })).toBeInTheDocument()
+    await openAdvanced()
 
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer l’appareil' }))
     expect(screen.getByText(/Donnez un nom à cet appareil/)).toBeInTheDocument()
@@ -27,7 +32,7 @@ describe('Enrôlement de l’appareil', () => {
 
   it('affiche clairement l’erreur renvoyée par le core', async () => {
     renderWithCore(createFakeCore())
-    await screen.findByRole('heading', { name: 'Enregistrer cet appareil' })
+    await openAdvanced()
     fill('iPad cuisine', VALID_ID, 'invalide')
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer l’appareil' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Jeton d’appareil refusé')
@@ -36,10 +41,19 @@ describe('Enrôlement de l’appareil', () => {
   it('passe à l’écran de verrouillage après un enrôlement réussi', async () => {
     const core = createFakeCore()
     renderWithCore(core)
-    await screen.findByRole('heading', { name: 'Enregistrer cet appareil' })
+    await openAdvanced()
     fill('iPad cuisine', VALID_ID, 'jeton-secret-123')
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer l’appareil' }))
     expect(await screen.findByRole('heading', { name: 'Qui êtes-vous ?' })).toBeInTheDocument()
     expect(await core.getDevice()).toMatchObject({ device_id: VALID_ID, name: 'iPad cuisine' })
+  })
+})
+
+describe('Configuration avancée – retour', () => {
+  it('revient à la connexion gérant', async () => {
+    renderWithCore(createFakeCore())
+    await openAdvanced()
+    fireEvent.click(screen.getByRole('button', { name: '← Retour' }))
+    expect(await screen.findByRole('heading', { name: 'Connexion gérant' })).toBeInTheDocument()
   })
 })

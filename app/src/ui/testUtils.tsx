@@ -6,6 +6,9 @@ import type { CoreApi } from '../core/api.ts'
 import { AppShell } from './AppShell.tsx'
 import { ToastProvider } from './components/index.ts'
 import { CoreProvider } from './CoreContext.tsx'
+import type { ManagerApi } from '../manager/api.ts'
+import { createMockManagerApi } from '../manager/mockManager.ts'
+import { ManagerProvider } from '../manager/ManagerContext.tsx'
 
 // Vitest sans `globals` : Testing Library ne démonte pas automatiquement entre les tests.
 afterEach(() => {
@@ -13,10 +16,12 @@ afterEach(() => {
   localStorage.clear()
 })
 
-export function renderWithCore(core: CoreApi, ui: ReactNode = <AppShell />) {
+export function renderWithCore(core: CoreApi, ui: ReactNode = <AppShell />, manager: ManagerApi = createMockManagerApi({ seeded: true })) {
   return render(
     <CoreProvider core={core}>
-      <ToastProvider>{ui}</ToastProvider>
+      <ManagerProvider manager={manager}>
+        <ToastProvider>{ui}</ToastProvider>
+      </ManagerProvider>
     </CoreProvider>,
   )
 }

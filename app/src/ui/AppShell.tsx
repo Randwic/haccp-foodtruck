@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Establishment, Settings, StaffMember } from '../../../shared/types.ts'
 import type { DeviceInfo } from '../core/api.ts'
-import { EnrollScreen } from '../features/enrollment/EnrollScreen.tsx'
 import { LockScreen } from '../features/lock/LockScreen.tsx'
+import { ManagementScreen } from '../features/management/ManagementScreen.tsx'
+import { SetupFlow } from '../features/setup/SetupFlow.tsx'
 import { SystemTestPanel } from '../features/system-test/SystemTestPanel.tsx'
 import { TodayScreen } from '../features/today/TodayScreen.tsx'
 import { AppHeader } from './AppHeader.tsx'
@@ -14,9 +15,9 @@ import { OfflineBanner } from './pwa/OfflineBanner.tsx'
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
 
 type Boot = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; device: DeviceInfo | null }
-type View = 'today' | 'system_test'
+type View = 'today' | 'system_test' | 'management'
 
-/** Enchaînement des écrans : enrôlement → verrouillage (PIN) → accueil. */
+/** Enchaînement des écrans : première configuration → verrouillage (PIN) → accueil / Gestion. */
 export function AppShell() {
   const core = useCore()
   const [boot, setBoot] = useState<Boot>({ state: 'loading' })
@@ -53,6 +54,23 @@ export function AppShell() {
   }, [core])
 
   const enrolled = boot.state === 'ready' && boot.device !== null
+
+  // Nom d'établissement et délai de verrouillage peuvent changer (Gestion) : relus après chaque synchro.
+  useEffect(() => {
+    if (!enrolled) return
+    let alive = true
+    const off = core.onSyncStatusChange(() => {
+      Promise.all([core.getEstablishment(), core.getSettings()]).then(([e, s]) => {
+        if (!alive) return
+        setEstablishment(e)
+        setSettings(s)
+      }, () => {})
+    })
+    return () => {
+      alive = false
+      off()
+    }
+  }, [core, enrolled])
   useEffect(() => {
     if (!enrolled) return
     core.requestPersistentStorage().then(setPersistent, () => setPersistent(false))
@@ -79,7 +97,7 @@ export function AppShell() {
       </main>
     )
   } else if (!boot.device) {
-    content = <EnrollScreen onEnrolled={loadDevice} />
+    content = <SetupFlow onEnrolled={loadDevice} />
   } else if (!staff) {
     content = <LockScreen establishmentName={establishment?.name} timeZone={tz} />
   } else {
@@ -88,8 +106,13 @@ export function AppShell() {
         <AppHeader establishmentName={establishment?.name} timeZone={tz} staff={staff} onLock={lock} persistentStorage={persistent} />
         {view === 'system_test' ? (
           <SystemTestPanel onBack={() => setView('today')} timeZone={tz} />
+        ) : view === 'management' && staff.role === 'manager' ? (
+          <ManagementScreen onBack={() => setView('today')} meId={staff.id} />
         ) : (
-          <TodayScreen onOpenSystemTest={() => setView('system_test')} />
+          <TodayScreen
+            onOpenSystemTest={() => setView('system_test')}
+            onOpenManagement={staff.role === 'manager' ? () => setView('management') : undefined}
+          />
         )}
       </>
     )

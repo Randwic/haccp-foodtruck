@@ -74,3 +74,60 @@ export const DEFAULT_PROCESS_THRESHOLDS = {
   hot_holding: { min_c: 63 },
   cooking_check: { min_c: 70 },
 } as const
+
+// ───────────────────────────── Lot 3 : réception & traçabilité ─────────────────────────────
+
+/**
+ * Photos : prises sur l'appareil, compressées (WebP, ≤ 1 Mo, idéalement ~200 Ko), stockées
+ * localement puis envoyées par la fonction `photo-upload` dès qu'il y a du réseau.
+ * Chemin imposé (référencé dans les payloads) : `<device_id>/<uuid>.webp` dans le bucket privé `photos`.
+ */
+export const PHOTO_BUCKET = 'photos'
+export const PHOTO_MAX_BYTES = 1_000_000
+export const PHOTO_PATH_RE = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.webp$/
+
+/** Une ligne de livraison. */
+export interface ReceptionItem {
+  product: string // 1..80
+  lot?: string // n° de lot, 1..40
+  dlc?: string // AAAA-MM-JJ
+  ddm?: string // AAAA-MM-JJ (date de durabilité minimale)
+  gtin?: string // code-barres EAN/GTIN, 8 à 14 chiffres
+  temperature_c?: number // à cœur ou en surface, 1 décimale, −50..300
+  storage: 'fridge' | 'freezer' | 'ambient' // conservation exigée
+  accepted: boolean // false = refusé à la livraison
+  refusal_reason?: string // requis si accepted = false (1..200)
+  photo_paths?: string[] // 0..5, format PHOTO_PATH_RE (étiquette, n° de lot…)
+}
+
+/** Réception d'une livraison — type 'reception'. */
+export interface ReceptionPayload {
+  supplier_id: string
+  delivery_note?: string // n° de bon de livraison, 1..40
+  vehicle_ok: boolean // propreté / température du véhicule
+  packaging_ok: boolean // emballages intacts
+  items: ReceptionItem[] // 1..50
+  photo_paths?: string[] // 0..5 (bon de livraison…)
+  comment?: string // 0..500
+}
+
+/** Refus / anomalie constatée après coup (ex. produit non conforme découvert à l'ouverture) — type 'waste'. */
+export interface WastePayload {
+  product: string // 1..80
+  lot?: string
+  quantity?: string // texte libre court, ex. « 2 kg », 1..40
+  reason: 'expired' | 'non_compliant' | 'temperature' | 'damaged' | 'recall' | 'other'
+  comment?: string // requis si reason = 'other'
+  related_record_id?: string // réception / relevé concerné
+  photo_paths?: string[]
+}
+
+/** Fournisseur (donnée de référence, gérée dans Gestion, transmise par sync-pull). */
+export interface Supplier {
+  id: string
+  name: string // 1..80
+  phone?: string | null
+  email?: string | null
+  active: boolean
+  updated_at: string
+}

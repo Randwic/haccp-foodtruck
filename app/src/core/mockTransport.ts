@@ -82,7 +82,8 @@ export const DEMO_THRESHOLDS: Threshold[] = [
 ]
 
 export const DEMO_SETTINGS: Settings = {
-  retention_years: 3,
+  daily_check_times: ['08:00', '18:00'],
+    retention_years: 3,
   auto_lock_minutes: 5, // [À CONFIRMER]
   clock_suspect_minutes: 5,
   email_alerts: true,

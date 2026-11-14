@@ -47,6 +47,9 @@ export const GENESIS_HASH = '0'.repeat(64)
 /** POST /functions/v1/sync-push  (appareil) */
 export interface SyncPushRequest {
   device_id: string
+  // Horloge de l'appareil au moment de l'envoi (ISO UTC). Sert à détecter une horloge déréglée
+  // sans signaler à tort les saisies faites hors réseau et envoyées plus tard.
+  device_now?: string
   records: HaccpRecord[] // triés par device_seq croissant
 }
 export interface SyncPushResponse {
@@ -129,4 +132,5 @@ export interface Settings {
   auto_lock_minutes: number
   clock_suspect_minutes: number // écart device/serveur au-delà duquel on signale
   email_alerts: boolean
+  daily_check_times: string[] // heures des relevés d'enceintes, ex. ['08:00', '18:00'] (heure locale de l'établissement)
 }

@@ -44,6 +44,15 @@ async function push(records: unknown[], deviceId = DEVICE_ID, token = TOKEN): Pr
   return (await res.json()) as SyncPushResponse
 }
 
+/** Envoi par une app récente : device_now = horloge de l'appareil au moment de l'envoi. */
+async function pushAt(records: unknown[], deviceNow: string | null): Promise<SyncPushResponse> {
+  const res = await handler(pushReq({ device_id: DEVICE_ID, device_now: deviceNow, records }))
+  expect(res.status).toBe(200)
+  return (await res.json()) as SyncPushResponse
+}
+
+const minutes = (n: number) => new Date(NOW.getTime() + n * 60_000).toISOString()
+
 describe('sync-push — authentification', () => {
   it('refuse sans jeton, avec un jeton inconnu ou mal formé (401 unauthorized)', async () => {
     for (const token of [null, 'inconnu-mais-assez-long-0123456789', 'court', 'x'.repeat(300), 'avec espace dedans 123456']) {
@@ -259,15 +268,15 @@ describe('sync-push — quarantaine (chaîne intègre, contenu refusé)', () => 
   it('type hors contrat → quarantaine unknown_type (stocké tel quel)', async () => {
     const chain = new ChainBuilder()
     const pizza = await chain.next({ type: 'pizza' as never })
-    const cooling = await chain.next({ type: 'cooling', payload: {} })
-    const out = await push([pizza, cooling])
+    const oil = await chain.next({ type: 'oil_check', payload: {} })
+    const out = await push([pizza, oil])
     expect(out.rejected.map((r) => [r.reason, r.detail])).toEqual([
       ['unknown_type', Q('unknown_type')],
       ['unknown_type', Q('unknown_type')],
     ])
     expect(repo.records.map((r) => [r.type, r.quarantine_reason])).toEqual([
       ['pizza', 'unknown_type'],
-      ['cooling', 'unknown_type'],
+      ['oil_check', 'unknown_type'],
     ])
     expect(out.last_device_seq).toBe(2)
   })
@@ -418,10 +427,11 @@ describe('sync-push — concurrence (violation d’unicité)', () => {
     expect(out.rejected[0]).toEqual({ id: recs[0].id, reason: 'invalid_record', detail: 'refusé par la base de données' })
     expect(out.rejected[1].reason).toBe('broken_chain')
   })
-  it('ne transmet jamais server_time ni clock_suspect à l’insertion (imposés par le trigger)', async () => {
+  it('ne transmet jamais server_time ; ni clock_suspect ni device_now sans device_now (ancienne app)', async () => {
     await push(await new ChainBuilder().many(1))
     expect(repo.inserted[0]).not.toHaveProperty('server_time')
     expect(repo.inserted[0]).not.toHaveProperty('clock_suspect')
+    expect(repo.inserted[0]).not.toHaveProperty('device_now')
   })
 })
 
@@ -609,6 +619,70 @@ describe('sync-push — corrections', () => {
   })
 })
 
+describe('sync-push — lot 2 (températures)', () => {
+  const batch = '00000000-0000-4000-8000-00000000ba7c'
+  it('accepte cooling, reheating, thawing, hot_holding, cooking_check valides', async () => {
+    const chain = new ChainBuilder()
+    const recs = [
+      await chain.next({ type: 'cooling', payload: { batch_id: batch, step: 'start', product: 'Chili', value_c: 70, source: 'probe' } }),
+      await chain.next({ type: 'cooling', payload: { batch_id: batch, step: 'end', product: 'Chili', value_c: 9, source: 'probe', in_range: true, duration_min: 110 } }),
+      await chain.next({ type: 'reheating', payload: { batch_id: batch, step: 'end', product: 'Chili', value_c: 66, source: 'probe', in_range: true, duration_min: 40 } }),
+      await chain.next({ type: 'thawing', payload: { batch_id: batch, step: 'end', product: 'Steaks', equipment_id: FRIDGE_ID, dlc: '2026-11-17' } }),
+      await chain.next({ type: 'hot_holding', payload: { product: 'Frites', value_c: 65, source: 'probe', in_range: true } }),
+      await chain.next({ type: 'hot_holding', payload: { product: 'Frites', value_c: 64, source: 'probe', in_range: true, equipment_id: FRIDGE_ID } }),
+      await chain.next({ type: 'cooking_check', payload: { product: 'Steak haché', value_c: 72, source: 'probe', in_range: true } }),
+    ]
+    const out = await push(recs)
+    expect(out.rejected).toEqual([])
+    expect(out.accepted).toHaveLength(7)
+  })
+  it('n’évalue pas in_range contre les seuils (choix : seuils changeants hors réseau)', async () => {
+    repo.thresholds.push({ id: newId(), equipment_id: null, check_type: 'cooking_check', min_c: 70, max_c: null, tolerance_minutes: 0, updated_at: NOW.toISOString() })
+    const r = await new ChainBuilder().next({ type: 'cooking_check', payload: { product: 'Steak', value_c: 50, source: 'manual', in_range: true } })
+    expect((await push([r])).rejected).toEqual([])
+  })
+  it('équipement inconnu (thawing, hot_holding) → quarantaine invalid_payload, la chaîne avance', async () => {
+    const chain = new ChainBuilder()
+    const thaw = await chain.next({ type: 'thawing', payload: { batch_id: batch, step: 'start', product: 'Pain', equipment_id: newId() } })
+    const hot = await chain.next({ type: 'hot_holding', payload: { product: 'Frites', value_c: 65, source: 'probe', in_range: true, equipment_id: newId() } })
+    const ok = await chain.next()
+    const out = await push([thaw, hot, ok])
+    expect(out.rejected.map((r) => [r.id, r.reason, r.quarantined])).toEqual([
+      [thaw.id, 'invalid_payload', true],
+      [hot.id, 'invalid_payload', true],
+    ])
+    expect(out.rejected[0].detail).toMatch(/équipement inconnu/)
+    expect(out.accepted.map((a) => a.id)).toEqual([ok.id])
+    expect(out.last_device_seq).toBe(3)
+  })
+  it('payload invalide (cooling end sans duration_min, DLC impossible) → quarantaine invalid_payload', async () => {
+    const chain = new ChainBuilder()
+    const cool = await chain.next({ type: 'cooling', payload: { batch_id: batch, step: 'end', product: 'Chili', value_c: 9, source: 'probe', in_range: true } })
+    const thaw = await chain.next({ type: 'thawing', payload: { batch_id: batch, step: 'end', product: 'Pain', equipment_id: FRIDGE_ID, dlc: '2026-02-30' } })
+    const out = await push([cool, thaw])
+    expect(out.rejected.map((r) => r.reason)).toEqual(['invalid_payload', 'invalid_payload'])
+    expect(out.rejected[0].detail).toMatch(/duration_min/)
+    expect(out.rejected[1].detail).toMatch(/dlc/)
+  })
+  it('correction d’une décongélation : remplacement validé et équipement vérifié', async () => {
+    const chain = new ChainBuilder()
+    const thaw = { batch_id: batch, step: 'end', product: 'Pain', equipment_id: FRIDGE_ID, dlc: '2026-11-17' }
+    const { dlc: _dlc, ...noDlc } = thaw
+    const orig = await chain.next({ type: 'thawing', payload: thaw })
+    const good = await chain.next({ type: 'correction', supersedes_id: orig.id, payload: { reason: 'DLC', replacement: { ...thaw, dlc: '2026-11-16' } } })
+    const badEq = await chain.next({ type: 'correction', supersedes_id: orig.id, payload: { reason: 'r', replacement: { ...thaw, equipment_id: newId() } } })
+    const badDlc = await chain.next({ type: 'correction', supersedes_id: good.id, payload: { reason: 'r', replacement: noDlc } })
+    const out = await push([orig, good, badEq, badDlc])
+    expect(out.accepted.map((a) => a.id)).toEqual([orig.id, good.id])
+    expect(out.rejected.map((r) => [r.id, r.reason])).toEqual([
+      [badEq.id, 'invalid_payload'],
+      [badDlc.id, 'invalid_payload'],
+    ])
+    expect(out.rejected[0].detail).toMatch(/équipement inconnu/)
+    expect(out.rejected[1].detail).toMatch(/thawing.*dlc.*obligatoire/)
+  })
+})
+
 describe('sync-push — horloge', () => {
   it('écart > clock_suspect_minutes → accepté mais signalé', async () => {
     const chain = new ChainBuilder()
@@ -620,7 +694,7 @@ describe('sync-push — horloge', () => {
     expect(repo.records.map((r) => r.clock_suspect)).toEqual([true, true, false])
     expect(logger.lines.filter((l) => l.event === 'clock_suspect')).toHaveLength(2)
   })
-  it('saisie hors-ligne synchronisée 48 h plus tard → signalée (comportement attendu, documenté)', async () => {
+  it('ancienne app (sans device_now) : saisie hors-ligne envoyée 48 h plus tard → signalée (ancienne règle)', async () => {
     const r = await new ChainBuilder().next({ device_time: new Date(NOW.getTime() - 48 * 3600_000).toISOString() })
     expect((await push([r])).accepted[0].clock_suspect).toBe(true)
   })
@@ -637,6 +711,52 @@ describe('sync-push — horloge', () => {
       return res.ok ? { ...res, clock_suspect: true } : res
     }
     expect((await push([r])).accepted[0].clock_suspect).toBe(true)
+  })
+  it('device_now juste : saisies hors réseau envoyées 48 h plus tard → NON signalées', async () => {
+    const chain = new ChainBuilder()
+    const old = await chain.next({ device_time: minutes(-48 * 60) })
+    const older = await chain.next({ device_time: minutes(-30 * 60) })
+    const out = await pushAt([old, older], minutes(1))
+    expect(out.accepted.map((a) => a.clock_suspect)).toEqual([false, false])
+    expect(repo.records.map((r) => r.clock_suspect)).toEqual([false, false])
+    expect(repo.inserted.map((r) => r.device_now)).toEqual([minutes(1), minutes(1)])
+    expect(repo.inserted[0]).not.toHaveProperty('clock_suspect')
+    expect(logger.lines.some((l) => l.event.startsWith('clock_suspect'))).toBe(false)
+  })
+  it('device_now décalé > clock_suspect_minutes → TOUT le lot signalé (même device_time = heure serveur)', async () => {
+    const chain = new ChainBuilder()
+    const recs = [await chain.next({ device_time: minutes(-60) }), await chain.next({ device_time: NOW.toISOString() })]
+    const out = await pushAt(recs, minutes(-6))
+    expect(out.accepted.map((a) => a.clock_suspect)).toEqual([true, true])
+    expect(repo.inserted.map((r) => r.clock_suspect)).toEqual([true, true])
+    const batch = logger.lines.find((l) => l.event === 'clock_suspect_batch')!
+    expect(batch.fields).toMatchObject({ device_id: DEVICE_ID, skew_seconds: 360, records: 2 })
+    // en avance aussi
+    const ahead = await chain.next()
+    expect((await pushAt([ahead], minutes(6))).accepted[0].clock_suspect).toBe(true)
+  })
+  it('device_now : écart ≤ seuil toléré, settings.clock_suspect_minutes respecté', async () => {
+    const chain = new ChainBuilder()
+    expect((await pushAt([await chain.next({ device_time: minutes(-500) })], minutes(-5))).accepted[0].clock_suspect).toBe(false)
+    repo.settings!.clock_suspect_minutes = 60
+    expect((await pushAt([await chain.next()], minutes(-59))).accepted[0].clock_suspect).toBe(false)
+    expect((await pushAt([await chain.next()], minutes(61))).accepted[0].clock_suspect).toBe(true)
+  })
+  it('device_now : null = absent (ancienne règle) ; mal formé → 400 sans rien insérer', async () => {
+    const r = await new ChainBuilder().next({ device_time: minutes(-60) })
+    for (const bad of ['2026-11-14T10:00:00Z', '2026-11-14 10:00:00.000Z', 'hier', 12, true]) {
+      const res = await handler(pushReq({ device_id: DEVICE_ID, device_now: bad, records: [r] }))
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'invalid_request', detail: expect.stringMatching(/device_now/) })
+    }
+    expect(repo.inserted).toHaveLength(0)
+    expect((await pushAt([r], null)).accepted[0].clock_suspect).toBe(true)
+  })
+  it('device_now : rejeu idempotent → même réponse qu’au premier envoi', async () => {
+    const r = await new ChainBuilder().next({ device_time: minutes(-120) })
+    const first = await pushAt([r], NOW.toISOString())
+    const again = await pushAt([r], minutes(-30))
+    expect(again).toEqual(first)
   })
   it('isClockSuspect : même règle que le trigger (5 min par défaut sans settings)', () => {
     const later = new Date(NOW.getTime() + 5 * 60_000 + 1)

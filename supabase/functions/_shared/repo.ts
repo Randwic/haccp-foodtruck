@@ -42,7 +42,18 @@ export interface NewRecordRow {
   hash: string
   supersedes_id: string | null
   quarantine_reason: QuarantineReason | null
-  // server_time et clock_suspect ne sont PAS envoyés : le trigger d'insertion les impose.
+  /**
+   * `SyncPushRequest.device_now` (horloge de l'appareil à l'envoi), absent pour une ancienne app.
+   * Le trigger calcule alors clock_suspect sur |server_time − device_now| au lieu de device_time
+   * (pris en compte pour service_role seulement).
+   */
+  device_now?: string
+  /**
+   * Envoyé uniquement à `true`, quand le lot entier est jugé « horloge suspecte ». Le trigger fait
+   * un OU avec son propre calcul : une valeur fournie ne peut jamais effacer un signalement.
+   * server_time n'est jamais envoyé (imposé par le trigger).
+   */
+  clock_suspect?: true
 }
 
 export type InsertResult =
@@ -76,7 +87,10 @@ export function classifyDbError(code: string, message: string): InsertResult & {
   return { ok: false, kind: 'rejected', detail: `${code} ${message}`.trim() }
 }
 
-/** Même règle que le trigger : |server_time − device_time| > clock_suspect_minutes (5 par défaut). */
+/**
+ * Même règle que le trigger : |server_time − horloge appareil| > clock_suspect_minutes (5 par défaut).
+ * Horloge appareil = device_now (moment de l'envoi) si fourni, sinon device_time (ancienne règle).
+ */
 export function isClockSuspect(serverTime: Date, deviceTime: Date, clockSuspectMinutes: number | null | undefined): boolean {
   return Math.abs(serverTime.getTime() - deviceTime.getTime()) > (clockSuspectMinutes ?? 5) * 60_000
 }
@@ -92,6 +106,8 @@ export interface DeviceAuthRepo {
 }
 
 export interface PushRepo extends DeviceAuthRepo {
+  /** Paramètres (clock_suspect_minutes pour juger l'horloge du lot). */
+  getSettings(): Promise<Settings | null>
   /**
    * `device_chain_head(device_id)` : dernier maillon, ou ancre de purge (record_chain_anchors)
    * si tous les enregistrements ont été purgés — traitée comme une tête normale. null si jamais rien reçu.

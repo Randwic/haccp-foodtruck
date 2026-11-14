@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import type { CookingCheckPayload, CoolingPayload, HotHoldingPayload, ThawingPayload } from './payloads.ts'
 import { GENESIS_HASH } from './types.ts'
 import {
   CORRECTIVE_ACTIONS,
   RECORD_TYPES,
   SUPPORTED_RECORD_TYPES,
   isCanonicalIsoTime,
+  referencedEquipmentId,
   validatePayload,
   validateRecordSemantics,
   validateRecordShape,
@@ -252,11 +254,161 @@ describe('validatePayload — correction', () => {
     expectFail(res, 'invalid_payload', /replacement \(temperature_check\) : replacement\.value_c/)
   })
   it('refuse de corriger vers un type non pris en charge ou « correction »', () => {
-    expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'cooling' }), 'unknown_type')
+    expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'oil_check' }), 'unknown_type')
     expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'correction' }))
   })
   it('refuse un champ en trop', () => {
     expectFail(validatePayload('correction', { reason: 'r', replacement, x: 1 }))
+  })
+})
+
+describe('validatePayload — lot 2 : types pris en charge', () => {
+  it('cooling, reheating, thawing, hot_holding, cooking_check sont pris en charge', () => {
+    for (const t of ['cooling', 'reheating', 'thawing', 'hot_holding', 'cooking_check']) {
+      expect(SUPPORTED_RECORD_TYPES as readonly string[]).toContain(t)
+    }
+  })
+})
+
+describe.each(['cooling', 'reheating'] as const)('validatePayload — %s', (type) => {
+  const start: CoolingPayload = { batch_id: U(30), step: 'start', product: 'Chili', value_c: 70, source: 'probe' }
+  const end: CoolingPayload = { ...start, step: 'end', value_c: 8.5, in_range: true, duration_min: 95 }
+  it('accepte start, check et end', () => {
+    expect(validatePayload(type, start).ok).toBe(true)
+    expect(validatePayload(type, { ...start, step: 'check', value_c: 30 }).ok).toBe(true)
+    expect(validatePayload(type, end).ok).toBe(true)
+    expect(validatePayload(type, { ...end, in_range: false, duration_min: 0 }).ok).toBe(true)
+    expect(validatePayload(type, { ...end, duration_min: 1440 }).ok).toBe(true)
+  })
+  it('in_range / duration_min facultatifs hors « end »', () => {
+    expect(validatePayload(type, { ...start, in_range: true }).ok).toBe(true)
+    expect(validatePayload(type, { ...start, step: 'check', duration_min: 40, in_range: false }).ok).toBe(true)
+  })
+  it('à « end » : in_range et duration_min obligatoires', () => {
+    const { in_range: _a, ...noRange } = end
+    const { duration_min: _b, ...noDuration } = end
+    expectFail(validatePayload(type, noRange), 'invalid_payload', /in_range.*obligatoire/)
+    expectFail(validatePayload(type, noDuration), 'invalid_payload', /duration_min.*obligatoire/)
+  })
+  it.each([-1, 1441, 1.5, '30', null, NaN])('refuse duration_min = %s', (d) => {
+    expectFail(validatePayload(type, { ...end, duration_min: d }), 'invalid_payload', /duration_min/)
+  })
+  it('refuse step, batch_id, source, in_range invalides', () => {
+    expectFail(validatePayload(type, { ...start, step: 'middle' }), 'invalid_payload', /step/)
+    expectFail(validatePayload(type, { ...start, batch_id: 'lot-1' }), 'invalid_payload', /batch_id/)
+    expectFail(validatePayload(type, { ...start, batch_id: U(30).replace('-4000-', '-4AB0-') }), 'invalid_payload', /batch_id/)
+    expectFail(validatePayload(type, { ...start, source: 'eye' }), 'invalid_payload', /source/)
+    expectFail(validatePayload(type, { ...end, in_range: 1 }), 'invalid_payload', /in_range/)
+  })
+  it.each([-50.1, 300.1, 63.25, '63'])('refuse value_c = %s', (v) => {
+    expectFail(validatePayload(type, { ...start, value_c: v }), 'invalid_payload', /value_c/)
+  })
+  it('product : 1 à 80 caractères, non blanc', () => {
+    expect(validatePayload(type, { ...start, product: 'é'.repeat(80) }).ok).toBe(true)
+    expect(validatePayload(type, { ...start, product: '🍲'.repeat(80) }).ok).toBe(true)
+    expectFail(validatePayload(type, { ...start, product: 'x'.repeat(81) }), 'invalid_payload', /product.*80/)
+    expectFail(validatePayload(type, { ...start, product: '' }), 'invalid_payload', /product/)
+    expectFail(validatePayload(type, { ...start, product: '   ' }), 'invalid_payload', /product/)
+    expectFail(validatePayload(type, { ...start, product: 3 }), 'invalid_payload', /product/)
+  })
+  it('refuse un champ manquant ou inconnu', () => {
+    const { product: _, ...noProduct } = start
+    expectFail(validatePayload(type, noProduct), 'invalid_payload', /product.*obligatoire/)
+    expectFail(validatePayload(type, { ...start, equipment_id: U(10) }), 'invalid_payload', /equipment_id.*inconnu/)
+  })
+})
+
+describe('validatePayload — thawing', () => {
+  const start: ThawingPayload = { batch_id: U(40), step: 'start', product: 'Steaks hachés', equipment_id: U(10) }
+  const end: ThawingPayload = { ...start, step: 'end', dlc: '2026-11-17' }
+  it('accepte start et end (avec DLC)', () => {
+    expect(validatePayload('thawing', start).ok).toBe(true)
+    expect(validatePayload('thawing', end).ok).toBe(true)
+    expect(validatePayload('thawing', { ...end, dlc: '2028-02-29' }).ok).toBe(true)
+  })
+  it('à « end » : dlc obligatoire', () => {
+    expectFail(validatePayload('thawing', { ...start, step: 'end' }), 'invalid_payload', /dlc.*obligatoire/)
+  })
+  it.each(['2026-02-30', '2027-02-29', '2026-13-01', '2026-1-05', '17/11/2026', '2026-11-17T00:00:00Z', '', 20261117])(
+    'refuse dlc = %s',
+    (dlc) => {
+      expectFail(validatePayload('thawing', { ...end, dlc }), 'invalid_payload', /dlc/)
+    },
+  )
+  it('refuse step « check », equipment_id manquant ou invalide, champ inconnu', () => {
+    expectFail(validatePayload('thawing', { ...start, step: 'check' }), 'invalid_payload', /step/)
+    const { equipment_id: _, ...noEq } = start
+    expectFail(validatePayload('thawing', noEq), 'invalid_payload', /equipment_id.*obligatoire/)
+    expectFail(validatePayload('thawing', { ...start, equipment_id: 'frigo' }), 'invalid_payload', /equipment_id/)
+    expectFail(validatePayload('thawing', { ...start, value_c: 3 }), 'invalid_payload', /value_c.*inconnu/)
+  })
+})
+
+describe('validatePayload — hot_holding', () => {
+  const good: HotHoldingPayload = { product: 'Frites', value_c: 65, source: 'probe', in_range: true }
+  it('accepte avec ou sans equipment_id', () => {
+    expect(validatePayload('hot_holding', good).ok).toBe(true)
+    expect(validatePayload('hot_holding', { ...good, equipment_id: U(10), in_range: false, value_c: 55.5 }).ok).toBe(true)
+  })
+  it('refuse in_range absent, equipment_id invalide, valeur hors plage, champ inconnu', () => {
+    const { in_range: _, ...noRange } = good
+    expectFail(validatePayload('hot_holding', noRange), 'invalid_payload', /in_range.*obligatoire/)
+    expectFail(validatePayload('hot_holding', { ...good, equipment_id: null }), 'invalid_payload', /equipment_id/)
+    expectFail(validatePayload('hot_holding', { ...good, value_c: 301 }), 'invalid_payload', /value_c/)
+    expectFail(validatePayload('hot_holding', { ...good, batch_id: U(1) }), 'invalid_payload', /batch_id.*inconnu/)
+  })
+})
+
+describe('validatePayload — cooking_check', () => {
+  const good: CookingCheckPayload = { product: 'Steak haché', value_c: 72.5, source: 'probe', in_range: true }
+  it('accepte un contrôle valide', () => {
+    expect(validatePayload('cooking_check', good).ok).toBe(true)
+    expect(validatePayload('cooking_check', { ...good, value_c: 60, in_range: false, source: 'manual' }).ok).toBe(true)
+  })
+  it('refuse les champs manquants, invalides ou inconnus', () => {
+    const { product: _, ...noProduct } = good
+    expectFail(validatePayload('cooking_check', noProduct), 'invalid_payload', /product.*obligatoire/)
+    expectFail(validatePayload('cooking_check', { ...good, product: ' ' }), 'invalid_payload', /product/)
+    expectFail(validatePayload('cooking_check', { ...good, value_c: 70.05 }), 'invalid_payload', /value_c/)
+    expectFail(validatePayload('cooking_check', { ...good, equipment_id: U(10) }), 'invalid_payload', /equipment_id.*inconnu/)
+  })
+  it('n’évalue pas in_range par rapport aux seuils (choix : seuils variables hors réseau)', () => {
+    expect(validatePayload('cooking_check', { ...good, value_c: 40, in_range: true }).ok).toBe(true)
+  })
+})
+
+describe('validatePayload — correction des types du lot 2', () => {
+  it('accepte un remplacement valide et refuse un remplacement invalide', () => {
+    const cooling = { batch_id: U(30), step: 'end', product: 'Chili', value_c: 9, source: 'probe', in_range: true, duration_min: 100 }
+    expect(validatePayload('correction', { reason: 'mauvaise durée', replacement: cooling }, { supersededType: 'cooling' }).ok).toBe(true)
+    const { duration_min: _, ...noDuration } = cooling
+    expectFail(
+      validatePayload('correction', { reason: 'r', replacement: noDuration }, { supersededType: 'cooling' }),
+      'invalid_payload',
+      /replacement \(cooling\) : replacement\.duration_min.*obligatoire/,
+    )
+    const thaw = { batch_id: U(40), step: 'end', product: 'Pain', equipment_id: U(10), dlc: '2026-11-20' }
+    expect(validatePayload('correction', { reason: 'DLC', replacement: thaw }, { supersededType: 'thawing' }).ok).toBe(true)
+    expectFail(validatePayload('correction', { reason: 'r', replacement: { ...thaw, dlc: '2026-11-31' } }, { supersededType: 'thawing' }), 'invalid_payload', /dlc/)
+    for (const [t, rep] of [
+      ['reheating', { ...cooling, value_c: 70 }],
+      ['hot_holding', { product: 'Frites', value_c: 66, source: 'probe', in_range: true }],
+      ['cooking_check', { product: 'Steak', value_c: 71, source: 'probe', in_range: true }],
+    ] as const) {
+      expect(validatePayload('correction', { reason: 'r', replacement: rep }, { supersededType: t }).ok).toBe(true)
+      expectFail(validatePayload('correction', { reason: 'r', replacement: { ...rep, product: '' } }, { supersededType: t }), 'invalid_payload', /product/)
+    }
+  })
+})
+
+describe('referencedEquipmentId', () => {
+  it('renvoie l’équipement des types qui en portent un', () => {
+    expect(referencedEquipmentId('temperature_check', { equipment_id: U(10) })).toBe(U(10))
+    expect(referencedEquipmentId('thawing', { equipment_id: U(11) })).toBe(U(11))
+    expect(referencedEquipmentId('hot_holding', { equipment_id: U(12) })).toBe(U(12))
+    expect(referencedEquipmentId('hot_holding', {})).toBeNull()
+    expect(referencedEquipmentId('cooking_check', { product: 'x' })).toBeNull()
+    expect(referencedEquipmentId('corrective_action', { related_record_id: U(1) })).toBeNull()
   })
 })
 

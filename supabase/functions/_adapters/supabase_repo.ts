@@ -79,7 +79,7 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
   async getSettings(): Promise<Settings | null> {
     const { data, error } = await this.db
       .from('settings')
-      .select('retention_years, auto_lock_minutes, clock_suspect_minutes, email_alerts')
+      .select('retention_years, auto_lock_minutes, clock_suspect_minutes, email_alerts, daily_check_times')
       .eq('id', 1)
       .maybeSingle()
     if (error) throw new DbError('settings.select', error)
@@ -127,8 +127,11 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
     return data !== null
   }
   async insertRecord(row: NewRecordRow): Promise<InsertResult> {
-    // server_time / clock_suspect : jamais envoyés, imposés par le trigger, relus ici.
-    const { data, error } = await this.db.from('records').insert(row).select('server_time, clock_suspect').single()
+    // server_time : jamais envoyé, imposé par le trigger. clock_suspect : envoyé seulement à true (lot
+    // suspect) ; le trigger fait un OU avec son calcul. Valeurs relues ici. Clés absentes non envoyées.
+    const body: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(row)) if (v !== undefined) body[k] = v
+    const { data, error } = await this.db.from('records').insert(body).select('server_time, clock_suspect').single()
     if (!error) return { ok: true, server_time: isoReq(data.server_time), clock_suspect: Boolean(data.clock_suspect) }
     const code = error.code ?? ''
     const message = error.message ?? ''

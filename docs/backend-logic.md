@@ -1,6 +1,6 @@
 # Backend — logique serveur (Edge Functions)
 
-Lot 1. Supabase offre gratuite (UE), Edge Functions Deno. Contrat : `shared/types.ts` (inchangé).
+Lots 1 et 2. Supabase offre gratuite (UE), Edge Functions Deno. Contrat : `shared/types.ts` et `shared/payloads.ts` (payloads du lot 2).
 
 ## Organisation
 
@@ -34,8 +34,13 @@ supabase/functions/
 2. **Hash** recalculé (`computeRecordHash`) → `invalid_hash`.
 3. **Idempotence** : id connu + même hash → même réponse qu'au premier envoi ; hash différent → `id_conflict`.
 4. **Chaîne** : `device_seq = tête+1` (`seq_gap`), `prev_hash = hash de tête` (`broken_chain`) ; tête = `device_chain_head()` (ancre de purge comprise), `GENESIS_HASH` au premier.
-5. **Contenu** : type du contrat et défini (`unknown_type`), auteur existant **et actif** (`unknown_author`), correction : cible existante (`supersedes_not_found`) et remplacement valide pour le type d'origine (remonte les corrections successives), payload (`invalid_payload`), équipement référencé existant.
-6. **Insertion** ; `server_time` et `clock_suspect` sont imposés par le trigger et **relus** (jamais envoyés).
+5. **Contenu** : type du contrat et défini (`unknown_type`), auteur existant **et actif** (`unknown_author`), correction : cible existante (`supersedes_not_found`) et remplacement valide pour le type d'origine (remonte les corrections successives), payload (`invalid_payload`), équipement référencé existant (`temperature_check`, `thawing`, `hot_holding` s'il est déclaré ; aussi dans le remplacement d'une correction).
+6. **Insertion** ; `server_time` est imposé par le trigger, `clock_suspect` calculé par le trigger ; les deux sont **relus**.
+
+**Payloads du lot 2** (`shared/validation.ts`, selon `shared/payloads.ts`) : champs inconnus refusés ; `product` 1–80 caractères non blanc ; `value_c` −50..300, 1 décimale ; `step` `start|check|end` (`thawing` : `start|end`) ; `cooling`/`reheating` à `end` : `in_range` et `duration_min` (entier 0–1440) obligatoires (facultatifs avant) ; `thawing` à `end` : `dlc` date réelle `AAAA-MM-JJ` ; uuid en minuscules.
+**Choix : aucun contrôle `in_range` / seuils côté serveur.** `in_range` est calculé par l'app avec le seuil en vigueur au moment de la saisie, souvent hors réseau ; le gérant a pu changer le seuil entre-temps, le serveur ne peut donc pas rejuger sans faux refus. Les seuils restent consultables pour un contrôle a posteriori.
+
+**Horloge suspecte.** L'app envoie `device_now` (ISO canonique, sinon 400 `invalid_request` ; `null` = absent). Le lot est jugé **une fois** : |heure de la fonction − `device_now`| > `settings.clock_suspect_minutes`. Chaque ligne insérée porte `device_now` (le trigger calcule sur lui, plus sur `device_time`) et, si le lot est suspect, `clock_suspect: true` : tout le lot est signalé (événement `clock_suspect_batch` avec l'écart). Une saisie hors réseau envoyée des heures plus tard avec une horloge juste n'est donc plus signalée. Sans `device_now` (ancienne app) : ancienne règle par enregistrement sur `device_time`. Le trigger reste l'autorité (OU logique, `device_now` accepté de `service_role` seulement) ; un écart à la limite du seuil peut, au pire, signaler quelques lignes de plus, jamais en masquer.
 
 **Deux familles de refus**
 - *Intégrité* (1 à 4, `device_revoked`) : rien n'est stocké, la chaîne n'avance pas, les suivants du lot sont refusés en `broken_chain` (« bloqué par … »).
@@ -47,7 +52,7 @@ supabase/functions/
 Limites : 500 enregistrements (413 `too_many_records`), 1 Mo (413 `payload_too_large`, vérifié aussi sur flux sans Content-Length). Met à jour `devices.last_seen_at`.
 
 ### sync-pull
-`server_now` est pris **avant** les lectures ; on relit avec un recouvrement de 5 min sous `since` (transactions validées en retard) — doublons sans effet (remplacement par id). Staff : actifs seulement, avec `pin_salt`/`pin_hash`. `deleted` : staff/équipements passés `active=false` depuis `since` (vide si `since` vide). `establishment` et `settings` toujours renvoyés (503 `not_configured` si absents). 400 si `since` n'est pas une date.
+`server_now` est pris **avant** les lectures ; on relit avec un recouvrement de 5 min sous `since` (transactions validées en retard) — doublons sans effet (remplacement par id). Staff : actifs seulement, avec `pin_salt`/`pin_hash`. `deleted` : staff/équipements passés `active=false` depuis `since` (vide si `since` vide). `establishment` et `settings` (dont `daily_check_times`) toujours renvoyés (503 `not_configured` si absents). 400 si `since` n'est pas une date.
 
 ### device-enroll
 JWT → `auth.getUser()`, utilisateur présent dans `managers` (sinon 401/403). `name` : 1–60 caractères, espaces normalisés. Jeton = 32 octets aléatoires en base64url (43 car.) ; **seul son SHA-256** est stocké, le jeton n'est jamais journalisé. Réponse 201.

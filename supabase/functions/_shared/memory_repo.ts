@@ -32,7 +32,7 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   thresholds: Threshold[] = []
   establishment: Establishment | null = null
   settings: Settings | null = null
-  records: (NewRecordRow & { server_time: string; clock_suspect: boolean })[] = []
+  records: (Omit<NewRecordRow, 'clock_suspect'> & { server_time: string; clock_suspect: boolean })[] = []
   /** record_chain_anchors : dernier maillon d'un appareil dont tous les enregistrements ont été purgés. */
   anchors: { device_id: string; device_seq: number; hash: string }[] = []
   /** Toutes les lignes envoyées à insertRecord (y compris refusées). */
@@ -141,7 +141,10 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
       return raise('23505', 'duplicate key value violates unique constraint')
     }
     const server_time = serverTime.toISOString()
-    const clock_suspect = isClockSuspect(serverTime, new Date(row.device_time), this.settings?.clock_suspect_minutes)
+    // Comme le trigger (appelé en service_role) : device_now remplace device_time, OU avec la valeur fournie.
+    const clock_suspect =
+      row.clock_suspect === true ||
+      isClockSuspect(serverTime, new Date(row.device_now ?? row.device_time), this.settings?.clock_suspect_minutes)
     this.records.push({ ...structuredClone(row), server_time, clock_suspect })
     return { ok: true, server_time, clock_suspect }
   }

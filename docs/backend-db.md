@@ -11,11 +11,14 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 | `…0500_cron_purge.sql` | Planification pg_cron (quotidienne à 03:17 UTC). Si pg_cron est absent, la migration passe avec un avertissement |
 | `…0600_quarantine.sql` | Quarantaine des enregistrements refusés pour leur contenu |
 | `…0700_manager_bootstrap.sql` | `staff.user_id`, inscription unique du gérant (`bootstrap_manager()`), compteur anti-abus |
+| `…0800_lot2_temperatures.sql` | `settings.daily_check_times`, seuils génériques des procédés, `records.device_now` et nouveau calcul de `clock_suspect` |
 
 ## Tables
 
 - **Références** (modifiables par le gérant, journalisées) : `establishment` (une seule ligne), `managers`, `staff`, `devices`, `equipment`, `thresholds`, `settings` (une seule ligne, `id = 1`).
 - **Registre** `records` : insertion seule. `audit_log` : insertion seule.
+- `settings.daily_check_times` (`text[]`, défaut `{08:00,18:00}`) : heures des relevés d'enceintes, heure locale. Contrainte `haccp_valid_check_times()` : 1 à 6 heures `HH:MM` distinctes, sans null, tableau à une dimension.
+- Seuils génériques (`equipment_id` null) posés par `…0800` et le seed (idempotents, `on conflict do nothing`, à confirmer selon le PMS) : `hot_holding` min 63, `cooking_check` min 70, `cooling` max 10 / `tolerance_minutes` 120, `reheating` min 63 / 60. Pour les procédés, `tolerance_minutes` = durée maximale. Le « départ ≥ 63 °C » du refroidissement n'a pas de ligne (une ligne par type).
 - `staff.user_id` (null, unique, → `auth.users`, `on delete set null`) : relie le compte Supabase du gérant à sa fiche équipier.
 - `bootstrap_attempts` (table interne) : échecs d'inscription du gérant (horodatage + raison courte, aucune donnée personnelle). RLS sans politique, aucun privilège : accès seulement par les fonctions ci-dessous.
 - `record_chain_anchors` (table interne) : dernier maillon supprimé par la purge pour chaque appareil, pour que la chaîne puisse continuer et rester vérifiable.
@@ -26,7 +29,7 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
    - Seule exception : `purge_expired_records()` (SECURITY DEFINER). Elle pose l'indicateur local `haccp.purge_in_progress`. Les triggers n'en tiennent compte que si `current_user` est le propriétaire de la table, et seulement pour des lignes réellement expirées. Un rôle applicatif qui pose lui-même cet indicateur reste bloqué.
 2. **Contrôles à l'insertion dans `records`**, en filet de sécurité sous les Edge Functions :
    - `server_time` est imposé à `now()` ;
-   - `clock_suspect` est calculé à partir de `settings.clock_suspect_minutes` ;
+   - `clock_suspect` = valeur fournie **OU** |`server_time` − horloge appareil| > `settings.clock_suspect_minutes`. Horloge appareil = `device_now` (horloge à l'envoi, posée par `sync-push`) si présente, sinon `device_time` (ancienne app). `device_now` n'est pris en compte que pour le rôle `service_role` (`current_setting('role')`) ; pour tout autre rôle il est remis à null. Une valeur fournie ne peut qu'ajouter le signalement, jamais l'effacer ;
    - un appareil révoqué est refusé ;
    - la chaîne est vérifiée : `prev_hash` doit être le hash du maillon `device_seq - 1` (ou celui de l'ancre de purge), sans trou, et la genèse doit être `GENESIS_HASH`.
    - Les erreurs commencent par `HACCP: seq_gap`, `HACCP: broken_chain` ou `HACCP: device_revoked`.
@@ -68,6 +71,8 @@ Limite connue : le propriétaire de la base (rôle `postgres` de Supabase) peut 
 1. Lier le projet et pousser les migrations : `supabase link` puis `supabase db push`. Appliquer ensuite `seed.sql` une seule fois.
 2. Activer pg_cron (Database > Extensions). Si pg_cron a été activé après la migration, relancer la commande de planification indiquée en tête de `…0500_cron_purge.sql`.
 3. Laisser l'inscription libre désactivée. Le gérant crée son compte depuis l'app au premier lancement (Edge Function `bootstrap-manager`, une seule fois). En secours : créer l'utilisateur dans Auth puis `insert into public.managers (user_id) values ('<uuid>');`.
+
+Les types du lot 2 (`cooling`, `reheating`, `thawing`, `hot_holding`, `cooking_check`) figuraient déjà dans `haccp_known_record_type()` : aucune modification.
 
 ## Tests
 

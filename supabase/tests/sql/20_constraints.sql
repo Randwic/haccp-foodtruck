@@ -100,7 +100,7 @@ select tests.throws('seuil sans borne', 'service_role', null,
   'insert into public.thresholds (check_type) values (''hot_holding'')', '%thresholds_bound_present%');
 select tests.throws('seuil en double (équipement, type)', 'service_role', null,
   'insert into public.thresholds (equipment_id, check_type, max_c) values (''00000000-0000-4000-8000-000000000101'', ''temperature_check'', 5)', '%thresholds_unique%');
-select tests.exec_as('service_role', null, 'insert into public.thresholds (check_type, min_c) values (''hot_holding'', 63)');
+-- (le seuil générique hot_holding est posé par la migration …0800 / le seed)
 select tests.throws('seuil générique en double (equipment_id null)', 'service_role', null,
   'insert into public.thresholds (check_type, min_c) values (''hot_holding'', 65)', '%thresholds_unique%');
 select tests.throws('settings : une seule ligne', 'service_role', null,

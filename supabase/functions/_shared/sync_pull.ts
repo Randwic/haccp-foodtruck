@@ -66,6 +66,7 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
       auto_lock_minutes: settings.auto_lock_minutes,
       clock_suspect_minutes: settings.clock_suspect_minutes,
       email_alerts: settings.email_alerts,
+      daily_check_times: [...settings.daily_check_times],
     },
     deleted,
   }

@@ -1,6 +1,7 @@
 // Validation des enregistrements du registre HACCP.
 // TS pur, sans dépendance : utilisé par l'app (avant mise en file d'envoi) et par les Edge Functions
 // (contrôle définitif côté serveur). Toute règle ajoutée ici s'applique donc des deux côtés.
+import type { MeasureSource, ProcessStep, ThawingPayload } from './payloads.ts'
 import type { RecordType, RejectReason } from './types.ts'
 
 export type ValidationResult = { ok: true } | { ok: false; reason: RejectReason; detail: string }
@@ -31,7 +32,17 @@ const _exhaustive: _Exhaustive = true
 void _exhaustive
 
 /** Types dont le schéma de payload est défini (lot 1-2). Les autres sont refusés en `unknown_type`. */
-export const SUPPORTED_RECORD_TYPES = ['system_test', 'temperature_check', 'corrective_action', 'correction'] as const
+export const SUPPORTED_RECORD_TYPES = [
+  'system_test',
+  'temperature_check',
+  'corrective_action',
+  'cooling',
+  'reheating',
+  'thawing',
+  'hot_holding',
+  'cooking_check',
+  'correction',
+] as const
 
 export const CORRECTIVE_ACTIONS = [
   'discard',
@@ -43,13 +54,19 @@ export const CORRECTIVE_ACTIONS = [
 ] as const
 export type CorrectiveActionKind = (typeof CORRECTIVE_ACTIONS)[number]
 
-export const TEMPERATURE_SOURCES = ['manual', 'probe', 'sensor'] as const
+export const TEMPERATURE_SOURCES = ['manual', 'probe', 'sensor'] as const satisfies readonly MeasureSource[]
+/** Étapes des procédés suivis (cooling, reheating) ; thawing n'a que start et end. */
+export const PROCESS_STEPS = ['start', 'check', 'end'] as const satisfies readonly ProcessStep[]
+export const THAWING_STEPS = ['start', 'end'] as const satisfies readonly ThawingPayload['step'][]
 
 export const LIMITS = {
   noteMax: 500,
   reasonMax: 500,
   commentMax: 1000,
   photoPathMax: 300,
+  productMax: 80,
+  /** duration_min des procédés (minutes depuis 'start'). */
+  durationMaxMin: 1440,
   valueMinC: -50,
   valueMaxC: 300,
   /** Taille max du payload sérialisé (caractères JSON canonique, approximé par JSON.stringify). */
@@ -91,6 +108,10 @@ export function isCanonicalIsoTime(v: unknown): v is string {
 const ok: ValidationResult = { ok: true }
 function fail(detail: string, reason: RejectReason = 'invalid_payload'): ValidationResult {
   return { ok: false, reason, detail }
+}
+
+function has(o: Record<string, unknown>, k: string): boolean {
+  return Object.prototype.hasOwnProperty.call(o, k)
 }
 
 function charLength(s: string): number {
@@ -218,7 +239,7 @@ function checkObject(payload: Record<string, unknown>, spec: Record<string, Fiel
     if (!(k in spec)) return `${path}.${k} : champ inconnu`
   }
   for (const [k, s] of Object.entries(spec)) {
-    const present = Object.prototype.hasOwnProperty.call(payload, k)
+    const present = has(payload, k)
     if (!present) {
       if (s.optional) continue
       return `${path}.${k} : obligatoire`
@@ -260,7 +281,33 @@ const photoPathField: FieldCheck = (v, name) => {
   return null
 }
 
-const SCHEMAS: Record<'system_test' | 'temperature_check' | 'corrective_action', Record<string, FieldSpec>> = {
+const productField = str({ max: LIMITS.productMax, nonEmpty: true })
+const durationField: FieldCheck = (v, name) =>
+  typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= LIMITS.durationMaxMin
+    ? null
+    : `${name} : entier de 0 à ${LIMITS.durationMaxMin} attendu`
+/** Date civile AAAA-MM-JJ réelle (refuse 2026-02-30). */
+const dateField: FieldCheck = (v, name) => {
+  const bad = `${name} : date AAAA-MM-JJ attendue`
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return bad
+  const d = new Date(`${v}T00:00:00.000Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? null : bad
+}
+
+/** cooling / reheating (même forme). in_range et duration_min : facultatifs, sauf à 'end'. */
+const PROCESS_SCHEMA: Record<string, FieldSpec> = {
+  batch_id: { check: uuidField },
+  step: { check: oneOf(PROCESS_STEPS) },
+  product: { check: productField },
+  value_c: { check: temperatureField },
+  source: { check: oneOf(TEMPERATURE_SOURCES) },
+  in_range: { check: boolField, optional: true },
+  duration_min: { check: durationField, optional: true },
+}
+
+type SchemaType = 'system_test' | 'temperature_check' | 'corrective_action' | 'cooling' | 'reheating' | 'thawing' | 'hot_holding' | 'cooking_check'
+
+const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
   system_test: {
     note: { check: str({ max: LIMITS.noteMax }) },
   },
@@ -277,6 +324,39 @@ const SCHEMAS: Record<'system_test' | 'temperature_check' | 'corrective_action',
     comment: { check: str({ max: LIMITS.commentMax }) },
     photo_path: { check: photoPathField, optional: true },
   },
+  cooling: PROCESS_SCHEMA,
+  reheating: PROCESS_SCHEMA,
+  thawing: {
+    batch_id: { check: uuidField },
+    step: { check: oneOf(THAWING_STEPS) },
+    product: { check: productField },
+    equipment_id: { check: uuidField },
+    dlc: { check: dateField, optional: true },
+  },
+  hot_holding: {
+    product: { check: productField },
+    value_c: { check: temperatureField },
+    source: { check: oneOf(TEMPERATURE_SOURCES) },
+    in_range: { check: boolField },
+    equipment_id: { check: uuidField, optional: true },
+  },
+  cooking_check: {
+    product: { check: productField },
+    value_c: { check: temperatureField },
+    source: { check: oneOf(TEMPERATURE_SOURCES) },
+    in_range: { check: boolField },
+  },
+}
+
+/**
+ * Équipement référencé par un payload valide (pour le contrôle d'existence côté serveur), ou null.
+ * temperature_check et thawing : obligatoire ; hot_holding : facultatif.
+ */
+export function referencedEquipmentId(type: RecordType | string, payload: Record<string, unknown>): string | null {
+  if (type === 'temperature_check' || type === 'thawing' || type === 'hot_holding') {
+    return typeof payload.equipment_id === 'string' ? payload.equipment_id : null
+  }
+  return null
 }
 
 export interface PayloadContext {
@@ -307,6 +387,15 @@ export function validatePayload(type: RecordType | string, payload: unknown, ctx
   if (type === 'corrective_action' && payload.action === 'other' && (payload.comment as string).trim() === '') {
     return fail('payload.comment : obligatoire quand l’action est « other »')
   }
+  if ((type === 'cooling' || type === 'reheating') && payload.step === 'end') {
+    if (!has(payload, 'in_range')) return fail('payload.in_range : obligatoire à l’étape « end »')
+    if (!has(payload, 'duration_min')) return fail('payload.duration_min : obligatoire à l’étape « end »')
+  }
+  if (type === 'thawing' && payload.step === 'end' && !has(payload, 'dlc')) {
+    return fail('payload.dlc : obligatoire à l’étape « end »')
+  }
+  // Pas de contrôle de cohérence in_range / seuils : l'app calcule in_range avec le seuil en vigueur
+  // au moment de la saisie (éventuellement hors réseau) ; le serveur ne peut pas le rejuger.
   return ok
 }
 

@@ -1,10 +1,18 @@
 // sync-push : réception des enregistrements d'un appareil et vérification de sa chaîne de hachage.
 import { computeRecordHash } from '../../../shared/canonical.ts'
 import { GENESIS_HASH, type HaccpRecord, type RecordType, type RejectReason, type SyncPushResponse } from '../../../shared/types.ts'
-import { isPlainObject, isUuid, validatePayload, validateRecordSemantics, validateRecordStructure } from '../../../shared/validation.ts'
+import {
+  isCanonicalIsoTime,
+  isPlainObject,
+  isUuid,
+  referencedEquipmentId,
+  validatePayload,
+  validateRecordSemantics,
+  validateRecordStructure,
+} from '../../../shared/validation.ts'
 import { authenticateDevice } from './auth.ts'
 import { HttpError, jsonResponse, readJsonBody, withHttp, type HttpEnv, type Logger } from './http.ts'
-import type { ChainHead, DeviceRow, PushRepo, QuarantineReason, StoredRecord } from './repo.ts'
+import { isClockSuspect, type ChainHead, type DeviceRow, type NewRecordRow, type PushRepo, type QuarantineReason, type StoredRecord } from './repo.ts'
 
 export const PUSH_LIMITS = {
   maxRecords: 500,
@@ -31,8 +39,15 @@ export function quarantineDetail(q: QuarantineReason, detail: string): string {
   return `quarantaine[${q}] (enregistré, chaîne avancée) : ${detail}`
 }
 
-/** Contrôle de l'enveloppe { device_id, records } ; renvoie les enregistrements bruts (non typés). */
-export function parsePushRequest(body: unknown, device: DeviceRow): unknown[] {
+export interface ParsedPush {
+  /** Enregistrements bruts (non typés). */
+  records: unknown[]
+  /** Horloge de l'appareil à l'envoi (ISO canonique), absente pour une ancienne app. */
+  deviceNow: string | null
+}
+
+/** Contrôle de l'enveloppe { device_id, device_now?, records }. */
+export function parsePushRequest(body: unknown, device: DeviceRow): ParsedPush {
   if (!isPlainObject(body)) throw new HttpError(400, 'invalid_request', 'objet JSON attendu')
   if (typeof body.device_id !== 'string') throw new HttpError(400, 'invalid_request', 'device_id manquant')
   if (body.device_id !== device.id) throw new HttpError(403, 'device_mismatch', 'device_id ne correspond pas au jeton')
@@ -40,7 +55,25 @@ export function parsePushRequest(body: unknown, device: DeviceRow): unknown[] {
   if (body.records.length > PUSH_LIMITS.maxRecords) {
     throw new HttpError(413, 'too_many_records', `${PUSH_LIMITS.maxRecords} enregistrements maximum par requête`)
   }
-  return body.records
+  let deviceNow: string | null = null
+  if (body.device_now !== undefined && body.device_now !== null) {
+    if (!isCanonicalIsoTime(body.device_now)) {
+      throw new HttpError(400, 'invalid_request', 'device_now : format ISO UTC canonique attendu (new Date().toISOString())')
+    }
+    deviceNow = body.device_now
+  }
+  return { records: body.records, deviceNow }
+}
+
+/**
+ * Horloge du LOT : |server_now − device_now| > settings.clock_suspect_minutes. Jugée une fois pour
+ * tout le lot ; null si device_now est absent (ancienne app : le trigger applique l'ancienne règle,
+ * enregistrement par enregistrement, sur device_time).
+ */
+export async function batchClockSuspect(deviceNow: string | null, serverNow: Date, repo: PushRepo): Promise<boolean | null> {
+  if (deviceNow === null) return null
+  const settings = await repo.getSettings()
+  return isClockSuspect(serverNow, new Date(deviceNow), settings?.clock_suspect_minutes)
 }
 
 function idOf(r: unknown): string {
@@ -70,8 +103,21 @@ type ContentVerdict = { ok: true } | { ok: false; quarantine: QuarantineReason; 
  *  - `seq_gap` / `broken_chain` / `device_revoked` → refus d'intégrité (tête relue) ;
  *  - `unknown_author` / `supersedes_not_found` → nouvelle insertion en quarantaine.
  * `server_time` et `clock_suspect` sont imposés par le trigger et relus après insertion.
+ *
+ * Horloge : si l'app envoie `device_now`, le lot est jugé une fois (`batchClockSuspect`). Chaque
+ * ligne porte `device_now` (le trigger calcule sur lui plutôt que sur device_time : une saisie hors
+ * réseau envoyée plus tard avec une horloge juste n'est plus signalée) et, si le lot est suspect,
+ * `clock_suspect: true` (tous les enregistrements du lot sont alors signalés). Sans device_now :
+ * ancienne règle par enregistrement, dans le trigger.
  */
-export async function processPush(device: DeviceRow, rawRecords: unknown[], repo: PushRepo, ctx: PushContext): Promise<SyncPushResponse> {
+export async function processPush(
+  device: DeviceRow,
+  rawRecords: unknown[],
+  repo: PushRepo,
+  ctx: PushContext,
+  opts: { deviceNow?: string | null } = {},
+): Promise<SyncPushResponse> {
+  const deviceNow = opts.deviceNow ?? null
   const accepted: Accepted[] = []
   const rejected: Rejected[] = []
 
@@ -84,6 +130,15 @@ export async function processPush(device: DeviceRow, rawRecords: unknown[], repo
 
   const caches: ContentCaches = { staff: new Map(), equipment: new Map() }
   const state: { blockedBy: { id: string; reason: RejectReason } | null } = { blockedBy: null }
+
+  const batchSuspect = await batchClockSuspect(deviceNow, ctx.now(), repo)
+  if (batchSuspect) {
+    ctx.logger.log('warn', 'clock_suspect_batch', {
+      device_id: device.id,
+      skew_seconds: Math.round((ctx.now().getTime() - new Date(deviceNow as string).getTime()) / 1000),
+      records: rawRecords.length,
+    })
+  }
 
   /** Refus d'intégrité : rien n'est stocké et la suite du lot est bloquée. */
   const reject = (id: string, reason: RejectReason, detail?: string) => {
@@ -155,7 +210,7 @@ export async function processPush(device: DeviceRow, rawRecords: unknown[], repo
     let quarantine: QuarantineReason | null = verdict.ok ? null : verdict.quarantine
 
     // 6. Insertion (server_time et clock_suspect sont imposés par le trigger puis relus)
-    const row = {
+    const row: Omit<NewRecordRow, 'quarantine_reason'> = {
       id: r.id,
       type: r.type,
       payload: r.payload,
@@ -166,6 +221,8 @@ export async function processPush(device: DeviceRow, rawRecords: unknown[], repo
       prev_hash: r.prev_hash,
       hash: r.hash,
       supersedes_id: r.supersedes_id,
+      ...(deviceNow !== null ? { device_now: deviceNow } : {}),
+      ...(batchSuspect ? { clock_suspect: true as const } : {}),
     }
     let ins = await repo.insertRecord({ ...row, quarantine_reason: quarantine })
     if (!ins.ok && ins.kind === 'content' && quarantine === null) {
@@ -177,7 +234,12 @@ export async function processPush(device: DeviceRow, rawRecords: unknown[], repo
     }
     if (ins.ok) {
       const stored: StoredRecord = {
-        ...row,
+        id: row.id,
+        type: row.type,
+        hash: row.hash,
+        device_id: row.device_id,
+        device_seq: row.device_seq,
+        supersedes_id: row.supersedes_id,
         server_time: ins.server_time,
         clock_suspect: ins.clock_suspect,
         quarantine_reason: quarantine,
@@ -254,8 +316,11 @@ async function checkContent(r: HaccpRecord, repo: PushRepo, caches: ContentCache
   // Références du payload effectif
   const effectiveType = supersededType ?? r.type
   const effectivePayload = (r.type === 'correction' ? r.payload.replacement : r.payload) as Record<string, unknown>
-  if (effectiveType === 'temperature_check') {
-    const eq = effectivePayload.equipment_id as string
+  // Équipement référencé (temperature_check, thawing, hot_holding s'il est déclaré) : doit exister.
+  // Pas de contrôle in_range / seuils ici (choix) : in_range est calculé par l'app avec le seuil en
+  // vigueur au moment de la saisie, éventuellement hors réseau, alors que le seuil a pu changer depuis.
+  const eq = referencedEquipmentId(effectiveType, effectivePayload)
+  if (eq !== null) {
     if (!caches.equipment.has(eq)) caches.equipment.set(eq, await repo.equipmentExists(eq))
     if (!caches.equipment.get(eq)) return q('invalid_payload', 'equipment_id : équipement inconnu')
   }
@@ -289,12 +354,13 @@ export function createSyncPushHandler(deps: SyncPushDeps): (req: Request) => Pro
   return withHttp('sync-push', ['POST'], deps, async (req, ctx) => {
     const device = await authenticateDevice(req, deps.repo, ctx.logger)
     const body = await readJsonBody(req, PUSH_LIMITS.maxBodyBytes)
-    const records = parsePushRequest(body, device)
-    const res = await processPush(device, records, deps.repo, ctx)
+    const { records, deviceNow } = parsePushRequest(body, device)
+    const res = await processPush(device, records, deps.repo, ctx, { deviceNow })
     await deps.repo.touchDevice(device.id, ctx.now().toISOString())
     ctx.logger.log('info', 'sync_push', {
       device_id: device.id,
       received: records.length,
+      device_now: deviceNow !== null,
       accepted: res.accepted.length,
       rejected: res.rejected.length,
       reject_reasons: [...new Set(res.rejected.map((r) => r.reason))],

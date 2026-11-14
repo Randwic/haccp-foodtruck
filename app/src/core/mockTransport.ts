@@ -278,6 +278,7 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       staff: changed(refs.staff),
       equipment: changed(refs.equipment),
       thresholds: changed(refs.thresholds),
+      suppliers: [],
       settings,
       deleted: deletedLog.filter((d) => Date.parse(d.at) > sinceMs).map(({ table, id }) => ({ table, id })),
     })

@@ -450,6 +450,9 @@ export function referencedSupplierId(type: RecordType | string, payload: Record<
  * `photo_paths` (reception, waste) et `items[].photo_paths` (reception). Sans doublon.
  * Le `photo_path` libre de corrective_action (lot 2) n'est pas concerné.
  */
+/** Plafond total de photos d'une réception (reste sous la limite de taille d'un payload). */
+export const RECEPTION_MAX_PHOTOS = 20
+
 export function referencedPhotoPaths(type: RecordType | string, payload: Record<string, unknown>): string[] {
   if (type !== 'reception' && type !== 'waste') return []
   const out = new Set<string>()
@@ -487,6 +490,9 @@ export function validatePayload(type: RecordType | string, payload: unknown, ctx
   const schema = SCHEMAS[type as keyof typeof SCHEMAS]
   const e = checkObject(payload, schema)
   if (e) return fail(e)
+  if (type === 'reception' && referencedPhotoPaths(type, payload).length > RECEPTION_MAX_PHOTOS) {
+    return fail(`photos : ${RECEPTION_MAX_PHOTOS} au maximum par réception (toutes lignes confondues)`)
+  }
 
   if (type === 'corrective_action' && payload.action === 'other' && (payload.comment as string).trim() === '') {
     return fail('payload.comment : obligatoire quand l’action est « other »')

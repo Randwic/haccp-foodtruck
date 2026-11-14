@@ -591,3 +591,19 @@ describe('validatePayload — waste', () => {
     expectFail(validatePayload('correction', { reason: 'r', replacement: w({ reason: 'other' }) }, { supersededType: 'waste' }), 'invalid_payload', /replacement\.comment/)
   })
 })
+
+describe('réception : plafond de photos', () => {
+  it('refuse plus de 20 photos au total', async () => {
+    const { validatePayload, RECEPTION_MAX_PHOTOS } = await import('./validation.ts')
+    const dev = '6f1c2a4e-0000-4000-8000-000000000401'
+    const ph = (i: number) => `${dev}/6f1c2a4e-0000-4000-8000-${String(i).padStart(12, '0')}.webp`
+    const items = Array.from({ length: 5 }, (_, k) => ({
+      product: `P${k}`, storage: 'fridge', accepted: true, photo_paths: [0, 1, 2, 3, 4].map((j) => ph(k * 5 + j)),
+    }))
+    const base = { supplier_id: '6f1c2a4e-0000-4000-8000-000000000501', vehicle_ok: true, packaging_ok: true }
+    expect(validatePayload('reception', { ...base, items: items.slice(0, 4) }).ok).toBe(true) // 20
+    const r = validatePayload('reception', { ...base, items }) // 25
+    expect(r.ok).toBe(false)
+    expect(RECEPTION_MAX_PHOTOS).toBe(20)
+  })
+})

@@ -86,6 +86,16 @@ export const PHOTO_BUCKET = 'photos'
 export const PHOTO_MAX_BYTES = 1_000_000
 export const PHOTO_PATH_RE = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.webp$/
 
+/** Au plus 20 photos par réception, toutes lignes confondues (RECEPTION_MAX_PHOTOS). */
+
+/** Réponse de PUT /functions/v1/photo-upload?path=<device_id>/<uuid>.webp (en-tête x-device-token, corps WebP). */
+export type PhotoUploadResponse =
+  | { ok: true; path: string; status: 'created' | 'already_present'; size: number } // 201 / 200
+  | {
+      ok?: false
+      error: 'invalid_path' | 'device_mismatch' | 'payload_too_large' | 'invalid_photo' | 'photo_conflict' | 'unauthorized' | 'device_revoked'
+    } // 400 / 403 / 413 / 415 / 409 / 401
+
 /** Une ligne de livraison. */
 export interface ReceptionItem {
   product: string // 1..80

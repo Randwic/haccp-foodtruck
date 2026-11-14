@@ -1,0 +1,57 @@
+/* Styles de base de l'interface (complète Tailwind, importé après index.css).
+   Placés dans @layer base pour ne jamais écraser les classes utilitaires. */
+@layer base {
+  :root {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  html,
+  body {
+    background: #020617; /* slate-950 */
+    color: #f8fafc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.4;
+    overscroll-behavior: none;
+  }
+  body {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  button {
+    touch-action: manipulation; /* pas de délai ni de zoom au double-toucher */
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  input {
+    font-size: max(16px, 1em); /* évite le zoom automatique de Safari iOS */
+  }
+  :focus-visible {
+    outline: 4px solid #fde047; /* yellow-300 : visible sur tous les fonds */
+    outline-offset: 3px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+/* Zones sûres (encoche, barre d'accueil iOS) avec viewport-fit=cover. */
+@layer utilities {
+  .safe-pt {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-px {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+}

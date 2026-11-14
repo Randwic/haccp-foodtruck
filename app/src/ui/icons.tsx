@@ -9,6 +9,8 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CalendarDays,
+  ChefHat,
   CircleCheck,
   CircleExclamationPoint,
   ClipboardCheck,
@@ -20,6 +22,7 @@ import {
   Delete,
   Droplets,
   Ellipsis,
+  Flag,
   Eye,
   EyeOff,
   Flame,
@@ -31,6 +34,7 @@ import {
   Minus,
   Package,
   Pencil,
+  Play,
   Phone,
   Plus,
   Refrigerator,
@@ -42,6 +46,8 @@ import {
   SquarePlus,
   Tag,
   Thermometer,
+  ThermometerSun,
+  Timer,
   Trash2,
   ThermometerSnowflake,
   TriangleExclamationPoint,
@@ -110,6 +116,15 @@ export const IconCleaning = make(SprayCan, 'IconCleaning')
 export const IconOil = make(Droplets, 'IconOil')
 export const IconDocuments = make(FolderOpen, 'IconDocuments')
 export const IconSystemTest = make(ClipboardCheck, 'IconSystemTest')
+export const IconReheating = make(ThermometerSun, 'IconReheating')
+export const IconCooking = make(ChefHat, 'IconCooking')
+export const IconThawing = make(Snowflake, 'IconThawing')
+
+// Procédés
+export const IconTimer = make(Timer, 'IconTimer')
+export const IconStart = make(Play, 'IconStart')
+export const IconFinish = make(Flag, 'IconFinish')
+export const IconCalendar = make(CalendarDays, 'IconCalendar')
 
 // Équipements
 export const IconFridge = make(Refrigerator, 'IconFridge')

@@ -5,17 +5,19 @@ import { ManagerProvider, useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button, Notice, TextField, useToast } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { useOnline } from '../../ui/hooks/useOnline.ts'
-import { IconChevronLeft, IconFridge, IconOffline, IconSettings, IconUsers, type IconProps } from '../../ui/icons.tsx'
+import { IconChevronLeft, IconFridge, IconOffline, IconSettings, IconSupplier, IconUsers, type IconProps } from '../../ui/icons.tsx'
 import { PasswordField } from '../setup/PasswordField.tsx'
 import { ManagementContext, type ManagementTools, type RunWrite } from './common.tsx'
 import { EquipmentSection } from './EquipmentSection.tsx'
 import { SettingsSection } from './SettingsSection.tsx'
 import { StaffSection } from './StaffSection.tsx'
+import { SupplierSection } from './SupplierSection.tsx'
 
-type Tab = 'equipment' | 'staff' | 'settings'
+type Tab = 'equipment' | 'staff' | 'suppliers' | 'settings'
 const TABS: { id: Tab; label: string; Icon: (p: IconProps) => ReactNode }[] = [
   { id: 'equipment', label: 'Équipements', Icon: IconFridge },
   { id: 'staff', label: 'Équipe', Icon: IconUsers },
+  { id: 'suppliers', label: 'Fournisseurs', Icon: IconSupplier },
   { id: 'settings', label: 'Réglages', Icon: IconSettings },
 ]
 
@@ -93,7 +95,7 @@ export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: s
   } else {
     body = (
       <>
-        <div role="tablist" aria-label="Rubriques de gestion" className="mb-8 grid grid-cols-3 gap-1 rounded-xl bg-sunken p-1 sm:max-w-xl">
+        <div role="tablist" aria-label="Rubriques de gestion" className="mb-8 grid grid-cols-2 gap-1 rounded-xl bg-sunken p-1 sm:max-w-2xl sm:grid-cols-4">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -115,6 +117,7 @@ export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: s
         <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
           {tab === 'equipment' && <EquipmentSection />}
           {tab === 'staff' && <StaffSection />}
+          {tab === 'suppliers' && <SupplierSection />}
           {tab === 'settings' && <SettingsSection onSignedOut={() => setAuth({ kind: 'needed' })} />}
         </div>
       </>

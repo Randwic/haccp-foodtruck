@@ -26,11 +26,13 @@ import { formatMinutes, plainSpaces, remainingLabel, type TimedSummary } from '.
 import { useProcessStatus, type ProcessSummary } from '../processes/useProcessData.ts'
 import { plural, type TemperatureSummary } from '../temperatures/schedule.ts'
 import { useTemperatureStatus } from '../temperatures/useTemperatureData.ts'
+import { useReceptionStatus, type ReceptionStatus } from '../reception/useReceptionData.ts'
+import { whenLabel } from '../temperatures/format.ts'
+import { IconBan, IconSyncPending } from '../../ui/icons.tsx'
 
 const ICON = 22
 
 const UPCOMING = [
-  { title: 'Réception', Icon: IconDelivery, description: 'Livraisons, lots, DLC' },
   { title: 'Étiquettes DLC', Icon: IconLabel, description: 'Impression et allergènes' },
   { title: 'Nettoyage', Icon: IconCleaning, description: 'Plan et checklists' },
   { title: 'Huiles de friture', Icon: IconOil, description: 'Composés polaires, vidanges' },
@@ -160,21 +162,40 @@ function shortObjective(rule: TimedRule): string {
   return rule.start ? `${describeThreshold(rule.start)} → ${describeThreshold(rule.target)} en ${d}` : `${describeThreshold(rule.target)} en ${d}`
 }
 
+/** Compteurs de la tuile Réception : action manquante, dernière réception, photos en attente, refus de la semaine. */
+function receptionLines(s: ReceptionStatus | null, now: Date, tz: string): StatusLine[] | null {
+  if (!s) return null
+  const lines = missingLine(s.missingActions)
+  lines.push(
+    s.last
+      ? { tone: 'muted', icon: <IconOk size={17} className="shrink-0" />, text: `Dernière réception : ${whenLabel(s.last, now, tz)}` }
+      : { tone: 'muted', icon: <IconDue size={17} className="shrink-0" />, text: 'Aucune réception récente' },
+  )
+  if (s.photos.failed > 0) lines.push({ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: plural(s.photos.failed, 'photo refusée', 'photos refusées') })
+  else if (s.photos.pending > 0)
+    lines.push({ tone: 'warn', icon: <IconSyncPending size={17} className="shrink-0" />, text: `${plural(s.photos.pending, 'photo', 'photos')} en attente d’envoi` })
+  if (s.refusedThisWeek > 0) lines.push({ tone: 'warn', icon: <IconBan size={17} className="shrink-0" />, text: `${plural(s.refusedThisWeek, 'refus', 'refus')} cette semaine` })
+  return lines
+}
+
 export type ProcessView = 'cooling' | 'reheating' | 'cooking' | 'thawing'
 
 export interface TodayScreenProps {
   onOpenSystemTest: () => void
   onOpenManagement?: () => void
   onOpenTemperatures: () => void
+  onOpenReception?: () => void
   onOpenProcess: (view: ProcessView) => void
 }
 
 /** Accueil « Aujourd'hui » : alertes, modules HACCP puis outils. */
-export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenProcess }: TodayScreenProps) {
+export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess }: TodayScreenProps) {
   const { summary } = useTemperatureStatus()
   const { summary: processes, data: processData } = useProcessStatus(15_000)
   const temp = temperatureLines(summary)
   const lines = processLines(processes)
+  const { summary: receptionSummary, data: receptionData, now: receptionNow } = useReceptionStatus(60_000)
+  const reception = receptionLines(receptionSummary, receptionNow, receptionData?.timeZone ?? 'Europe/Paris')
   const processMissing = processes ? processes.cooling.missingActions + processes.reheating.missingActions + processes.spot.missingActions : 0
 
   return (
@@ -256,6 +277,17 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
             ariaLabel={ariaOf('Décongélation', lines.thawing)}
             onClick={() => onOpenProcess('thawing')}
           />
+          {onOpenReception && (
+            <Tile
+              title="Réception"
+              icon={<IconDelivery size={ICON} />}
+              description="Livraisons, lots, DLC, pertes"
+              status={<StatusLines lines={reception} />}
+              tone={tileTone(reception)}
+              ariaLabel={ariaOf('Réception', reception)}
+              onClick={onOpenReception}
+            />
+          )}
           {UPCOMING.map((m) => (
             <Tile key={m.title} title={m.title} icon={<m.Icon size={ICON} />} description={m.description} disabled />
           ))}

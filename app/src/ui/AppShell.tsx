@@ -6,6 +6,7 @@ import { ManagementScreen } from '../features/management/ManagementScreen.tsx'
 import { SetupFlow } from '../features/setup/SetupFlow.tsx'
 import { SystemTestPanel } from '../features/system-test/SystemTestPanel.tsx'
 import { TemperaturesScreen } from '../features/temperatures/TemperaturesScreen.tsx'
+import { ReceptionScreen } from '../features/reception/ReceptionScreen.tsx'
 import { CookingScreen } from '../features/processes/CookingScreen.tsx'
 import { DeadlineWatcher } from '../features/processes/DeadlineWatcher.tsx'
 import { ThawingScreen } from '../features/processes/ThawingScreen.tsx'
@@ -20,7 +21,7 @@ import { OfflineBanner } from './pwa/OfflineBanner.tsx'
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
 
 type Boot = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; device: DeviceInfo | null }
-type View = 'today' | 'system_test' | 'management' | 'temperatures' | ProcessView
+type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | ProcessView
 
 /** Enchaînement des écrans : première configuration → verrouillage (PIN) → accueil / Gestion. */
 export function AppShell() {
@@ -118,6 +119,8 @@ export function AppShell() {
           <TimedProcessScreen key={view} kind={view} onBack={() => setView('today')} />
         ) : view === 'cooking' ? (
           <CookingScreen onBack={() => setView('today')} />
+        ) : view === 'reception' ? (
+          <ReceptionScreen onBack={() => setView('today')} canAddSupplier={staff.role === 'manager'} />
         ) : view === 'thawing' ? (
           <ThawingScreen onBack={() => setView('today')} />
         ) : view === 'management' && staff.role === 'manager' ? (
@@ -126,6 +129,7 @@ export function AppShell() {
           <TodayScreen
             onOpenSystemTest={() => setView('system_test')}
             onOpenTemperatures={() => setView('temperatures')}
+            onOpenReception={() => setView('reception')}
             onOpenProcess={setView}
             onOpenManagement={staff.role === 'manager' ? () => setView('management') : undefined}
           />

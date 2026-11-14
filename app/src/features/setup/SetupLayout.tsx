@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { IconCheck } from '../../ui/icons.tsx'
 
 export interface SetupLayoutProps {
   title: string
@@ -63,7 +64,9 @@ export function SetupProgress({ current, withAccount }: { current: ProgressStep;
           <li key={s} className={`flex min-h-16 items-center gap-4 rounded-2xl px-5 py-3 text-xl ${state === 'current' ? 'bg-slate-800 ring-2 ring-sky-300' : 'bg-slate-900'}`}>
             <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center">
               {state === 'done' ? (
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-2xl font-black text-slate-950">✓</span>
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-slate-950">
+                  <IconCheck size={24} strokeWidth={3} />
+                </span>
               ) : state === 'current' ? (
                 <span className="h-8 w-8 animate-spin rounded-full border-4 border-sky-300 border-t-transparent" />
               ) : (

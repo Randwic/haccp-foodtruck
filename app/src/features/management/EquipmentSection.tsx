@@ -1,9 +1,22 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import type { Equipment, EquipmentKind, Threshold } from '../../../../shared/types.ts'
 import { errorText } from '../../manager/api.ts'
-import { checkTypeFor, defaultThreshold, EQUIPMENT_KINDS, kindIcon, kindLabel, parseTemperature, thresholdSummary } from '../../manager/helpers.ts'
+import { checkTypeFor, defaultThreshold, EQUIPMENT_KINDS, kindLabel, parseTemperature, thresholdSummary } from '../../manager/helpers.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button, Modal, Notice, TextField } from '../../ui/components/index.ts'
+import { IconBox, IconFlame, IconFridge, IconFryer, IconPlus, IconSnowflake, type IconProps } from '../../ui/icons.tsx'
+
+const KIND_ICONS: Record<EquipmentKind, (p: IconProps) => ReactNode> = {
+  fridge: IconFridge,
+  freezer: IconSnowflake,
+  fryer_vat: IconFryer,
+  hot_holding: IconFlame,
+  other: IconBox,
+}
+function KindIcon({ kind, ...p }: IconProps & { kind: EquipmentKind }) {
+  const I = KIND_ICONS[kind]
+  return <I {...p} />
+}
 import { ConfirmModal, SectionTitle, TemperatureField, useManagement } from './common.tsx'
 
 const PMS_NOTE = 'Valeurs proposées (réglementation courante) : à confirmer selon votre PMS.'
@@ -55,7 +68,7 @@ export function EquipmentSection() {
           Équipements
         </h2>
         <p className="max-w-xl text-lg text-slate-300">Frigos, congélateur, friteuses… Chaque équipement a ses seuils de température.</p>
-        <Button onClick={() => setDialog({ kind: 'add' })} icon={<span aria-hidden="true">＋</span>}>
+        <Button onClick={() => setDialog({ kind: 'add' })} icon={<IconPlus />}>
           Ajouter un équipement
         </Button>
       </div>
@@ -140,8 +153,8 @@ function EquipmentCard({ eq, threshold, retired, children }: { eq: Equipment; th
   return (
     <li className={`flex flex-col gap-4 rounded-3xl p-5 ring-1 ${retired ? 'bg-slate-900 ring-slate-800' : 'bg-slate-800 ring-slate-600'}`}>
       <div className="flex items-start gap-4">
-        <span aria-hidden="true" className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-3xl ${retired ? 'bg-slate-800 grayscale' : 'bg-slate-700'}`}>
-          {kindIcon(eq.kind)}
+        <span aria-hidden="true" className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${retired ? 'bg-slate-800 text-slate-500' : 'bg-slate-700 text-sky-200'}`}>
+          <KindIcon kind={eq.kind} size={28} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -149,13 +162,13 @@ function EquipmentCard({ eq, threshold, retired, children }: { eq: Equipment; th
             {retired && <Badge tone="neutral">Retiré</Badge>}
           </div>
           <p className="text-base text-slate-300">{kindLabel(eq.kind)}</p>
-          <p className={`mt-1 text-lg font-semibold ${threshold ? 'text-sky-200' : 'text-slate-400'}`}>
+          <p className={`mt-1 text-lg font-semibold ${threshold && !retired ? 'text-sky-200' : 'text-slate-400'}`}>
             <span className="sr-only">Seuil : </span>
             {thresholdSummary(threshold)}
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap gap-3">{children}</div>
+      <div className={`grid gap-2 sm:flex sm:flex-wrap sm:gap-3 ${retired ? 'grid-cols-1' : 'grid-cols-3'} [&>button]:px-2 [&>button]:text-base sm:[&>button]:px-5 sm:[&>button]:text-lg`}>{children}</div>
     </li>
   )
 }
@@ -192,8 +205,9 @@ function parseDraft(d: ThresholdDraft): { ok: true; empty: boolean; min_c: numbe
 function ThresholdFields({ draft, setDraft, errors }: { draft: ThresholdDraft; setDraft: (d: ThresholdDraft) => void; errors: Partial<ThresholdDraft> }) {
   return (
     <div className="grid gap-5 sm:grid-cols-2">
-      <TemperatureField label="Minimum" hint="Laisser vide si pas de minimum." value={draft.min} onChange={(min) => setDraft({ ...draft, min })} error={errors.min} />
-      <TemperatureField label="Maximum" hint="Ex. 4 pour un frigo, −18 pour un congélateur." value={draft.max} onChange={(max) => setDraft({ ...draft, max })} error={errors.max} />
+      <p className="text-base text-slate-300 sm:col-span-2">Laissez une case vide s’il n’y a pas de limite de ce côté. Le bouton ± change le signe (−18).</p>
+      <TemperatureField label="Minimum" value={draft.min} onChange={(min) => setDraft({ ...draft, min })} error={errors.min} />
+      <TemperatureField label="Maximum" value={draft.max} onChange={(max) => setDraft({ ...draft, max })} error={errors.max} />
       <TextField
         className="sm:col-span-2"
         label="Tolérance (minutes)"
@@ -262,13 +276,11 @@ function AddEquipmentModal({ onClose, onDone }: { onClose: () => void; onDone: (
                 role="radio"
                 aria-checked={kind === k.kind}
                 onClick={() => chooseKind(k.kind)}
-                className={`flex min-h-16 items-center gap-3 rounded-2xl px-4 text-left text-lg font-semibold ${
+                className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-center text-base leading-tight font-semibold sm:flex-row sm:justify-start sm:gap-3 sm:px-4 sm:text-left sm:text-lg ${
                   kind === k.kind ? 'bg-sky-300 text-slate-950 ring-4 ring-sky-100' : 'bg-slate-800 text-white ring-1 ring-slate-600 active:bg-slate-700'
                 }`}
               >
-                <span aria-hidden="true" className="text-2xl">
-                  {k.icon}
-                </span>
+                <KindIcon kind={k.kind} size={26} />
                 {k.label}
               </button>
             ))}

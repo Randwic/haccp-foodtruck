@@ -4,6 +4,7 @@ import { errorText, type ManagedStaff } from '../../manager/api.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button, Modal, Notice, PinSetup, TextField } from '../../ui/components/index.ts'
 import { initials } from '../../ui/format.ts'
+import { IconPlus } from '../../ui/icons.tsx'
 import { ConfirmModal, SectionTitle, useManagement } from './common.tsx'
 
 type Dialog = { kind: 'add' } | { kind: 'pin'; s: ManagedStaff } | { kind: 'deactivate'; s: ManagedStaff } | { kind: 'reactivate'; s: ManagedStaff } | null
@@ -86,7 +87,7 @@ export function StaffSection() {
           Équipe
         </h2>
         <p className="max-w-xl text-lg text-slate-300">Chaque personne déverrouille l’app avec son code PIN : ses saisies portent son nom.</p>
-        <Button onClick={() => setDialog({ kind: 'add' })} icon={<span aria-hidden="true">＋</span>}>
+        <Button onClick={() => setDialog({ kind: 'add' })} icon={<IconPlus />}>
           Ajouter un employé
         </Button>
       </div>

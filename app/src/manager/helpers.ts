@@ -30,19 +30,16 @@ export function passwordStrength(pw: string): PasswordStrength {
   return { score, label: score === 2 ? 'Correct' : score === 3 ? 'Bon' : 'Excellent' }
 }
 
-export const EQUIPMENT_KINDS: { kind: EquipmentKind; label: string; icon: string }[] = [
-  { kind: 'fridge', label: 'Frigo', icon: '🧊' },
-  { kind: 'freezer', label: 'Congélateur', icon: '❄️' },
-  { kind: 'fryer_vat', label: 'Bac de friteuse', icon: '🍟' },
-  { kind: 'hot_holding', label: 'Maintien au chaud', icon: '🔥' },
-  { kind: 'other', label: 'Autre', icon: '📦' },
+export const EQUIPMENT_KINDS: { kind: EquipmentKind; label: string }[] = [
+  { kind: 'fridge', label: 'Frigo' },
+  { kind: 'freezer', label: 'Congélateur' },
+  { kind: 'fryer_vat', label: 'Bac de friteuse' },
+  { kind: 'hot_holding', label: 'Maintien au chaud' },
+  { kind: 'other', label: 'Autre' },
 ]
 
 export function kindLabel(kind: EquipmentKind): string {
   return EQUIPMENT_KINDS.find((k) => k.kind === kind)?.label ?? kind
-}
-export function kindIcon(kind: EquipmentKind): string {
-  return EQUIPMENT_KINDS.find((k) => k.kind === kind)?.icon ?? '📦'
 }
 
 /** Type de contrôle auquel s'applique le seuil principal d'un équipement. */

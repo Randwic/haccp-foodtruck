@@ -13,7 +13,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 type Step = 'identity' | 'account' | 'pin' | 'device'
 const STEPS: { id: Step; label: string }[] = [
-  { id: 'identity', label: 'Établissement' },
+  { id: 'identity', label: 'Vous' },
   { id: 'account', label: 'Compte' },
   { id: 'pin', label: 'Code PIN' },
   { id: 'device', label: 'Appareil' },

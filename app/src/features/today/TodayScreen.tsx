@@ -1,4 +1,5 @@
 import { Tile } from '../../ui/components/index.ts'
+import { IconSliders } from '../../ui/icons.tsx'
 
 const UPCOMING = [
   { title: 'Températures', icon: '🌡️', description: 'Frigos, congélateur, cuisson' },
@@ -17,7 +18,7 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement }: { onOpenSyst
       <h1 className="mb-5 text-3xl font-bold text-white">Aujourd’hui</h1>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {onOpenManagement && (
-          <Tile title="Gestion" icon="🛠️" description="Équipements, équipe, réglages" onClick={onOpenManagement} />
+          <Tile title="Gestion" icon={<IconSliders size={36} />} description="Équipements, équipe, réglages" onClick={onOpenManagement} />
         )}
         <Tile title="Test d’enregistrement" icon="✅" description="Vérifier saisie et synchro" onClick={onOpenSystemTest} className={onOpenManagement ? '' : 'col-span-2 lg:col-span-1'} />
         {UPCOMING.map((m) => (

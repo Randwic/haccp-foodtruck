@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { errorText, isManagerError, type ManagerApi } from '../../manager/api.ts'
 import { lastManagerEmail, rememberManagerEmail } from '../../manager/helpers.ts'
 import { ManagerProvider, useManager } from '../../manager/ManagerContext.tsx'
 import { Button, Notice, TextField, useToast } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { useOnline } from '../../ui/hooks/useOnline.ts'
+import { IconArrowLeft, IconFridge, IconSettings, IconUsers, type IconProps } from '../../ui/icons.tsx'
 import { PasswordField } from '../setup/PasswordField.tsx'
 import { ManagementContext, type ManagementTools, type RunWrite } from './common.tsx'
 import { EquipmentSection } from './EquipmentSection.tsx'
@@ -12,10 +13,10 @@ import { SettingsSection } from './SettingsSection.tsx'
 import { StaffSection } from './StaffSection.tsx'
 
 type Tab = 'equipment' | 'staff' | 'settings'
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'equipment', label: 'Équipements', icon: '🧊' },
-  { id: 'staff', label: 'Équipe', icon: '👥' },
-  { id: 'settings', label: 'Réglages', icon: '⚙️' },
+const TABS: { id: Tab; label: string; Icon: (p: IconProps) => ReactNode }[] = [
+  { id: 'equipment', label: 'Équipements', Icon: IconFridge },
+  { id: 'staff', label: 'Équipe', Icon: IconUsers },
+  { id: 'settings', label: 'Réglages', Icon: IconSettings },
 ]
 
 type Auth = { kind: 'checking' } | { kind: 'needed'; notice?: string } | { kind: 'ok' }
@@ -99,13 +100,11 @@ export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: s
               aria-selected={tab === t.id}
               aria-controls={`panel-${t.id}`}
               onClick={() => setTab(t.id)}
-              className={`flex min-h-14 items-center justify-center gap-2 rounded-2xl px-2 text-lg font-bold transition-colors ${
+              className={`flex min-h-14 min-w-0 items-center justify-center gap-2 rounded-2xl px-1 text-base font-bold transition-colors sm:px-2 sm:text-lg ${
                 tab === t.id ? 'bg-sky-300 text-slate-950' : 'text-slate-200 active:bg-slate-800'
               }`}
             >
-              <span aria-hidden="true" className="hidden sm:inline">
-                {t.icon}
-              </span>
+              <t.Icon className="hidden sm:inline" size={22} />
               {t.label}
             </button>
           ))}
@@ -124,8 +123,8 @@ export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: s
       <ManagementContext.Provider value={tools}>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-5 sm:py-6">
           <div className="mb-5 flex flex-wrap items-center gap-4">
-            <Button variant="secondary" onClick={onBack}>
-              ← Accueil
+            <Button variant="secondary" onClick={onBack} icon={<IconArrowLeft />}>
+              Accueil
             </Button>
             <h1 className="text-3xl font-bold text-white">Gestion</h1>
             {manager.mode === 'mock' && (

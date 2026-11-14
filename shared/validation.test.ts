@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CookingCheckPayload, CoolingPayload, HotHoldingPayload, ReceptionPayload, ThawingPayload, WastePayload } from './payloads.ts'
+import type { CookingCheckPayload, CoolingPayload, HotHoldingPayload, LabelPrintedPayload, ReceptionPayload, ThawingPayload, WastePayload } from './payloads.ts'
 import { GENESIS_HASH } from './types.ts'
 import {
   CORRECTIVE_ACTIONS,
@@ -10,6 +10,8 @@ import {
   referencedPhotoPaths,
   referencedSupplierId,
   referencedEquipmentId,
+  referencedProductId,
+  referencedRecipeId,
   validatePayload,
   validateRecordSemantics,
   validateRecordShape,
@@ -605,5 +607,103 @@ describe('réception : plafond de photos', () => {
     const r = validatePayload('reception', { ...base, items }) // 25
     expect(r.ok).toBe(false)
     expect(RECEPTION_MAX_PHOTOS).toBe(20)
+  })
+})
+
+describe('validatePayload — label_printed (lot 4)', () => {
+  const opened: LabelPrintedPayload = {
+    kind: 'opened',
+    product_id: U(40),
+    name: 'Cheddar tranches',
+    made_at: '2026-11-14T10:00:00.000Z',
+    dlc_at: '2026-11-17T10:00:00.000Z',
+    allergens: ['lait'],
+    storage: 'fridge',
+    lot: 'L2611-A',
+    source_record_ids: [U(41)],
+    copies: 1,
+  }
+  const prepared: LabelPrintedPayload = {
+    kind: 'prepared',
+    recipe_id: U(42),
+    name: 'Sauce cheddar maison',
+    made_at: '2026-11-14T10:00:00.000Z',
+    dlc_at: '2026-11-17T10:00:00.000Z',
+    allergens: ['gluten', 'lait'],
+    storage: 'fridge',
+    copies: 3,
+  }
+  const v = (p: unknown) => validatePayload('label_printed', p)
+  it('est pris en charge ; accepte opened, thawed et prepared', () => {
+    expect(SUPPORTED_RECORD_TYPES as readonly string[]).toContain('label_printed')
+    expect(v(opened).ok).toBe(true)
+    expect(v({ ...opened, kind: 'thawed' }).ok).toBe(true)
+    expect(v(prepared).ok).toBe(true)
+    expect(v({ ...prepared, allergens: [], source_record_ids: [] }).ok).toBe(true)
+  })
+  it('champs requis selon kind', () => {
+    const { product_id: _p, ...noProduct } = opened
+    expectFail(v(noProduct), 'invalid_payload', /product_id : obligatoire/)
+    expectFail(v({ ...noProduct, kind: 'thawed' }), 'invalid_payload', /product_id/)
+    expectFail(v({ ...opened, recipe_id: U(42) }), 'invalid_payload', /recipe_id : interdit/)
+    const { recipe_id: _r, ...noRecipe } = prepared
+    expectFail(v(noRecipe), 'invalid_payload', /recipe_id : obligatoire/)
+    expectFail(v({ ...prepared, product_id: U(40) }), 'invalid_payload', /product_id : interdit/)
+    expectFail(v({ ...opened, kind: 'cooked' }))
+    for (const k of ['kind', 'name', 'made_at', 'dlc_at', 'allergens', 'storage', 'copies']) {
+      const p: Record<string, unknown> = { ...opened }
+      delete p[k]
+      expectFail(v(p), 'invalid_payload', new RegExp(`${k} : obligatoire`))
+    }
+  })
+  it('identifiants : uuid en minuscules', () => {
+    expectFail(v({ ...opened, product_id: '0000000A-0000-4000-8000-00000000000B' }))
+    expectFail(v({ ...prepared, recipe_id: 'abc' }))
+  })
+  it('dates ISO canoniques, dlc_at strictement après made_at et au plus 90 jours après', () => {
+    expectFail(v({ ...opened, made_at: '2026-11-14T10:00:00Z' }), 'invalid_payload', /made_at/)
+    expectFail(v({ ...opened, dlc_at: '2026-11-17' }), 'invalid_payload', /dlc_at/)
+    expectFail(v({ ...opened, dlc_at: '2026-11-17T11:00:00.000+01:00' }), 'invalid_payload', /dlc_at/)
+    expectFail(v({ ...opened, dlc_at: opened.made_at }), 'invalid_payload', /postérieure/)
+    expectFail(v({ ...opened, dlc_at: '2026-11-14T09:59:59.999Z' }), 'invalid_payload', /postérieure/)
+    expect(v({ ...opened, dlc_at: '2026-11-14T10:00:00.001Z' }).ok).toBe(true)
+    expect(v({ ...opened, dlc_at: '2027-02-12T10:00:00.000Z' }).ok).toBe(true) // 90 jours pile
+    expectFail(v({ ...opened, dlc_at: '2027-02-12T10:00:00.001Z' }), 'invalid_payload', /90 jours/)
+  })
+  it('allergènes : 14 codes du règlement, sans doublon', () => {
+    const all = ['gluten', 'crustaces', 'oeufs', 'poissons', 'arachides', 'soja', 'lait', 'fruits_a_coque', 'celeri', 'moutarde', 'sesame', 'sulfites', 'lupin', 'mollusques']
+    expect(v({ ...opened, allergens: all }).ok).toBe(true)
+    expectFail(v({ ...opened, allergens: ['lait', 'lait'] }), 'invalid_payload', /double/)
+    expectFail(v({ ...opened, allergens: ['Lait'] }))
+    expectFail(v({ ...opened, allergens: ['noix'] }))
+    expectFail(v({ ...opened, allergens: 'lait' }))
+    expectFail(v({ ...opened, allergens: [...all, 'lait'] }))
+  })
+  it('copies 1..20 (entier), name 1..80, lot 1..40, storage, source_record_ids 0..20 uuid', () => {
+    expect(v({ ...opened, copies: 20 }).ok).toBe(true)
+    for (const c of [0, 21, 1.5, '2', -1]) expectFail(v({ ...opened, copies: c }), 'invalid_payload', /copies/)
+    expect(v({ ...opened, name: 'é'.repeat(80) }).ok).toBe(true)
+    expectFail(v({ ...opened, name: 'é'.repeat(81) }))
+    expectFail(v({ ...opened, name: '  ' }))
+    expect(v({ ...opened, lot: 'x'.repeat(40) }).ok).toBe(true)
+    expectFail(v({ ...opened, lot: 'x'.repeat(41) }))
+    expectFail(v({ ...opened, lot: '' }))
+    expectFail(v({ ...opened, storage: 'cellar' }))
+    expect(v({ ...opened, source_record_ids: Array.from({ length: 20 }, (_, i) => U(100 + i)) }).ok).toBe(true)
+    expectFail(v({ ...opened, source_record_ids: Array.from({ length: 21 }, (_, i) => U(100 + i)) }))
+    expectFail(v({ ...opened, source_record_ids: ['pas-un-uuid'] }))
+  })
+  it('refuse un champ inconnu', () => {
+    expectFail(v({ ...opened, product: 'Cheddar' }), 'invalid_payload', /champ inconnu/)
+  })
+  it('accepté en remplacement d’une correction (et validé)', () => {
+    expect(validatePayload('correction', { reason: 'mauvaise DLC', replacement: opened }, { supersededType: 'label_printed' }).ok).toBe(true)
+    expectFail(validatePayload('correction', { reason: 'r', replacement: { ...opened, copies: 0 } }, { supersededType: 'label_printed' }), 'invalid_payload', /replacement\.copies/)
+  })
+  it('referencedProductId / referencedRecipeId', () => {
+    expect(referencedProductId('label_printed', opened as unknown as Record<string, unknown>)).toBe(U(40))
+    expect(referencedRecipeId('label_printed', opened as unknown as Record<string, unknown>)).toBeNull()
+    expect(referencedRecipeId('label_printed', prepared as unknown as Record<string, unknown>)).toBe(U(42))
+    expect(referencedProductId('waste', { product_id: U(40) })).toBeNull()
   })
 })

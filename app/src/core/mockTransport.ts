@@ -308,6 +308,9 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       thresholds: changed(refs.thresholds),
       // Comme la fonction : fournisseurs ACTIFS modifiés depuis `since` (désactivés dans `deleted`).
       suppliers: changed(refs.suppliers).filter((s) => s.active),
+      // Lot 4 (produits, recettes) : pas encore stockés par l'app.
+      products: [],
+      recipes: [],
       settings,
       deleted: deletedLog.filter((d) => Date.parse(d.at) > sinceMs).map(({ table, id }) => ({ table, id })),
     })

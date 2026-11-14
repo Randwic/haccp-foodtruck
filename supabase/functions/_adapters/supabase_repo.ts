@@ -1,7 +1,7 @@
 // Adaptateur Deno : implémente les interfaces Repo avec supabase-js (clé service_role).
 // Seul endroit (avec les index.ts) qui dépend de Deno / npm. Non couvert par Vitest.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import type { Supplier } from '../../../shared/payloads.ts'
+import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import { jsonLogger, parseAllowedOrigins, type HttpEnv } from '../_shared/http.ts'
 import { classifyDbError } from '../_shared/repo.ts'
@@ -132,6 +132,16 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
     if (error) throw new DbError('suppliers.select', error)
     return data !== null
   }
+  async productExists(productId: string): Promise<boolean> {
+    const { data, error } = await this.db.from('products').select('id').eq('id', productId).maybeSingle()
+    if (error) throw new DbError('products.select', error)
+    return data !== null
+  }
+  async recipeExists(recipeId: string): Promise<boolean> {
+    const { data, error } = await this.db.from('recipes').select('id').eq('id', recipeId).maybeSingle()
+    if (error) throw new DbError('recipes.select', error)
+    return data !== null
+  }
   async getPayloadsByIds(ids: string[]): Promise<{ id: string; type: string; payload: unknown }[]> {
     const out: { id: string; type: string; payload: unknown }[] = []
     for (let i = 0; i < ids.length; i += IN_CHUNK) {
@@ -197,6 +207,29 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
     const { data, error } = await q.order('name')
     if (error) throw new DbError('suppliers.list', error)
     return (data ?? []).map((s) => ({ ...s, updated_at: isoReq(s.updated_at) }))
+  }
+  async listProducts(since: string | null): Promise<Product[]> {
+    let q = this.db
+      .from('products')
+      .select('id, name, allergens, storage, shelf_life_opened_hours, shelf_life_thawed_hours, active, updated_at')
+    if (since) q = q.gte('updated_at', since)
+    const { data, error } = await q.order('name')
+    if (error) throw new DbError('products.list', error)
+    return (data ?? []).map((p) => ({ ...p, allergens: p.allergens ?? [], updated_at: isoReq(p.updated_at) }))
+  }
+  async listRecipes(since: string | null): Promise<Recipe[]> {
+    let q = this.db
+      .from('recipes')
+      .select('id, name, ingredient_product_ids, extra_allergens, storage, shelf_life_hours, active, updated_at')
+    if (since) q = q.gte('updated_at', since)
+    const { data, error } = await q.order('name')
+    if (error) throw new DbError('recipes.list', error)
+    return (data ?? []).map((r) => ({
+      ...r,
+      ingredient_product_ids: r.ingredient_product_ids ?? [],
+      extra_allergens: r.extra_allergens ?? [],
+      updated_at: isoReq(r.updated_at),
+    }))
   }
 
   // ---- enrôlement ----

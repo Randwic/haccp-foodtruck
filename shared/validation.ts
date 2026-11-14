@@ -1,8 +1,8 @@
 // Validation des enregistrements du registre HACCP.
 // TS pur, sans dépendance : utilisé par l'app (avant mise en file d'envoi) et par les Edge Functions
 // (contrôle définitif côté serveur). Toute règle ajoutée ici s'applique donc des deux côtés.
-import { PHOTO_PATH_RE } from './payloads.ts'
-import type { MeasureSource, ProcessStep, ReceptionItem, ThawingPayload, WastePayload } from './payloads.ts'
+import { ALLERGENS, PHOTO_PATH_RE } from './payloads.ts'
+import type { LabelPrintedPayload, MeasureSource, ProcessStep, ReceptionItem, ThawingPayload, WastePayload } from './payloads.ts'
 import type { RecordType, RejectReason } from './types.ts'
 
 export type ValidationResult = { ok: true } | { ok: false; reason: RejectReason; detail: string }
@@ -32,7 +32,7 @@ type _Exhaustive = Exclude<RecordType, (typeof RECORD_TYPES)[number]> extends ne
 const _exhaustive: _Exhaustive = true
 void _exhaustive
 
-/** Types dont le schéma de payload est défini (lots 1 à 3). Les autres sont refusés en `unknown_type`. */
+/** Types dont le schéma de payload est défini (lots 1 à 4). Les autres sont refusés en `unknown_type`. */
 export const SUPPORTED_RECORD_TYPES = [
   'system_test',
   'temperature_check',
@@ -44,6 +44,7 @@ export const SUPPORTED_RECORD_TYPES = [
   'cooking_check',
   'reception',
   'waste',
+  'label_printed',
   'correction',
 ] as const
 
@@ -64,6 +65,8 @@ export const THAWING_STEPS = ['start', 'end'] as const satisfies readonly Thawin
 /** Lot 3 : conservation exigée d'un produit livré, motifs de perte / anomalie. */
 export const STORAGE_KINDS = ['fridge', 'freezer', 'ambient'] as const satisfies readonly ReceptionItem['storage'][]
 export const WASTE_REASONS = ['expired', 'non_compliant', 'temperature', 'damaged', 'recall', 'other'] as const satisfies readonly WastePayload['reason'][]
+/** Lot 4 : nature d'une étiquette imprimée. */
+export const LABEL_KINDS = ['opened', 'prepared', 'thawed'] as const satisfies readonly LabelPrintedPayload['kind'][]
 
 export const LIMITS = {
   noteMax: 500,
@@ -82,6 +85,12 @@ export const LIMITS = {
   refusalReasonMax: 200,
   receptionCommentMax: 500,
   wasteCommentMax: 500,
+  /** Lot 4 (étiquettes) — bornes de shared/payloads.ts. */
+  labelNameMax: 80,
+  labelCopiesMax: 20,
+  labelSourceRecordsMax: 20,
+  /** dlc_at − made_at : au plus 90 jours. */
+  labelMaxShelfLifeMs: 90 * 24 * 3_600_000,
   valueMinC: -50,
   valueMaxC: 300,
   /** Taille max du payload sérialisé (caractères JSON canonique, approximé par JSON.stringify). */
@@ -326,6 +335,19 @@ const dateField: FieldCheck = (v, name) => {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? null : bad
 }
 
+const isoTimeField: FieldCheck = (v, name) =>
+  isCanonicalIsoTime(v) ? null : `${name} : date-heure ISO UTC canonique attendue (new Date(x).toISOString())`
+/** Allergènes : codes de ALLERGENS (annexe II INCO 1169/2011), sans doublon. */
+const allergensField: FieldCheck = (v, name) => {
+  const e = arrayOf(oneOf(ALLERGENS), { min: 0, max: ALLERGENS.length })(v, name)
+  if (e) return e
+  return new Set(v as string[]).size === (v as string[]).length ? null : `${name} : allergène en double`
+}
+const copiesField: FieldCheck = (v, name) =>
+  typeof v === 'number' && Number.isSafeInteger(v) && v >= 1 && v <= LIMITS.labelCopiesMax
+    ? null
+    : `${name} : entier de 1 à ${LIMITS.labelCopiesMax} attendu`
+
 /** Une ligne de livraison (ReceptionItem). */
 const RECEPTION_ITEM_SCHEMA: Record<string, FieldSpec> = {
   product: { check: productField },
@@ -369,6 +391,7 @@ type SchemaType =
   | 'cooking_check'
   | 'reception'
   | 'waste'
+  | 'label_printed'
 
 const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
   system_test: {
@@ -427,6 +450,19 @@ const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
     related_record_id: { check: uuidField, optional: true },
     photo_paths: { check: photoPathsField, optional: true },
   },
+  label_printed: {
+    kind: { check: oneOf(LABEL_KINDS) },
+    product_id: { check: uuidField, optional: true },
+    recipe_id: { check: uuidField, optional: true },
+    name: { check: str({ max: LIMITS.labelNameMax, nonEmpty: true }) },
+    made_at: { check: isoTimeField },
+    dlc_at: { check: isoTimeField },
+    allergens: { check: allergensField },
+    storage: { check: oneOf(STORAGE_KINDS) },
+    lot: { check: str({ max: LIMITS.lotMax, nonEmpty: true }), optional: true },
+    source_record_ids: { check: arrayOf(uuidField, { min: 0, max: LIMITS.labelSourceRecordsMax }), optional: true },
+    copies: { check: copiesField },
+  },
 }
 
 /**
@@ -438,6 +474,19 @@ export function referencedEquipmentId(type: RecordType | string, payload: Record
     return typeof payload.equipment_id === 'string' ? payload.equipment_id : null
   }
   return null
+}
+
+/**
+ * Produit / recette référencés par une étiquette valide (`label_printed`), ou null.
+ * Le serveur vérifie leur existence (même désactivés : saisie hors réseau), mais PAS que les
+ * allergènes imprimés correspondent à la fiche actuelle : la fiche a pu changer depuis l'impression,
+ * et l'étiquette atteste ce qui a été imprimé.
+ */
+export function referencedProductId(type: RecordType | string, payload: Record<string, unknown>): string | null {
+  return type === 'label_printed' && typeof payload.product_id === 'string' ? payload.product_id : null
+}
+export function referencedRecipeId(type: RecordType | string, payload: Record<string, unknown>): string | null {
+  return type === 'label_printed' && typeof payload.recipe_id === 'string' ? payload.recipe_id : null
 }
 
 /** Fournisseur référencé par un payload valide (réception), ou null. */
@@ -504,12 +553,32 @@ export function validatePayload(type: RecordType | string, payload: unknown, ctx
   if (type === 'thawing' && payload.step === 'end' && !has(payload, 'dlc')) {
     return fail('payload.dlc : obligatoire à l’étape « end »')
   }
+  if (type === 'label_printed') {
+    const e = checkLabel(payload)
+    if (e) return fail(e)
+  }
   if (type === 'waste' && payload.reason === 'other' && (typeof payload.comment !== 'string' || payload.comment.trim() === '')) {
     return fail('payload.comment : obligatoire quand le motif est « other »')
   }
   // Pas de contrôle de cohérence in_range / seuils : l'app calcule in_range avec le seuil en vigueur
   // au moment de la saisie (éventuellement hors réseau) ; le serveur ne peut pas le rejuger.
   return ok
+}
+
+/** Règles croisées d'une étiquette (champs déjà validés un à un). */
+function checkLabel(p: Record<string, unknown>): string | null {
+  if (p.kind === 'prepared') {
+    if (!has(p, 'recipe_id')) return 'payload.recipe_id : obligatoire pour une préparation (kind = prepared)'
+    if (has(p, 'product_id')) return 'payload.product_id : interdit pour une préparation (kind = prepared)'
+  } else {
+    if (!has(p, 'product_id')) return `payload.product_id : obligatoire pour kind = ${String(p.kind)}`
+    if (has(p, 'recipe_id')) return `payload.recipe_id : interdit pour kind = ${String(p.kind)}`
+  }
+  const made = new Date(p.made_at as string).getTime()
+  const dlc = new Date(p.dlc_at as string).getTime()
+  if (dlc <= made) return 'payload.dlc_at : doit être postérieure à made_at'
+  if (dlc - made > LIMITS.labelMaxShelfLifeMs) return 'payload.dlc_at : au plus 90 jours après made_at'
+  return null
 }
 
 function validateCorrection(payload: Record<string, unknown>, ctx: PayloadContext): ValidationResult {

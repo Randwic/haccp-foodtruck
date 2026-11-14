@@ -7,6 +7,8 @@ import {
   isUuid,
   referencedEquipmentId,
   referencedPhotoPaths,
+  referencedProductId,
+  referencedRecipeId,
   referencedSupplierId,
   validatePayload,
   validateRecordSemantics,
@@ -130,7 +132,7 @@ export async function processPush(
   const known = new Map<string, StoredRecord>()
   if (candidateIds.length > 0) for (const s of await repo.getRecordsByIds(candidateIds)) known.set(s.id, s)
 
-  const caches: ContentCaches = { staff: new Map(), equipment: new Map(), suppliers: new Map() }
+  const caches: ContentCaches = { staff: new Map(), equipment: new Map(), suppliers: new Map(), products: new Map(), recipes: new Map() }
   const state: { blockedBy: { id: string; reason: RejectReason } | null } = { blockedBy: null }
 
   const batchSuspect = await batchClockSuspect(deviceNow, ctx.now(), repo)
@@ -286,6 +288,8 @@ interface ContentCaches {
   staff: Map<string, boolean | null> // null = inconnu, false = désactivé
   equipment: Map<string, boolean>
   suppliers: Map<string, boolean>
+  products: Map<string, boolean>
+  recipes: Map<string, boolean>
 }
 
 /** Contrôles de contenu d'un enregistrement à la chaîne intègre. */
@@ -334,6 +338,19 @@ async function checkContent(r: HaccpRecord, deviceId: string, repo: PushRepo, ca
   if (sup !== null) {
     if (!caches.suppliers.has(sup)) caches.suppliers.set(sup, await repo.supplierExists(sup))
     if (!caches.suppliers.get(sup)) return q('invalid_payload', 'supplier_id : fournisseur inconnu')
+  }
+  // Étiquette : produit / recette existants (même désactivés depuis : impression hors réseau).
+  // Choix : AUCUN contrôle que `allergens` correspond à la fiche actuelle — la fiche a pu changer
+  // depuis l'impression ; l'enregistrement atteste ce qui a été imprimé.
+  const prod = referencedProductId(effectiveType, effectivePayload)
+  if (prod !== null) {
+    if (!caches.products.has(prod)) caches.products.set(prod, await repo.productExists(prod))
+    if (!caches.products.get(prod)) return q('invalid_payload', 'product_id : produit inconnu')
+  }
+  const rec = referencedRecipeId(effectiveType, effectivePayload)
+  if (rec !== null) {
+    if (!caches.recipes.has(rec)) caches.recipes.set(rec, await repo.recipeExists(rec))
+    if (!caches.recipes.get(rec)) return q('invalid_payload', 'recipe_id : recette inconnue')
   }
   // Photos : chemin `<device_id>/<uuid>.webp` de CET appareil (seul dossier où photo-upload le
   // laisse écrire). Une correction peut reprendre les photos de l'enregistrement qu'elle corrige,

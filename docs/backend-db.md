@@ -14,6 +14,7 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 | `…0800_lot2_temperatures.sql` | `settings.daily_check_times`, seuils génériques des procédés, `records.device_now` et nouveau calcul de `clock_suspect` |
 | `…0900_reglages_procedes.sql` | `settings.missed_slot_carry_over`, `settings.thaw_dlc_days` |
 | `…1000_lot3_reception.sql` | Fournisseurs, bucket privé `photos` et ses politiques, `photos_to_purge()`, `record_photo_purge()` (idempotente, rejouée par les tests) |
+| `…1100_lot4_produits.sql` | Produits, recettes, produits d'exemple, index de traçabilité aval, `trace_lot()` (idempotente, rejouée par les tests) |
 
 ## Tables
 
@@ -25,6 +26,15 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 - `bootstrap_attempts` (table interne) : échecs d'inscription du gérant (horodatage + raison courte, aucune donnée personnelle). RLS sans politique, aucun privilège : accès seulement par les fonctions ci-dessous.
 - `record_chain_anchors` (table interne) : dernier maillon supprimé par la purge pour chaque appareil, pour que la chaîne puisse continuer et rester vérifiable.
 - `suppliers` (lot 3) : `name` 1–80 (non blanc), `phone` 1–30 ou null, `email` plausible ou null, `active`. Référence comme les autres (RLS gérant, audit, `updated_at` forcé, `service_role` en lecture seule). **Aucune suppression**, pour personne, propriétaire compris (trigger, TRUNCATE aussi) : les réceptions référencent `supplier_id` dans leur payload jsonb, sans clé étrangère possible → désactiver. Index `records_supplier_idx` pour la traçabilité amont.
+
+- `products` (lot 4) : `name` 1–80 (non blanc), `allergens text[]` ⊂ les 14 codes de `ALLERGENS` (sans null ni doublon, une dimension : `haccp_valid_allergens()`), `storage` `fridge|freezer|ambient`, `shelf_life_opened_hours` / `shelf_life_thawed_hours` 1–2160 ou null.
+- `recipes` (lot 4) : `name` 1–80, `ingredient_product_ids uuid[]` 0–50 sans null, `extra_allergens` (même contrôle), `storage`, `shelf_life_hours` 1–2160 (obligatoire). Chaque ingrédient doit exister dans `products` (trigger, `HACCP: unknown_product` ; produit désactivé accepté). Pas de clé étrangère sur un tableau, mais un produit n'est jamais supprimé, donc le contrôle à l'écriture suffit.
+- Produits et recettes : **même régime que `suppliers`** (RLS gérant en lecture/écriture, `service_role` en lecture seule, audit, `updated_at` forcé, DELETE et TRUNCATE bloqués pour tous par `haccp_reference_no_delete()` → désactiver). La migration pose 8 produits d'un food truck burger/frites et une recette d'exemple (uuid fixes `…0401`–`…0408`, `…0451`, `on conflict do nothing` : une fiche modifiée par le gérant n'est jamais écrasée). **Allergènes à vérifier sur les fiches fournisseurs, durées de vie à confirmer selon le PMS.**
+- Traçabilité aval (lot 4) :
+  - `haccp_norm_lot(text)` : minuscules, sans espaces. `haccp_record_lots(payload)` : lots normalisés cités par `lot`, `items[].lot` et les mêmes sous `replacement` (corrections) ; mode jsonpath *lax*, jamais d'erreur sur un payload en quarantaine ; valeurs > 100 caractères ignorées (taille d'entrée d'index).
+  - Index : `records_lots_idx` (GIN sur `haccp_record_lots(payload)`, types `reception|waste|label_printed|correction`), `records_label_sources_idx` (GIN `jsonb_path_ops` sur `payload->'source_record_ids'`, étiquettes : `… @> jsonb_build_array('<uuid>')`), `records_correction_sources_idx` (idem sous `replacement`), `records_waste_related_idx` (`payload->>'related_record_id'` des pertes).
+  - `trace_lot(p_lot)` (SECURITY DEFINER, **gérant seulement** : `HACCP: forbidden` sinon ; EXECUTE accordé à `authenticated` uniquement ; lot vide → `HACCP: invalid_lot`). Renvoie `kind` (`reception|label_printed|waste`, type d'origine pour une correction), `matched_by` (`lot` | `source_record` | `related_record`), `record_id`, `record_type`, `supersedes_id`, `corrected` (corrigé depuis), `quarantine_reason`, `device_time`, `server_time`, `author_id`, `device_id`, `payload`. Contenu : réceptions dont une ligne porte le lot (et toute leur chaîne de corrections), étiquettes portant le lot ou citant une de ces réceptions dans `source_record_ids`, pertes portant le lot ou liées (`related_record_id`) à une de ces réceptions / étiquettes. La quarantaine est incluse et signalée (pour un rappel, mieux vaut trop que pas assez). Un seul niveau : une étiquette faite à partir d'une autre étiquette n'est pas suivie.
+  - Appel depuis l'app gérant : `supabase.rpc('trace_lot', { p_lot })`.
 
 ## Règles de sécurité
 
@@ -93,7 +103,7 @@ Prérequis : PostgreSQL 16 (`/usr/lib/postgresql/16/bin`, modifiable avec `PGBIN
 Le script :
 - crée un cluster jetable sur un port libre ;
 - installe les stubs Supabase (`supabase/tests/supabase_stubs.sql` : rôles, `auth.users`, `auth.uid()`, privilèges par défaut, schéma `storage` minimal avec RLS et le blocage du `DELETE` direct) ;
-- applique les migrations (celle du lot 3 deux fois) et le seed (deux fois), pour vérifier l'idempotence, puis `helpers.sql` ;
+- applique les migrations (celles des lots 3 et 4 deux fois) et le seed (deux fois), pour vérifier l'idempotence, puis `helpers.sql` ;
 - exécute chaque `supabase/tests/sql/*.sql` dans une base clonée neuve ;
 - vérifie la concurrence de `bootstrap_manager()` avec deux sessions `psql` simultanées (une seule réussit) ;
 - détruit le cluster.

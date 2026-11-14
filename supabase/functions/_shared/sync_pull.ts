@@ -21,13 +21,15 @@ export function parseSince(raw: string | null): Date | null {
 export async function processPull(since: Date | null, repo: PullRepo, now: Date): Promise<SyncPullResponse> {
   const serverNow = now.toISOString() // capturé AVANT les lectures
   const from = since ? new Date(since.getTime() - PULL_OVERLAP_MS).toISOString() : null
-  const [establishment, settings, staff, equipment, thresholds, suppliers] = await Promise.all([
+  const [establishment, settings, staff, equipment, thresholds, suppliers, products, recipes] = await Promise.all([
     repo.getEstablishment(),
     repo.getSettings(),
     repo.listStaff(from),
     repo.listEquipment(from),
     repo.listThresholds(from),
     repo.listSuppliers(from),
+    repo.listProducts(from),
+    repo.listRecipes(from),
   ])
   if (!establishment || !settings) throw new HttpError(503, 'not_configured', 'établissement ou paramètres absents')
 
@@ -36,6 +38,8 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
     for (const s of staff) if (!s.active) deleted.push({ table: 'staff', id: s.id })
     for (const e of equipment) if (!e.active) deleted.push({ table: 'equipment', id: e.id })
     for (const s of suppliers) if (!s.active) deleted.push({ table: 'suppliers', id: s.id })
+    for (const p of products) if (!p.active) deleted.push({ table: 'products', id: p.id })
+    for (const r of recipes) if (!r.active) deleted.push({ table: 'recipes', id: r.id })
   }
   return {
     server_now: serverNow,
@@ -75,6 +79,30 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
     suppliers: suppliers
       .filter((s) => s.active)
       .map((s) => ({ id: s.id, name: s.name, phone: s.phone ?? null, email: s.email ?? null, active: s.active, updated_at: s.updated_at })),
+    products: products
+      .filter((p) => p.active)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        allergens: [...p.allergens],
+        storage: p.storage,
+        shelf_life_opened_hours: p.shelf_life_opened_hours ?? null,
+        shelf_life_thawed_hours: p.shelf_life_thawed_hours ?? null,
+        active: p.active,
+        updated_at: p.updated_at,
+      })),
+    recipes: recipes
+      .filter((r) => r.active)
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        ingredient_product_ids: [...r.ingredient_product_ids],
+        extra_allergens: [...r.extra_allergens],
+        storage: r.storage,
+        shelf_life_hours: r.shelf_life_hours,
+        active: r.active,
+        updated_at: r.updated_at,
+      })),
     deleted,
   }
 }
@@ -96,6 +124,8 @@ export function createSyncPullHandler(deps: SyncPullDeps): (req: Request) => Pro
       equipment: res.equipment.length,
       thresholds: res.thresholds.length,
       suppliers: res.suppliers.length,
+      products: res.products.length,
+      recipes: res.recipes.length,
       deleted: res.deleted.length,
     })
     return jsonResponse(200, res)

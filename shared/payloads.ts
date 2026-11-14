@@ -141,3 +141,61 @@ export interface Supplier {
   active: boolean
   updated_at: string
 }
+
+// ───────────────────────────── Lot 4 : produits, recettes, allergènes, étiquettes ─────────────────────────────
+
+/** Les 14 allergènes à déclaration obligatoire (règlement UE 1169/2011, annexe II). */
+export const ALLERGENS = [
+  'gluten', 'crustaces', 'oeufs', 'poissons', 'arachides', 'soja', 'lait',
+  'fruits_a_coque', 'celeri', 'moutarde', 'sesame', 'sulfites', 'lupin', 'mollusques',
+] as const
+export type Allergen = (typeof ALLERGENS)[number]
+
+export const ALLERGEN_LABELS: Record<Allergen, string> = {
+  gluten: 'Céréales contenant du gluten', crustaces: 'Crustacés', oeufs: 'Œufs', poissons: 'Poissons',
+  arachides: 'Arachides', soja: 'Soja', lait: 'Lait', fruits_a_coque: 'Fruits à coque', celeri: 'Céleri',
+  moutarde: 'Moutarde', sesame: 'Graines de sésame', sulfites: 'Anhydride sulfureux et sulfites',
+  lupin: 'Lupin', mollusques: 'Mollusques',
+}
+
+export type StorageMode = 'fridge' | 'freezer' | 'ambient'
+
+/** Produit / matière première (référence gérée dans Gestion, transmise par sync-pull). */
+export interface Product {
+  id: string
+  name: string // 1..80
+  allergens: Allergen[]
+  storage: StorageMode
+  // Durées de vie secondaires en heures (null = non applicable) — à confirmer selon le PMS
+  shelf_life_opened_hours: number | null // après ouverture du conditionnement
+  shelf_life_thawed_hours: number | null // après décongélation
+  active: boolean
+  updated_at: string
+}
+
+/** Recette / préparation maison (référence). Les allergènes = union de ceux des ingrédients + extra. */
+export interface Recipe {
+  id: string
+  name: string // 1..80
+  ingredient_product_ids: string[] // 0..50 Product.id
+  extra_allergens: Allergen[] // allergènes non portés par un produit référencé
+  storage: StorageMode
+  shelf_life_hours: number // durée de vie de la préparation (1..2160)
+  active: boolean
+  updated_at: string
+}
+
+/** Étiquette imprimée — type 'label_printed' (traçabilité aval). */
+export interface LabelPrintedPayload {
+  kind: 'opened' | 'prepared' | 'thawed' // ouverture d'un produit, préparation maison, décongélation
+  product_id?: string // requis si kind = 'opened' | 'thawed'
+  recipe_id?: string // requis si kind = 'prepared'
+  name: string // libellé imprimé, 1..80
+  made_at: string // ISO UTC canonique : ouverture / fabrication / fin de décongélation
+  dlc_at: string // ISO UTC canonique : date-heure limite calculée
+  allergens: Allergen[] // tels qu'imprimés (gras sur l'étiquette)
+  storage: StorageMode
+  lot?: string // lot interne ou lot fournisseur, 1..40
+  source_record_ids?: string[] // 0..20 : réceptions / décongélations utilisées (traçabilité amont→aval)
+  copies: number // 1..20
+}

@@ -11,6 +11,8 @@ export const STAFF_ID = '00000000-0000-4000-8000-0000000000a1'
 export const INACTIVE_STAFF_ID = '00000000-0000-4000-8000-0000000000a2'
 export const FRIDGE_ID = '00000000-0000-4000-8000-0000000000e1'
 export const SUPPLIER_ID = '00000000-0000-4000-8000-0000000000b1'
+export const PRODUCT_ID = '00000000-0000-4000-8000-0000000000c3'
+export const RECIPE_ID = '00000000-0000-4000-8000-0000000000c4'
 export const TOKEN = 'tok_' + 'A'.repeat(39)
 export const OTHER_TOKEN = 'tok_' + 'B'.repeat(39)
 export const NOW = new Date('2026-11-14T10:00:00.000Z')
@@ -33,6 +35,26 @@ export async function seededRepo(): Promise<MemoryRepo> {
   )
   repo.equipment.push({ id: FRIDGE_ID, name: 'Frigo 1', kind: 'fridge', active: true, updated_at: '2026-11-01T00:00:00.000Z' })
   repo.suppliers.push({ id: SUPPLIER_ID, name: 'Boucherie Martin', phone: '0102030405', email: null, active: true, updated_at: '2026-11-01T00:00:00.000Z' })
+  repo.products.push({
+    id: PRODUCT_ID,
+    name: 'Cheddar tranches',
+    allergens: ['lait'],
+    storage: 'fridge',
+    shelf_life_opened_hours: 72,
+    shelf_life_thawed_hours: null,
+    active: true,
+    updated_at: '2026-11-01T00:00:00.000Z',
+  })
+  repo.recipes.push({
+    id: RECIPE_ID,
+    name: 'Sauce cheddar maison',
+    ingredient_product_ids: [PRODUCT_ID],
+    extra_allergens: ['gluten'],
+    storage: 'fridge',
+    shelf_life_hours: 72,
+    active: true,
+    updated_at: '2026-11-01T00:00:00.000Z',
+  })
   repo.establishment = { id: '00000000-0000-4000-8000-0000000000f1', name: 'Le Camion', timezone: 'Europe/Paris' }
   repo.settings = { retention_years: 3, auto_lock_minutes: 2, clock_suspect_minutes: 5, email_alerts: true, daily_check_times: ['08:00', '18:00'], missed_slot_carry_over: true, thaw_dlc_days: 3 }
   return repo

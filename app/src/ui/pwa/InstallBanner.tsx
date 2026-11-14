@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '../components/index.ts'
-import { InstallGuide, ShareIcon } from './InstallGuide.tsx'
+import { IconShare } from '../icons.tsx'
+import { InstallGuide } from './InstallGuide.tsx'
 import { dismissInstallBanner, isInstallBannerDismissed, isStandalone } from './installState.ts'
 
 /** Bannière « Installer l'application », visible tant que l'app n'est pas ouverte depuis l'écran d'accueil. */
@@ -13,13 +14,15 @@ export function InstallBanner() {
   return (
     <>
       {!hidden && (
-        <aside aria-label="Installation" className="flex flex-wrap items-center gap-3 bg-sky-950 px-4 py-3 text-sky-50 ring-1 ring-sky-800 sm:px-6">
-          <ShareIcon className="h-8 w-8 shrink-0 text-sky-200" />
-          <p className="min-w-0 flex-1 text-lg">
-            <strong>Installez l’application</strong> sur l’écran d’accueil pour ne pas perdre vos saisies et recevoir les alertes.
+        <aside aria-label="Installation" className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line bg-surface px-4 py-3 sm:px-6">
+          <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+            <IconShare size={20} />
+          </span>
+          <p className="min-w-0 flex-1 text-[15px] leading-snug text-fg-muted">
+            <strong className="font-semibold text-fg">Installez l’application</strong> sur l’écran d’accueil pour ne pas perdre vos saisies et recevoir les alertes.
           </p>
-          <div className="flex gap-2">
-            <Button onClick={() => setGuideOpen(true)}>Comment faire ?</Button>
+          <div className="flex w-full gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
+            <Button variant="secondary" onClick={() => setGuideOpen(true)}>Comment faire ?</Button>
             <Button
               variant="ghost"
               onClick={() => {

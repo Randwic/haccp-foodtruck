@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { passwordStrength } from '../../manager/helpers.ts'
 import { TextField, type TextFieldProps } from '../../ui/components/index.ts'
+import { IconEye, IconEyeOff } from '../../ui/icons.tsx'
 
-const BAR = ['bg-slate-700', 'bg-red-500', 'bg-amber-400', 'bg-emerald-400', 'bg-emerald-300']
-const TEXT = ['text-slate-300', 'text-red-300', 'text-amber-200', 'text-emerald-300', 'text-emerald-200']
+const BAR = ['bg-line-strong', 'bg-danger', 'bg-warn', 'bg-ok', 'bg-ok']
+const TEXT = ['text-fg-muted', 'text-danger', 'text-warn', 'text-ok', 'text-ok']
 
 /** Mot de passe avec bouton « Afficher » et, en option, indicateur de force. */
 export function PasswordField({ showStrength, ...props }: Omit<TextFieldProps, 'type' | 'addon' | 'below'> & { showStrength?: boolean }) {
@@ -19,20 +20,21 @@ export function PasswordField({ showStrength, ...props }: Omit<TextFieldProps, '
           onClick={() => setVisible((v) => !v)}
           aria-pressed={visible}
           aria-label={visible ? `Masquer – ${props.label}` : `Afficher – ${props.label}`}
-          className="min-h-16 shrink-0 rounded-2xl bg-slate-700 px-4 text-base font-semibold text-white ring-1 ring-slate-500 active:bg-slate-600"
+          className="flex min-h-14 shrink-0 items-center gap-2 rounded-xl border border-line-strong bg-elevated px-3.5 text-[15px] font-semibold text-fg shadow-card active:bg-pressed"
         >
-          {visible ? 'Masquer' : 'Afficher'}
+          {visible ? <IconEyeOff size={20} className="text-fg-muted" /> : <IconEye size={20} className="text-fg-muted" />}
+          <span className="hidden sm:inline">{visible ? 'Masquer' : 'Afficher'}</span>
         </button>
       }
       below={
         showStrength && props.value.length > 0 ? (
           <div className="mt-3" aria-live="polite">
-            <div className="flex gap-2" aria-hidden="true">
+            <div className="flex gap-1.5" aria-hidden="true">
               {[1, 2, 3, 4].map((i) => (
-                <span key={i} className={`h-2.5 flex-1 rounded-full ${i <= strength.score ? BAR[strength.score] : 'bg-slate-700'}`} />
+                <span key={i} className={`h-1.5 flex-1 rounded-full ${i <= strength.score ? BAR[strength.score] : 'bg-line-strong'}`} />
               ))}
             </div>
-            <p className={`mt-2 text-base font-semibold ${TEXT[strength.score]}`}>Force du mot de passe : {strength.label}</p>
+            <p className={`mt-2 text-[14px] font-semibold ${TEXT[strength.score]}`}>Force du mot de passe : {strength.label}</p>
           </div>
         ) : undefined
       }

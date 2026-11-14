@@ -4,7 +4,7 @@ import { errorText, type ManagedStaff } from '../../manager/api.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button, Modal, Notice, PinSetup, TextField } from '../../ui/components/index.ts'
 import { initials } from '../../ui/format.ts'
-import { IconPlus } from '../../ui/icons.tsx'
+import { IconChevronLeft, IconPlus } from '../../ui/icons.tsx'
 import { ConfirmModal, SectionTitle, useManagement } from './common.tsx'
 
 type Dialog = { kind: 'add' } | { kind: 'pin'; s: ManagedStaff } | { kind: 'deactivate'; s: ManagedStaff } | { kind: 'reactivate'; s: ManagedStaff } | null
@@ -42,15 +42,15 @@ export function StaffSection() {
     const me = s.id === meId
     const lastManager = s.role === 'manager' && activeManagers <= 1
     return (
-      <li key={s.id} className={`flex flex-col gap-4 rounded-3xl p-5 ring-1 sm:flex-row sm:items-center ${s.active ? 'bg-slate-800 ring-slate-600' : 'bg-slate-900 ring-slate-800'}`}>
+      <li key={s.id} className={`flex flex-col gap-4 rounded-2xl border border-line p-4 sm:flex-row sm:items-center sm:p-5 ${s.active ? 'bg-surface shadow-card' : 'bg-sunken'}`}>
         <div className="flex min-w-0 flex-1 items-center gap-4">
-          <span aria-hidden="true" className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-black ${s.active ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
+          <span aria-hidden="true" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-line text-[15px] font-semibold ${s.active ? 'bg-accent-soft text-accent' : 'bg-surface text-fg-subtle'}`}>
             {initials(s.display_name)}
           </span>
           <div className="min-w-0">
-            <h3 className={`break-words text-xl font-bold ${s.active ? 'text-white' : 'text-slate-300'}`}>
+            <h3 className={`break-words text-lg leading-snug font-semibold tracking-[-0.01em] ${s.active ? 'text-fg' : 'text-fg-muted'}`}>
               {s.display_name}
-              {me && <span className="ml-2 text-base font-semibold text-sky-200">(vous)</span>}
+              {me && <span className="ml-2 text-[15px] font-medium text-accent">(vous)</span>}
             </h3>
             <div className="mt-1 flex flex-wrap gap-2">
               <Badge tone={s.role === 'manager' ? 'info' : 'neutral'}>{s.role === 'manager' ? 'Gérant' : 'Équipier'}</Badge>
@@ -86,21 +86,21 @@ export function StaffSection() {
         <h2 id="staff-title" className="sr-only">
           Équipe
         </h2>
-        <p className="max-w-xl text-lg text-slate-300">Chaque personne déverrouille l’app avec son code PIN : ses saisies portent son nom.</p>
-        <Button onClick={() => setDialog({ kind: 'add' })} icon={<IconPlus />}>
+        <p className="max-w-xl text-[17px] text-fg-muted">Chaque personne déverrouille l’app avec son code PIN : ses saisies portent son nom.</p>
+        <Button onClick={() => setDialog({ kind: 'add' })} icon={<IconPlus size={20} />}>
           Ajouter un employé
         </Button>
       </div>
       {loadError && <Notice>{loadError}</Notice>}
-      {items === null && !loadError && <p className="text-lg text-slate-300">Chargement…</p>}
+      {items === null && !loadError && <p className="text-[17px] text-fg-muted">Chargement…</p>}
       {items !== null && (
         <>
           <SectionTitle count={active.length}>Actifs</SectionTitle>
-          <ul className="grid gap-4 lg:grid-cols-2">{active.map(card)}</ul>
+          <ul className="grid gap-3 sm:gap-4 lg:grid-cols-2">{active.map(card)}</ul>
           {inactive.length > 0 && (
             <>
               <SectionTitle count={inactive.length}>Désactivés</SectionTitle>
-              <ul className="grid gap-4 lg:grid-cols-2">{inactive.map(card)}</ul>
+              <ul className="grid gap-3 sm:gap-4 lg:grid-cols-2">{inactive.map(card)}</ul>
             </>
           )}
         </>
@@ -182,11 +182,11 @@ function AddStaffModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
       ) : (
         <div className="space-y-4">
           <PinSetup minLength={4} maxLength={6} onComplete={save} disabled={busy} who={name.trim()} />
-          {busy && <p className="text-center text-lg text-slate-300">Enregistrement…</p>}
+          {busy && <p className="text-center text-[17px] text-fg-muted">Enregistrement…</p>}
           {error && <Notice>{error}</Notice>}
           <div className="text-center">
-            <Button variant="ghost" onClick={() => setStep('name')} disabled={busy}>
-              ← Modifier le nom
+            <Button variant="ghost" onClick={() => setStep('name')} disabled={busy} icon={<IconChevronLeft size={20} />} className="text-accent">
+              Modifier le nom
             </Button>
           </div>
         </div>
@@ -216,9 +216,9 @@ function ChangePinModal({ s, me, onClose, onDone }: { s: ManagedStaff; me: boole
   return (
     <Modal open title={me ? 'Changer mon code PIN' : `Changer le PIN – ${s.display_name}`} onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-base text-slate-300">L’ancien code ne fonctionnera plus sur les appareils dès leur prochaine synchronisation.</p>
+        <p className="text-[15px] text-fg-muted">L’ancien code ne fonctionnera plus sur les appareils dès leur prochaine synchronisation.</p>
         <PinSetup minLength={isManager ? 6 : 4} maxLength={6} onComplete={save} disabled={busy} who={me ? undefined : s.display_name} />
-        {busy && <p className="text-center text-lg text-slate-300">Enregistrement…</p>}
+        {busy && <p className="text-center text-[17px] text-fg-muted">Enregistrement…</p>}
         {error && <Notice>{error}</Notice>}
       </div>
     </Modal>

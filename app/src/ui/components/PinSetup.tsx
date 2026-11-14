@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { IconError } from '../icons.tsx'
 import { Button } from './Button.tsx'
 import { PinPad, haptic } from './PinPad.tsx'
 
@@ -60,12 +61,17 @@ export function PinSetup({ minLength = 6, maxLength = 6, onComplete, disabled, w
   const title = step === 'first' ? `Choisissez un code PIN${who ? ` pour ${who}` : ''}` : 'Confirmez le code PIN'
   return (
     <div>
-      <p className="text-center text-2xl font-bold text-white">{title}</p>
-      <p className="mb-3 text-center text-base text-slate-300">
+      <p className="text-center text-xl font-semibold text-fg">{title}</p>
+      <p className="mt-1 mb-3 text-center text-[15px] text-fg-muted">
         {step === 'first' ? `${lengthText}, pour déverrouiller l’app chaque jour.` : 'Saisissez le même code une seconde fois.'}
       </p>
       <div role="alert" aria-live="assertive" className="mb-2 min-h-8 text-center">
-        {error && <p className="inline-block rounded-2xl bg-red-700 px-4 py-2 text-lg font-bold text-white">{error}</p>}
+        {error && (
+          <p className="inline-flex items-center gap-2 rounded-xl bg-danger-soft px-4 py-2 text-[15px] font-semibold text-danger">
+            <IconError size={18} />
+            {error}
+          </p>
+        )}
       </div>
       <PinPad
         value={value}

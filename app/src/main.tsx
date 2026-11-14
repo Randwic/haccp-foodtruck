@@ -1,7 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import './ui/theme.css'
 import App from './App.tsx'
 import type { CoreApi } from './core/api.ts'
 import { setActivityNotifier } from './ui/activity.ts'
@@ -52,7 +51,7 @@ async function cleanOldTrialDatabases() {
 
 function TrialBanner() {
   return (
-    <div role="status" className="sticky top-0 z-50 bg-amber-400 px-4 py-2 text-center text-sm font-semibold text-black">
+    <div role="status" className="sticky top-0 z-50 border-b border-warn/35 bg-warn-soft px-4 py-2 text-center text-[13px] font-semibold text-warn">
       MODE ESSAI — rien n'est enregistré sur votre vrai serveur. Recharger la page = tout recommencer.
     </div>
   )

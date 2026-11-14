@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { IconError, IconInfo, IconOk } from '../icons.tsx'
 
 export type ToastTone = 'ok' | 'error' | 'info'
 interface ToastItem {
@@ -10,10 +11,10 @@ type ShowToast = (message: string, tone?: ToastTone, durationMs?: number) => voi
 
 const ToastContext = createContext<ShowToast>(() => {})
 
-const TONES: Record<ToastTone, string> = {
-  ok: 'bg-emerald-400 text-slate-950',
-  error: 'bg-red-700 text-white',
-  info: 'bg-slate-100 text-slate-950',
+const TONES: Record<ToastTone, { icon: string; Icon: typeof IconOk }> = {
+  ok: { icon: 'text-ok', Icon: IconOk },
+  error: { icon: 'text-danger', Icon: IconError },
+  info: { icon: 'text-accent', Icon: IconInfo },
 }
 
 /** Messages éphémères, annoncés aux lecteurs d'écran (aria-live). */
@@ -40,16 +41,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         role="status"
         className="safe-pb pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-3 px-4 pb-4"
       >
-        {items.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => dismiss(t.id)}
-            className={`pointer-events-auto min-h-14 max-w-xl rounded-2xl px-6 py-3 text-lg font-semibold shadow-2xl ${TONES[t.tone]}`}
-          >
-            {t.message}
-          </button>
-        ))}
+        {items.map((t) => {
+          const { icon, Icon } = TONES[t.tone]
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => dismiss(t.id)}
+              className="pointer-events-auto flex min-h-14 max-w-xl items-center gap-3 rounded-2xl border border-line bg-elevated px-5 py-3 text-left text-[16px] font-medium text-fg shadow-pop"
+            >
+              <Icon size={22} className={`shrink-0 ${icon}`} />
+              {t.message}
+            </button>
+          )
+        })}
       </div>
     </ToastContext.Provider>
   )

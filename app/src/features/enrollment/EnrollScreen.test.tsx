@@ -53,7 +53,7 @@ describe('Configuration avancée – retour', () => {
   it('revient à la connexion gérant', async () => {
     renderWithCore(createFakeCore())
     await openAdvanced()
-    fireEvent.click(screen.getByRole('button', { name: '← Retour' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retour' }))
     expect(await screen.findByRole('heading', { name: 'Connexion gérant' })).toBeInTheDocument()
   })
 })

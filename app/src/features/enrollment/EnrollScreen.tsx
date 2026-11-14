@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Button, Notice, TextField } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
+import { BrandStripe } from '../../ui/brand.tsx'
+import { IconChevronLeft } from '../../ui/icons.tsx'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -50,18 +52,20 @@ export function EnrollScreen({ onEnrolled, onBack }: { onEnrolled: () => void; o
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-5 py-8 sm:py-12">
+    <>
+    <BrandStripe />
+    <main className="mx-auto w-full max-w-xl px-4 pt-4 pb-12 sm:px-6 sm:pt-8">
       {onBack && (
-        <Button variant="ghost" onClick={onBack} className="mb-6">
-          ← Retour
+        <Button variant="ghost" onClick={onBack} className="-ml-3 mb-2 px-3 text-accent" icon={<IconChevronLeft size={22} />}>
+          Retour
         </Button>
       )}
-      <h1 className="text-3xl font-bold text-white sm:text-4xl">Configuration avancée</h1>
-      <p className="mt-3 text-lg text-slate-200">
+      <h1 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">Configuration avancée</h1>
+      <p className="mt-3 text-[17px] text-fg-muted">
         Enregistrement manuel de cet appareil avec un <strong>identifiant</strong> et un <strong>jeton</strong> d’appareil déjà créés par le gérant
         (dépannage). Une connexion Internet est nécessaire.
       </p>
-      <form onSubmit={submit} noValidate className="mt-8 space-y-6" aria-describedby={submitError ? 'enroll-error' : undefined}>
+      <form onSubmit={submit} noValidate className="mt-8 space-y-6 rounded-3xl border border-line bg-surface p-5 shadow-card sm:p-8" aria-describedby={submitError ? 'enroll-error' : undefined}>
         <TextField label="Nom de l’appareil" hint="Ex. « iPad cuisine », « iPhone du gérant »." value={values.name} onChange={set('name')} error={errors.name} />
         <TextField label="Identifiant d’appareil" value={values.device_id} onChange={set('device_id')} error={errors.device_id} mono />
         <TextField label="Jeton d’appareil" hint="Il n’est affiché qu’une fois chez le gérant : ne le partagez pas." value={values.device_token} onChange={set('device_token')} error={errors.device_token} mono />
@@ -73,5 +77,6 @@ export function EnrollScreen({ onEnrolled, onBack }: { onEnrolled: () => void; o
         </Button>
       </form>
     </main>
+    </>
   )
 }

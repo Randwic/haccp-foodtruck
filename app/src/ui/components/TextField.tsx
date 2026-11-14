@@ -1,4 +1,5 @@
 import { useId, type InputHTMLAttributes, type ReactNode } from 'react'
+import { IconError, IconInfo, IconOk, IconWarn } from '../icons.tsx'
 
 export interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'> {
   label: string
@@ -20,11 +21,11 @@ export function TextField({ label, hint, value, error, onChange, mono, addon, be
   const errId = `${id}-err`
   return (
     <div className={className}>
-      <label htmlFor={id} className="mb-2 block text-xl font-semibold text-white">
+      <label htmlFor={id} className="mb-1.5 block text-[15px] font-semibold text-fg">
         {label}
       </label>
       {hint && (
-        <p id={hintId} className="mb-2 text-base text-slate-300">
+        <p id={hintId} className="mb-2 text-[15px] text-fg-muted">
           {hint}
         </p>
       )}
@@ -40,15 +41,16 @@ export function TextField({ label, hint, value, error, onChange, mono, addon, be
           {...rest}
           aria-invalid={error ? true : undefined}
           aria-describedby={[hint ? hintId : '', error ? errId : ''].filter(Boolean).join(' ') || undefined}
-          className={`min-h-16 w-full min-w-0 rounded-2xl bg-slate-800 px-4 text-xl text-white ring-2 placeholder:text-slate-500 ${
-            error ? 'ring-red-400' : 'ring-slate-600'
-          } ${mono ? 'font-mono text-lg' : ''}`}
+          className={`min-h-14 w-full min-w-0 rounded-xl border bg-elevated px-4 text-[17px] text-fg transition-colors focus:border-accent ${
+            error ? 'border-danger' : 'border-line-strong'
+          } ${mono ? 'font-mono' : ''}`}
         />
         {addon}
       </div>
       {below}
       {error && (
-        <p id={errId} className="mt-2 text-lg font-semibold text-red-300">
+        <p id={errId} className="mt-2 flex items-start gap-1.5 text-[15px] font-medium text-danger">
+          <IconError size={18} className="mt-0.5 shrink-0" />
           {error}
         </p>
       )}
@@ -56,17 +58,20 @@ export function TextField({ label, hint, value, error, onChange, mono, addon, be
   )
 }
 
+const NOTICE = {
+  error: { cls: 'border-danger/30 bg-danger-soft', icon: 'text-danger', Icon: IconError },
+  ok: { cls: 'border-ok/30 bg-ok-soft', icon: 'text-ok', Icon: IconOk },
+  warn: { cls: 'border-warn/35 bg-warn-soft', icon: 'text-warn', Icon: IconWarn },
+  info: { cls: 'border-line bg-sunken', icon: 'text-accent', Icon: IconInfo },
+} as const
+
 /** Bandeau d'erreur ou de succès (role=alert / status). */
 export function Notice({ tone = 'error', children, id }: { tone?: 'error' | 'ok' | 'warn' | 'info'; children: ReactNode; id?: string }) {
-  const cls = {
-    error: 'bg-red-950 text-red-100 ring-red-400',
-    ok: 'bg-emerald-950 text-emerald-100 ring-emerald-400',
-    warn: 'bg-amber-950 text-amber-100 ring-amber-400',
-    info: 'bg-slate-900 text-slate-100 ring-sky-300',
-  }[tone]
+  const n = NOTICE[tone]
   return (
-    <div id={id} role={tone === 'error' ? 'alert' : 'status'} className={`rounded-2xl px-5 py-4 text-lg font-semibold ring-2 ${cls}`}>
-      {children}
+    <div id={id} role={tone === 'error' ? 'alert' : 'status'} className={`flex items-start gap-3 rounded-xl border px-4 py-3.5 text-[15px] leading-snug text-fg ${n.cls}`}>
+      <n.Icon size={20} className={`mt-px shrink-0 ${n.icon}`} />
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { rememberManagerEmail } from '../../manager/helpers.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
 import { Button, Notice, PinSetup, TextField } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
+import { IconChevronLeft } from '../../ui/icons.tsx'
 import { enrollThisDevice } from './enrollThisDevice.ts'
 import { PasswordField } from './PasswordField.tsx'
 import { SetupLayout, SetupProgress, type ProgressStep } from './SetupLayout.tsx'
@@ -151,10 +152,10 @@ export function BootstrapScreen({ defaultDeviceName, onAlreadyBootstrapped, onCo
       {step === 'pin' && (
         <div className="space-y-6">
           <PinSetup minLength={6} maxLength={6} onComplete={onPin} disabled={hashing} />
-          {hashing && <p className="text-center text-lg text-slate-300">Préparation du code…</p>}
+          {hashing && <p className="text-center text-[17px] text-fg-muted">Préparation du code…</p>}
           <div className="text-center">
-            <Button variant="ghost" onClick={back}>
-              ← Retour
+            <Button variant="ghost" onClick={back} icon={<IconChevronLeft size={20} />} className="text-accent">
+              Retour
             </Button>
           </div>
         </div>
@@ -163,13 +164,13 @@ export function BootstrapScreen({ defaultDeviceName, onAlreadyBootstrapped, onCo
       {step === 'device' && (
         <form onSubmit={create} noValidate className="space-y-6">
           <TextField label="Nom de cet appareil" hint="Pour le reconnaître dans la liste des appareils (ex. « iPad cuisine »)." value={v.device} onChange={set('device')} error={errors.device} autoCapitalize="words" />
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 rounded-2xl bg-slate-900 p-5 text-lg ring-1 ring-slate-700 sm:grid-cols-[auto_1fr]">
-            <dt className="text-slate-400">Établissement</dt>
-            <dd className="font-semibold text-white">{v.establishment.trim()}</dd>
-            <dt className="text-slate-400">Gérant</dt>
-            <dd className="font-semibold text-white">{v.name.trim()}</dd>
-            <dt className="text-slate-400">Email</dt>
-            <dd className="break-all font-semibold text-white">{v.email.trim().toLowerCase()}</dd>
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-xl border border-line bg-sunken p-4 text-[15px] sm:grid-cols-[auto_1fr] sm:gap-y-2">
+            <dt className="text-fg-subtle">Établissement</dt>
+            <dd className="mb-2 font-medium text-fg sm:mb-0">{v.establishment.trim()}</dd>
+            <dt className="text-fg-subtle">Gérant</dt>
+            <dd className="mb-2 font-medium text-fg sm:mb-0">{v.name.trim()}</dd>
+            <dt className="text-fg-subtle">Email</dt>
+            <dd className="break-all font-medium text-fg">{v.email.trim().toLowerCase()}</dd>
           </dl>
           <Notice tone="warn">
             Ce compte sera le <strong>seul compte gérant</strong>. Une fois créé, l’inscription est <strong>fermée définitivement</strong> :
@@ -187,8 +188,8 @@ function StepButtons({ onBack, submitLabel = 'Continuer' }: { onBack?: () => voi
   return (
     <div className="flex flex-col-reverse gap-3 sm:flex-row">
       {onBack && (
-        <Button variant="secondary" size="lg" onClick={onBack} className="sm:w-48">
-          ← Retour
+        <Button variant="secondary" size="lg" onClick={onBack} className="sm:w-40" icon={<IconChevronLeft size={20} />}>
+          Retour
         </Button>
       )}
       <Button type="submit" size="lg" className="flex-1">

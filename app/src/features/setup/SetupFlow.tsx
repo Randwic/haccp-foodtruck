@@ -4,6 +4,7 @@ import { guessDeviceName } from '../../manager/helpers.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
 import { Button, Notice } from '../../ui/components/index.ts'
 import { useOnline } from '../../ui/hooks/useOnline.ts'
+import { IconOffline } from '../../ui/icons.tsx'
 import { EnrollScreen } from '../enrollment/EnrollScreen.tsx'
 import { BootstrapScreen } from './BootstrapScreen.tsx'
 import { ManagerLoginScreen } from './ManagerLoginScreen.tsx'
@@ -51,11 +52,16 @@ export function SetupFlow({ onEnrolled }: { onEnrolled: () => void }) {
   if (!online) {
     return (
       <SetupLayout title="Connexion Internet nécessaire">
-        <div role="alert" className="rounded-3xl bg-slate-900 p-6 ring-2 ring-amber-400">
-          <p className="text-2xl font-bold text-amber-200">Connectez l’appareil à Internet pour la première configuration.</p>
-          <p className="mt-3 text-lg text-slate-200">
+        <div role="alert" className="flex items-start gap-4">
+          <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-warn-soft text-warn">
+            <IconOffline size={22} />
+          </span>
+          <div>
+          <p className="text-xl font-semibold text-fg">Connectez l’appareil à Internet pour la première configuration.</p>
+          <p className="mt-2 text-[17px] text-fg-muted">
             Wi-Fi ou partage de connexion du téléphone. Ensuite, l’application fonctionnera aussi sans réseau : vos saisies seront gardées sur l’appareil.
           </p>
+          </div>
         </div>
       </SetupLayout>
     )
@@ -64,7 +70,8 @@ export function SetupFlow({ onEnrolled }: { onEnrolled: () => void }) {
   if (state.kind === 'checking') {
     return (
       <SetupLayout title="Bienvenue">
-        <p className="text-xl text-slate-300" aria-busy="true">
+        <p className="flex items-center gap-3 text-[17px] text-fg-muted" aria-busy="true">
+          <span aria-hidden="true" className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
           Vérification auprès du serveur…
         </p>
       </SetupLayout>

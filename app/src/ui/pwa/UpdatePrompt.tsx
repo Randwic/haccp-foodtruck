@@ -21,13 +21,11 @@ export function UpdatePrompt() {
     <div
       role="alertdialog"
       aria-label="Mise à jour"
-      className="safe-pb fixed inset-x-0 bottom-0 z-[55] flex flex-wrap items-center justify-center gap-3 bg-slate-100 px-4 py-3 text-slate-950 shadow-2xl"
+      className="safe-pb fixed inset-x-0 bottom-0 z-[55] flex flex-wrap items-center justify-center gap-3 border-t border-line bg-elevated px-4 py-3 text-fg shadow-pop"
     >
-      <span className="text-lg font-semibold">Nouvelle version disponible</span>
-      <Button variant="secondary" onClick={() => updateServiceWorker(true)}>
-        Mettre à jour
-      </Button>
-      <Button variant="ghost" className="text-slate-950! ring-slate-500!" onClick={() => setNeedRefresh(false)}>
+      <span className="text-[17px] font-semibold">Nouvelle version disponible</span>
+      <Button onClick={() => updateServiceWorker(true)}>Mettre à jour</Button>
+      <Button variant="ghost" onClick={() => setNeedRefresh(false)}>
         Plus tard
       </Button>
     </div>

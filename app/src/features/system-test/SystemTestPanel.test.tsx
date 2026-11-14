@@ -26,7 +26,7 @@ describe('Test d’enregistrement', () => {
     expect(rec).toMatchObject({ type: 'system_test', author_id: 'staff-equipier', device_seq: 1 })
 
     await act(async () => core.simulate.flush())
-    expect(await within(list).findByText('✓ Synchronisé')).toBeInTheDocument()
+    expect(await within(list).findByText('Synchronisé')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Tout est synchronisé/ })).toBeInTheDocument()
   })
 })

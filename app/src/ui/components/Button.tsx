@@ -4,15 +4,15 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 export type ButtonSize = 'md' | 'lg'
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  // Contrastes vérifiés (WCAG AA) sur fond slate-950.
-  primary: 'bg-sky-300 text-slate-950 active:bg-sky-200',
-  secondary: 'bg-slate-700 text-white ring-1 ring-slate-500 active:bg-slate-600',
-  danger: 'bg-red-700 text-white active:bg-red-600',
-  ghost: 'bg-transparent text-slate-100 ring-1 ring-slate-600 active:bg-slate-800',
+  // Jetons de theme.css — contrastes AA vérifiés dans les deux thèmes (docs/ui.md).
+  primary: 'bg-accent text-on-accent active:bg-accent-pressed',
+  secondary: 'bg-elevated text-fg border border-line-strong shadow-card active:bg-pressed',
+  danger: 'bg-danger-strong text-on-danger active:brightness-110',
+  ghost: 'bg-transparent text-fg active:bg-pressed',
 }
 const SIZES: Record<ButtonSize, string> = {
-  md: 'min-h-14 px-5 text-lg',
-  lg: 'min-h-18 px-7 text-xl',
+  md: 'min-h-14 px-5 text-[17px]',
+  lg: 'min-h-16 px-6 text-lg',
 }
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -26,7 +26,7 @@ export function Button({ variant = 'primary', size = 'md', block, icon, classNam
   return (
     <button
       type={type}
-      className={`inline-flex min-w-14 select-none items-center justify-center gap-2 rounded-2xl font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTS[variant]} ${SIZES[size]} ${block ? 'w-full' : ''} ${className}`}
+      className={`inline-flex min-w-14 select-none items-center justify-center gap-2 rounded-xl font-semibold tracking-[-0.01em] transition-[background-color,transform] duration-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${VARIANTS[variant]} ${SIZES[size]} ${block ? 'w-full' : ''} ${className}`}
       {...rest}
     >
       {icon}

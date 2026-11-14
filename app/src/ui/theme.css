@@ -1,19 +1,130 @@
-/* Styles de base de l'interface (complète Tailwind, importé après index.css).
-   Placés dans @layer base pour ne jamais écraser les classes utilitaires. */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Jetons de design Space Diner · HACCP
+   Thème automatique clair / sombre (prefers-color-scheme). Aucun composant ne
+   contient de couleur codée en dur : tout passe par les variables ci-dessous,
+   exposées à Tailwind via @theme (bg-surface, text-fg-muted, border-line…).
+   Ratios WCAG vérifiés (voir docs/ui.md, « Jetons et contrastes »).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light dark;
+
+  /* Marque (fixe, identique dans les deux thèmes) */
+  --brand-navy: #0a0e1f;
+  --brand-pink: #ff2e97;
+  --brand-cyan: #22e6f2;
+  --brand-yellow: #ffd84a;
+  --brand-white: #f4f1ec;
+  --brand-chrome: #c9c9cf;
+
+  /* Thème clair (par défaut) */
+  --canvas: #f4f5f8;
+  --surface: #ffffff;
+  --elevated: #ffffff;
+  --pressed: #e9ecf1;
+  --sunken: #eceef3;
+  --line: rgb(10 14 31 / 0.1);
+  --line-strong: rgb(10 14 31 / 0.2);
+  --fg: #0a0e1f;
+  --fg-muted: #4b5167;
+  --fg-subtle: #5f657c;
+  --accent: #0a6c75;
+  --on-accent: #ffffff;
+  --accent-pressed: #08555c;
+  --ok: #126b36;
+  --warn: #8a5700;
+  --danger: #bf2323;
+  --danger-strong: #c62828;
+  --on-danger: #ffffff;
+  --stripe-chrome: #a9acb6;
+  --scrim: rgb(10 14 31 / 0.45);
+  --elev-card: 0 1px 2px rgb(10 14 31 / 0.05), 0 2px 8px rgb(10 14 31 / 0.04);
+  --elev-pop: 0 12px 40px rgb(10 14 31 / 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #0a0e1f;
+    --surface: #11162b;
+    --elevated: #192039;
+    --pressed: #252e50;
+    --sunken: #060915;
+    --line: rgb(201 201 207 / 0.14);
+    --line-strong: rgb(201 201 207 / 0.26);
+    --fg: #f4f1ec;
+    --fg-muted: #aeb3c6;
+    --fg-subtle: #8d93ab;
+    --accent: #22e6f2;
+    --on-accent: #0a0e1f;
+    --accent-pressed: #7df0f7;
+    --ok: #4ade80;
+    --warn: #ffd84a;
+    --danger: #ff5f57;
+    --danger-strong: #dc2626;
+    --on-danger: #ffffff;
+    --stripe-chrome: #c9c9cf;
+    --scrim: rgb(3 5 12 / 0.7);
+    --elev-card: none;
+    --elev-pop: 0 16px 48px rgb(0 0 0 / 0.5);
+  }
+}
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-brand: 'Bowlby One', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-pressed: var(--pressed);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-pressed: var(--accent-pressed);
+  --color-accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  --color-ok: var(--ok);
+  --color-ok-soft: color-mix(in srgb, var(--ok) 13%, var(--surface));
+  --color-warn: var(--warn);
+  --color-warn-soft: color-mix(in srgb, var(--warn) 14%, var(--surface));
+  --color-danger: var(--danger);
+  --color-danger-soft: color-mix(in srgb, var(--danger) 13%, var(--surface));
+  --color-danger-strong: var(--danger-strong);
+  --color-on-danger: var(--on-danger);
+  --color-scrim: var(--scrim);
+
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-pink: var(--brand-pink);
+  --color-brand-cyan: var(--brand-cyan);
+  --color-brand-yellow: var(--brand-yellow);
+  --color-brand-white: var(--brand-white);
+  --color-brand-chrome: var(--brand-chrome);
+  --color-stripe-chrome: var(--stripe-chrome);
+
+  --shadow-card: var(--elev-card);
+  --shadow-pop: var(--elev-pop);
+}
+
+/* Styles de base (dans @layer base pour ne jamais écraser les classes utilitaires). */
 @layer base {
   :root {
-    color-scheme: dark;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
   html,
   body {
-    background: #020617; /* slate-950 */
-    color: #f8fafc;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: var(--canvas);
+    color: var(--fg);
+    font-family: var(--font-sans);
     font-size: 16px;
-    line-height: 1.4;
+    line-height: 1.45;
     overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   body {
     -webkit-tap-highlight-color: transparent;
@@ -28,9 +139,13 @@
   input {
     font-size: max(16px, 1em); /* évite le zoom automatique de Safari iOS */
   }
+  ::placeholder {
+    color: var(--fg-subtle);
+    opacity: 1;
+  }
   :focus-visible {
-    outline: 4px solid #fde047; /* yellow-300 : visible sur tous les fonds */
-    outline-offset: 3px;
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
   }
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -42,8 +157,8 @@
   }
 }
 
-/* Zones sûres (encoche, barre d'accueil iOS) avec viewport-fit=cover. */
 @layer utilities {
+  /* Zones sûres (encoche, barre d'accueil iOS) avec viewport-fit=cover. */
   .safe-pt {
     padding-top: env(safe-area-inset-top, 0px);
   }
@@ -53,5 +168,14 @@
   .safe-px {
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
+  }
+  /* Seule lueur autorisée : le contour néon du logo, en thème sombre. */
+  .brand-glow {
+    filter: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    .brand-glow {
+      filter: drop-shadow(0 0 6px rgb(255 46 151 / 0.45));
+    }
   }
 }

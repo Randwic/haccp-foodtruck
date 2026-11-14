@@ -1,7 +1,9 @@
 import type { StaffMember } from '../../../shared/types.ts'
+import { BrandLogo, BrandStripe } from './brand.tsx'
 import { Button } from './components/index.ts'
 import { useNow } from './hooks/useNow.ts'
 import { formatLongDate, formatTime, initials } from './format.ts'
+import { IconLock } from './icons.tsx'
 import { SyncIndicator } from './SyncIndicator.tsx'
 
 export interface AppHeaderProps {
@@ -16,27 +18,35 @@ export interface AppHeaderProps {
 export function AppHeader({ establishmentName, timeZone, staff, onLock, persistentStorage }: AppHeaderProps) {
   const now = useNow(15_000)
   return (
-    <header className="border-b border-slate-800 bg-slate-900">
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3">
-        <div className="w-full min-w-0 sm:w-auto sm:flex-1">
-          <div className="truncate text-xl font-bold text-white">{establishmentName ?? 'HACCP'}</div>
-          <div className="text-base text-slate-300">
-            {formatLongDate(now, timeZone)} · <span className="tabular-nums font-semibold text-white">{formatTime(now, timeZone)}</span>
+    <header className="bg-surface">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3 sm:px-6">
+        <div className="order-1 flex w-[calc(100%-5rem)] min-w-0 items-center gap-3 sm:w-auto sm:flex-1">
+          <BrandLogo size={44} glow title={null} className="shrink-0" />
+          <div className="min-w-0">
+            <div className="truncate text-[17px] leading-tight font-semibold tracking-[-0.01em] text-fg">{establishmentName ?? 'HACCP'}</div>
+            <div className="mt-0.5 flex min-w-0 text-[14px] text-fg-muted">
+              <span className="block min-w-0 truncate first-letter:uppercase">{formatLongDate(now, timeZone)}</span>
+              <span className="shrink-0 whitespace-pre">
+                {' · '}
+                <span className="font-medium tabular-nums text-fg">{formatTime(now, timeZone)}</span>
+              </span>
+            </div>
           </div>
         </div>
-        <SyncIndicator timeZone={timeZone} persistentStorage={persistentStorage} />
-        <div className="ml-auto flex items-center gap-3">
-          <span className="flex items-center gap-2" aria-label={`Connecté : ${staff.display_name}`}>
-            <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 text-lg font-black text-white">
-              {initials(staff.display_name)}
-            </span>
-            <span className="hidden text-lg font-semibold text-white sm:inline">{staff.display_name}</span>
-          </span>
-          <Button variant="secondary" onClick={onLock} icon={<span aria-hidden="true">🔒</span>}>
-            Verrouiller
-          </Button>
+        <div className="order-3 sm:order-2">
+          <SyncIndicator timeZone={timeZone} persistentStorage={persistentStorage} />
         </div>
+        <span className="order-4 ml-auto flex items-center gap-2.5 sm:order-3 sm:ml-0" aria-label={`Connecté : ${staff.display_name}`}>
+          <span className="text-[15px] font-medium text-fg sm:hidden lg:inline">{staff.display_name}</span>
+          <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-sunken text-[14px] font-semibold text-fg-muted">
+            {initials(staff.display_name)}
+          </span>
+        </span>
+        <Button variant="secondary" onClick={onLock} icon={<IconLock size={20} />} aria-label="Verrouiller" className="order-2 px-4 sm:order-4 sm:px-5">
+          <span className="hidden sm:inline">Verrouiller</span>
+        </Button>
       </div>
+      <BrandStripe />
     </header>
   )
 }

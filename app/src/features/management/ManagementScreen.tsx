@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { errorText, isManagerError, type ManagerApi } from '../../manager/api.ts'
 import { lastManagerEmail, rememberManagerEmail } from '../../manager/helpers.ts'
 import { ManagerProvider, useManager } from '../../manager/ManagerContext.tsx'
-import { Button, Notice, TextField, useToast } from '../../ui/components/index.ts'
+import { Badge, Button, Notice, TextField, useToast } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { useOnline } from '../../ui/hooks/useOnline.ts'
-import { IconArrowLeft, IconFridge, IconSettings, IconUsers, type IconProps } from '../../ui/icons.tsx'
+import { IconChevronLeft, IconFridge, IconOffline, IconSettings, IconUsers, type IconProps } from '../../ui/icons.tsx'
 import { PasswordField } from '../setup/PasswordField.tsx'
 import { ManagementContext, type ManagementTools, type RunWrite } from './common.tsx'
 import { EquipmentSection } from './EquipmentSection.tsx'
@@ -78,19 +78,22 @@ export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: s
   let body
   if (!online) {
     body = (
-      <div role="alert" className="rounded-3xl bg-slate-900 p-6 ring-2 ring-amber-400">
-        <p className="text-2xl font-bold text-amber-200">La gestion nécessite une connexion Internet.</p>
-        <p className="mt-2 text-lg text-slate-200">Les modifications sont faites directement sur le serveur. Les relevés, eux, continuent de fonctionner hors-ligne.</p>
+      <div role="alert" className="flex items-start gap-4 rounded-2xl border border-warn/35 bg-warn-soft p-5 sm:p-6">
+        <IconOffline size={24} className="mt-0.5 shrink-0 text-warn" />
+        <div>
+        <p className="text-xl font-semibold text-fg">La gestion nécessite une connexion Internet.</p>
+        <p className="mt-1.5 text-[17px] text-fg-muted">Les modifications sont faites directement sur le serveur. Les relevés, eux, continuent de fonctionner hors-ligne.</p>
+        </div>
       </div>
     )
   } else if (auth.kind === 'checking') {
-    body = <p className="text-lg text-slate-300">Vérification de la session…</p>
+    body = <p className="text-[17px] text-fg-muted">Vérification de la session…</p>
   } else if (auth.kind === 'needed') {
     body = <ManagerReauth notice={auth.notice} onDone={() => setAuth({ kind: 'ok' })} />
   } else {
     body = (
       <>
-        <div role="tablist" aria-label="Rubriques de gestion" className="mb-6 grid grid-cols-3 gap-2 rounded-3xl bg-slate-900 p-2 ring-1 ring-slate-700">
+        <div role="tablist" aria-label="Rubriques de gestion" className="mb-8 grid grid-cols-3 gap-1 rounded-xl bg-sunken p-1 sm:max-w-xl">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -100,11 +103,11 @@ export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: s
               aria-selected={tab === t.id}
               aria-controls={`panel-${t.id}`}
               onClick={() => setTab(t.id)}
-              className={`flex min-h-14 min-w-0 items-center justify-center gap-2 rounded-2xl px-1 text-base font-bold transition-colors sm:px-2 sm:text-lg ${
-                tab === t.id ? 'bg-sky-300 text-slate-950' : 'text-slate-200 active:bg-slate-800'
+              className={`flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg px-1 text-[15px] font-semibold transition-colors sm:px-2 ${
+                tab === t.id ? 'bg-elevated text-fg shadow-card' : 'text-fg-muted active:bg-pressed'
               }`}
             >
-              <t.Icon className="hidden sm:inline" size={22} />
+              <t.Icon className={`hidden sm:inline ${tab === t.id ? 'text-accent' : ''}`} size={18} />
               {t.label}
             </button>
           ))}
@@ -121,15 +124,15 @@ export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: s
   return (
     <ManagerProvider manager={guarded}>
       <ManagementContext.Provider value={tools}>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-5 sm:py-6">
-          <div className="mb-5 flex flex-wrap items-center gap-4">
-            <Button variant="secondary" onClick={onBack} icon={<IconArrowLeft />}>
-              Accueil
-            </Button>
-            <h1 className="text-3xl font-bold text-white">Gestion</h1>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-4 pb-10 sm:px-6 sm:pt-6">
+          <Button variant="ghost" onClick={onBack} icon={<IconChevronLeft size={22} />} className="-ml-3 px-3 text-accent">
+            Accueil
+          </Button>
+          <div className="mt-2 mb-6 flex flex-wrap items-center gap-3">
+            <h1 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">Gestion</h1>
             {manager.mode === 'mock' && (
-              <span className="rounded-full bg-amber-400 px-3 py-1 text-sm font-bold text-slate-950" title="Aucun serveur configuré : données simulées">
-                Serveur simulé
+              <span title="Aucun serveur configuré : données simulées">
+                <Badge tone="warn">Serveur simulé</Badge>
               </span>
             )}
           </div>
@@ -164,8 +167,8 @@ function ManagerReauth({ notice, onDone }: { notice?: string; onDone: () => void
   }
   return (
     <form onSubmit={submit} noValidate className="max-w-xl space-y-6">
-      <h2 className="text-2xl font-bold text-white">Mot de passe gérant</h2>
-      <p className="text-lg text-slate-300">Par sécurité, la gestion demande le mot de passe de votre compte gérant.</p>
+      <h2 className="text-xl font-semibold text-fg">Mot de passe gérant</h2>
+      <p className="text-[17px] text-fg-muted">Par sécurité, la gestion demande le mot de passe de votre compte gérant.</p>
       {notice && <Notice tone="info">{notice}</Notice>}
       <TextField label="Email" type="email" inputMode="email" autoComplete="username" value={email} onChange={setEmail} />
       <PasswordField label="Mot de passe" autoComplete="current-password" value={password} onChange={setPassword} autoFocus />

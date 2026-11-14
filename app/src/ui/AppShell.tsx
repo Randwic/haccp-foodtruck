@@ -85,13 +85,13 @@ export function AppShell() {
   if (boot.state === 'loading') {
     content = (
       <main className="flex flex-1 items-center justify-center" aria-busy="true">
-        <p className="text-2xl text-slate-300">Chargement…</p>
+        <p className="text-lg text-fg-muted">Chargement…</p>
       </main>
     )
   } else if (boot.state === 'error') {
     content = (
       <main className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-        <p role="alert" className="text-2xl font-bold text-red-300">
+        <p role="alert" className="text-xl font-semibold text-danger">
           Démarrage impossible : {boot.message}
         </p>
       </main>
@@ -119,7 +119,7 @@ export function AppShell() {
   }
 
   return (
-    <div className="safe-px safe-pt safe-pb flex min-h-dvh flex-col bg-slate-950 text-slate-50">
+    <div className="safe-px safe-pt safe-pb flex min-h-dvh flex-col bg-canvas text-fg">
       <OfflineBanner />
       <InstallBanner />
       {content}

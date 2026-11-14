@@ -90,11 +90,11 @@ export function TemperatureField({ label, value, onChange, error, hint }: { labe
             type="button"
             onClick={toggleSign}
             aria-label={`Changer le signe – ${label}`}
-            className="min-h-16 w-16 shrink-0 rounded-2xl bg-slate-700 text-2xl font-bold text-white ring-1 ring-slate-500 active:bg-slate-600"
+            className="min-h-14 w-14 shrink-0 rounded-xl border border-line-strong bg-elevated text-[22px] font-medium text-fg shadow-card active:bg-pressed"
           >
             ±
           </button>
-          <span aria-hidden="true" className="flex min-h-16 items-center pl-1 text-xl text-slate-300">
+          <span aria-hidden="true" className="flex min-h-14 items-center pl-1 text-[17px] text-fg-muted">
             °C
           </span>
         </>
@@ -105,9 +105,9 @@ export function TemperatureField({ label, value, onChange, error, hint }: { labe
 
 export function SectionTitle({ children, count }: { children: ReactNode; count?: number }) {
   return (
-    <h2 className="mt-8 mb-3 text-xl font-bold text-slate-200 first:mt-0">
+    <h2 className="mt-8 mb-3 text-[13px] font-semibold tracking-[0.06em] text-fg-subtle uppercase first:mt-0">
       {children}
-      {count !== undefined && <span className="ml-2 font-semibold text-slate-400">({count})</span>}
+      {count !== undefined && <span className="ml-1.5 tabular-nums">({count})</span>}
     </h2>
   )
 }

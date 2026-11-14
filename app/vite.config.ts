@@ -12,13 +12,13 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'HACCP Food Truck',
+        name: 'Space Diner – HACCP',
         short_name: 'HACCP',
         lang: 'fr',
         display: 'standalone',
         orientation: 'any',
-        background_color: '#020617',
-        theme_color: '#020617',
+        background_color: '#0A0E1F',
+        theme_color: '#0A0E1F',
         start_url: '/',
         icons: [
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },

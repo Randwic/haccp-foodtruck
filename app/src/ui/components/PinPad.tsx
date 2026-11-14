@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { IconCheck, IconDelete } from '../icons.tsx'
 
 export interface PinPadProps {
   value: string
@@ -69,45 +70,46 @@ export function PinPad({ value, onChange, onSubmit, minLength = 4, maxLength = 6
   }, [maxLength, minLength])
 
   const keyClass =
-    'flex h-16 sm:h-20 items-center justify-center rounded-2xl text-4xl font-bold select-none transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+    'flex h-16 sm:h-[72px] items-center justify-center rounded-2xl text-[30px] font-medium tabular-nums select-none transition-[background-color,transform] duration-75 active:scale-[0.96] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100'
+  const digitClass = `${keyClass} border border-line-strong bg-elevated text-fg shadow-card active:bg-pressed`
 
   return (
     <div role="group" aria-label={label} className="mx-auto w-full max-w-sm">
-      <div className="mb-4 flex h-8 items-center justify-center gap-4" aria-live="polite" aria-label={`${value.length} chiffre${value.length > 1 ? 's' : ''} saisi${value.length > 1 ? 's' : ''}`}>
+      <div className="mb-5 flex h-6 items-center justify-center gap-3.5" aria-live="polite" aria-label={`${value.length} chiffre${value.length > 1 ? 's' : ''} saisi${value.length > 1 ? 's' : ''}`}>
         {Array.from({ length: maxLength }, (_, i) => (
           <span
             key={i}
             aria-hidden="true"
-            className={`h-6 w-6 rounded-full border-2 ${i < value.length ? 'border-sky-300 bg-sky-300' : 'border-slate-400'}`}
+            className={`h-3.5 w-3.5 rounded-full border-2 transition-colors ${i < value.length ? 'border-accent bg-accent' : 'border-line-strong bg-transparent'}`}
           />
         ))}
       </div>
       <div className="grid grid-cols-3 gap-3">
         {KEYS.map((k) => (
-          <button key={k} type="button" className={`${keyClass} bg-slate-700 text-white active:bg-slate-500`} onClick={() => press(k)} disabled={disabled}>
+          <button key={k} type="button" className={digitClass} onClick={() => press(k)} disabled={disabled}>
             {k}
           </button>
         ))}
         <button
           type="button"
-          className={`${keyClass} bg-slate-800 text-2xl text-white ring-1 ring-slate-600 active:bg-slate-600`}
+          className={`${keyClass} bg-transparent text-fg-muted active:bg-pressed`}
           onClick={erase}
           disabled={disabled || value.length === 0}
           aria-label="Effacer le dernier chiffre"
         >
-          ⌫
+          <IconDelete size={28} />
         </button>
-        <button type="button" className={`${keyClass} bg-slate-700 text-white active:bg-slate-500`} onClick={() => press('0')} disabled={disabled}>
+        <button type="button" className={digitClass} onClick={() => press('0')} disabled={disabled}>
           0
         </button>
         <button
           type="button"
-          className={`${keyClass} bg-sky-300 text-2xl text-slate-950 active:bg-sky-200`}
+          className={`${keyClass} bg-accent text-on-accent active:bg-accent-pressed`}
           onClick={submit}
           disabled={disabled || value.length < minLength}
           aria-label="Valider le code"
         >
-          OK
+          <IconCheck size={30} strokeWidth={2.25} />
         </button>
       </div>
     </div>

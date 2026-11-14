@@ -3,7 +3,9 @@ import type { StaffMember } from '../../../../shared/types.ts'
 import { Button, PinPad, haptic } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { useNow } from '../../ui/hooks/useNow.ts'
+import { BrandLogo, BrandStripe } from '../../ui/brand.tsx'
 import { formatDuration, formatLongDate, formatTime, initials } from '../../ui/format.ts'
+import { IconError, IconWarn } from '../../ui/icons.tsx'
 
 type Feedback = { kind: 'wrong' } | { kind: 'locked'; until: number | null } | { kind: 'error'; message: string } | null
 
@@ -103,82 +105,103 @@ export function LockScreen({ establishmentName, timeZone }: { establishmentName?
     message = remaining !== null ? `Bloqué, réessayez dans ${formatDuration(remaining)}` : 'Bloqué temporairement, réessayez plus tard'
   else if (feedback?.kind === 'error') message = `Erreur : ${feedback.message}`
 
-  return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-5 py-4 sm:gap-6 sm:py-6 lg:flex-row lg:items-center lg:gap-12">
-      <section className="lg:flex-1" aria-labelledby="who-title">
-        <p className="text-lg text-slate-300">
-          {establishmentName ?? 'HACCP'} · {formatLongDate(now, timeZone)} · <span className="tabular-nums">{formatTime(now, timeZone)}</span>
-        </p>
-        <h1 id="who-title" className="mt-1 text-3xl font-bold text-white sm:text-4xl">
-          Qui êtes-vous ?
-        </h1>
-        {loadError && (
-          <p role="alert" className="mt-4 text-lg font-semibold text-red-300">
-            Impossible de charger l’équipe : {loadError}
-          </p>
-        )}
-        {staffEmpty && (
-          <div role="status" className="mt-5 rounded-3xl bg-slate-900 p-5 ring-2 ring-amber-400">
-            <p className="text-xl font-semibold text-amber-200">Aucun équipier pour l’instant – connectez l’appareil à Internet pour récupérer l’équipe.</p>
-            <Button className="mt-4" onClick={retry} disabled={retrying}>
-              {retrying ? 'Synchronisation…' : 'Réessayer'}
-            </Button>
-          </div>
-        )}
-        <div role="radiogroup" aria-label="Équipier" className="mt-5 grid grid-cols-2 gap-4">
-          {staff?.map((s) => {
-            const active = s.id === selectedId
-            return (
-              <button
-                key={s.id}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => choose(s.id)}
-                className={`flex min-h-24 min-w-0 items-center gap-3 rounded-3xl p-3 text-left sm:gap-4 sm:p-4 transition-colors sm:min-h-36 sm:flex-col sm:items-start sm:justify-between ${
-                  active ? 'bg-sky-300 text-slate-950 ring-4 ring-sky-100' : 'bg-slate-800 text-white ring-1 ring-slate-600 active:bg-slate-700'
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-black sm:h-16 sm:w-16 sm:text-2xl ${active ? 'bg-slate-950 text-sky-200' : 'bg-slate-600 text-white'}`}
-                >
-                  {initials(s.display_name)}
-                </span>
-                <span className="min-w-0 break-words text-xl font-bold leading-tight sm:text-2xl">
-                  {s.display_name}
-                  {s.display_name !== (s.role === 'manager' ? 'Gérant' : 'Équipier') && (
-                    <span className={`block text-base font-medium ${active ? 'text-slate-800' : 'text-slate-300'}`}>{s.role === 'manager' ? 'Gérant' : 'Équipier'}</span>
-                  )}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
+  const FeedbackIcon = feedback?.kind === 'locked' ? IconWarn : IconError
 
-      {!staffEmpty && (
-      <section className="w-full lg:w-[26rem]" aria-labelledby="pin-title">
-        <h2 id="pin-title" className="mb-2 text-center text-2xl font-bold text-white">
-          {selected ? `Code PIN – ${selected.display_name}` : 'Choisissez votre nom'}
-        </h2>
-        <div role="alert" aria-live="assertive" className="mb-2 min-h-14 text-center">
-          {message && (
-            <p className={`inline-block rounded-2xl px-4 py-2 text-lg font-bold sm:px-5 sm:py-3 sm:text-xl ${feedback?.kind === 'wrong' ? 'bg-red-700 text-white' : 'bg-amber-400 text-slate-950'}`}>
-              <span className="tabular-nums">{message}</span>
+  return (
+    <>
+      <BrandStripe />
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 pt-6 pb-8 sm:px-6 sm:pt-10 lg:flex-row lg:items-center lg:gap-16">
+        <section className="min-w-0 lg:flex-1" aria-labelledby="who-title">
+          <div className="flex items-center gap-4">
+            <BrandLogo size={72} glow className="shrink-0" />
+            <div className="min-w-0">
+              <p className="truncate text-[17px] font-semibold text-fg">{establishmentName ?? 'HACCP'}</p>
+              <p className="text-[15px] text-fg-muted first-letter:uppercase">
+                {formatLongDate(now, timeZone)} · <span className="font-medium tabular-nums text-fg">{formatTime(now, timeZone)}</span>
+              </p>
+            </div>
+          </div>
+          <h1 id="who-title" className="mt-8 text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[34px]">
+            Qui êtes-vous ?
+          </h1>
+          {loadError && (
+            <p role="alert" className="mt-4 flex items-center gap-2 text-[15px] font-medium text-danger">
+              <IconError size={18} className="shrink-0" />
+              Impossible de charger l’équipe : {loadError}
             </p>
           )}
-        </div>
-        <PinPad value={pin} onChange={setPin} onSubmit={submit} disabled={!selected || busy || lockedOut} label={selected ? `Code PIN – ${selected.display_name}` : 'Code PIN'} />
-        {selected && staff && staff.length > 1 && (
-          <div className="mt-4 text-center lg:hidden">
-            <Button variant="ghost" onClick={() => setSelectedId(null)}>
-              Changer d’équipier
-            </Button>
+          {staffEmpty && (
+            <div role="status" className="mt-5 rounded-2xl border border-warn/35 bg-warn-soft p-5">
+              <p className="flex items-start gap-2.5 text-[17px] font-semibold text-fg">
+                <IconWarn size={22} className="mt-0.5 shrink-0 text-warn" />
+                Aucun équipier pour l’instant – connectez l’appareil à Internet pour récupérer l’équipe.
+              </p>
+              <Button className="mt-4" onClick={retry} disabled={retrying}>
+                {retrying ? 'Synchronisation…' : 'Réessayer'}
+              </Button>
+            </div>
+          )}
+          <div role="radiogroup" aria-label="Équipier" className="mt-5 grid grid-cols-2 gap-3 sm:gap-4">
+            {staff?.map((s) => {
+              const active = s.id === selectedId
+              const role = s.role === 'manager' ? 'Gérant' : 'Équipier'
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => choose(s.id)}
+                  className={`flex min-h-20 min-w-0 items-center gap-3 rounded-2xl border p-3 text-left shadow-card transition-[background-color,border-color,transform] duration-100 active:scale-[0.99] sm:min-h-24 sm:gap-4 sm:p-4 ${
+                    active ? 'border-accent bg-accent-soft ring-1 ring-accent' : 'border-line bg-surface active:bg-pressed'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold sm:h-14 sm:w-14 sm:text-lg ${
+                      active ? 'bg-accent text-on-accent' : 'border border-line bg-sunken text-fg-muted'
+                    }`}
+                  >
+                    {initials(s.display_name)}
+                  </span>
+                  <span className="min-w-0 break-words text-[17px] leading-snug font-semibold text-fg sm:text-lg">
+                    {s.display_name}
+                    {s.display_name !== role && <span className="block text-[14px] font-normal text-fg-muted">{role}</span>}
+                  </span>
+                </button>
+              )
+            })}
           </div>
+        </section>
+
+        {!staffEmpty && (
+          <section className="w-full rounded-3xl border border-line bg-surface px-5 pt-6 pb-5 shadow-card lg:w-[26rem]" aria-labelledby="pin-title">
+            <h2 id="pin-title" className="mb-1 text-center text-xl font-semibold tracking-[-0.01em] text-fg">
+              {selected ? `Code PIN – ${selected.display_name}` : 'Choisissez votre nom'}
+            </h2>
+            <div role="alert" aria-live="assertive" className="mb-2 flex min-h-11 items-center justify-center text-center">
+              {message && (
+                <p
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[15px] font-semibold ${
+                    feedback?.kind === 'locked' ? 'bg-warn-soft text-warn' : 'bg-danger-soft text-danger'
+                  }`}
+                >
+                  <FeedbackIcon size={18} className="shrink-0" />
+                  <span className="tabular-nums">{message}</span>
+                </p>
+              )}
+            </div>
+            <PinPad value={pin} onChange={setPin} onSubmit={submit} disabled={!selected || busy || lockedOut} label={selected ? `Code PIN – ${selected.display_name}` : 'Code PIN'} />
+            {selected && staff && staff.length > 1 && (
+              <div className="mt-3 text-center lg:hidden">
+                <Button variant="ghost" onClick={() => setSelectedId(null)} className="text-accent">
+                  Changer d’équipier
+                </Button>
+              </div>
+            )}
+          </section>
         )}
-      </section>
-      )}
-    </main>
+      </main>
+    </>
   )
 }

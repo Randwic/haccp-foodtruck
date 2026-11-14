@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { errorText } from '../../manager/api.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
 import { Button, Notice, TextField } from '../../ui/components/index.ts'
+import { IconLogOut, IconMinus, IconPlus } from '../../ui/icons.tsx'
 import { ConfirmModal, useManagement } from './common.tsx'
 
 const MIN_LOCK = 1
@@ -53,35 +54,35 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
   }
 
   if (loadError) return <Notice>{loadError}</Notice>
-  if (!loaded) return <p className="text-lg text-slate-300">Chargement…</p>
+  if (!loaded) return <p className="text-[17px] text-fg-muted">Chargement…</p>
 
   const step = (d: number) => setMinutes((m) => Math.min(MAX_LOCK, Math.max(MIN_LOCK, m + d)))
-  const stepBtn = 'flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-700 text-3xl font-bold text-white ring-1 ring-slate-500 active:bg-slate-600 disabled:opacity-40'
+  const stepBtn = 'flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-line-strong bg-elevated text-fg shadow-card transition-transform active:scale-[0.96] active:bg-pressed disabled:opacity-40'
 
   return (
     <section aria-labelledby="settings-title" className="max-w-2xl">
       <h2 id="settings-title" className="sr-only">
         Réglages
       </h2>
-      <form onSubmit={submit} noValidate className="space-y-8">
+      <form onSubmit={submit} noValidate className="space-y-8 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <TextField label="Nom de l’établissement" hint="Affiché en haut de l’écran et sur les registres." value={name} onChange={(v) => { setName(v); setNameError(undefined) }} error={nameError} autoCapitalize="words" />
         <div>
-          <p id="lock-label" className="mb-2 text-xl font-semibold text-white">
+          <p id="lock-label" className="mb-1.5 text-[15px] font-semibold text-fg">
             Verrouillage automatique
           </p>
-          <p className="mb-3 text-base text-slate-300">L’app revient à l’écran des codes PIN après ce délai sans activité.</p>
+          <p className="mb-3 text-[15px] text-fg-muted">L’app revient à l’écran des codes PIN après ce délai sans activité.</p>
           <div className="flex items-center gap-4" role="group" aria-labelledby="lock-label">
             <button type="button" className={stepBtn} onClick={() => step(-1)} disabled={minutes <= MIN_LOCK} aria-label="Diminuer d’une minute">
-              −
+              <IconMinus size={22} />
             </button>
-            <output aria-live="polite" className="min-w-32 text-center text-3xl font-bold text-white tabular-nums">
+            <output aria-live="polite" className="min-w-28 text-center text-[28px] font-semibold tracking-[-0.02em] text-fg tabular-nums">
               {minutes} min
             </output>
             <button type="button" className={stepBtn} onClick={() => step(1)} disabled={minutes >= MAX_LOCK} aria-label="Augmenter d’une minute">
-              +
+              <IconPlus size={22} />
             </button>
           </div>
-          <p className="mt-2 text-base text-slate-400">
+          <p className="mt-2 text-[15px] text-fg-subtle">
             Entre {MIN_LOCK} et {MAX_LOCK} minutes.
           </p>
         </div>
@@ -91,10 +92,10 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
         </Button>
       </form>
 
-      <div className="mt-12 border-t border-slate-800 pt-6">
-        <h3 className="text-xl font-bold text-white">Compte gérant</h3>
-        <p className="mt-1 text-base text-slate-300">Sur un appareil partagé, déconnectez-vous après vos réglages : le mot de passe sera redemandé la prochaine fois.</p>
-        <Button variant="secondary" className="mt-4" onClick={() => setConfirmSignOut(true)}>
+      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+        <h3 className="text-[17px] font-semibold text-fg">Compte gérant</h3>
+        <p className="mt-1 text-[15px] text-fg-muted">Sur un appareil partagé, déconnectez-vous après vos réglages : le mot de passe sera redemandé la prochaine fois.</p>
+        <Button variant="secondary" className="mt-4" onClick={() => setConfirmSignOut(true)} icon={<IconLogOut size={20} />}>
           Se déconnecter du compte gérant
         </Button>
       </div>

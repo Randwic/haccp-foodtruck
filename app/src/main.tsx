@@ -6,6 +6,7 @@ import type { CoreApi } from './core/api.ts'
 import { setActivityNotifier } from './ui/activity.ts'
 import { createFakeCore } from './ui/fakeCore.ts'
 import { demoTemperatureRecords } from './features/temperatures/demoData.ts'
+import { demoProcessAlerts, demoProcessRecords } from './features/processes/demoData.ts'
 import { createCore, createHttpTransport, createMockTransport, notifyActivity } from './core/index.ts'
 import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, type ManagerApi } from './manager/index.ts'
 
@@ -14,6 +15,8 @@ import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, 
 //  • URL avec ?demo=… / ?sync=… / ?staff=… → core factice de l'interface (captures, démo visuelle) ;
 //    &releves=demo : 7 jours de relevés de températures (avec correction et action corrective),
 //    &releves=alerte : idem + un relevé hors seuil sans action corrective ce matin.
+//    &procedes=demo : lots de refroidissement / remise en température en cours, cuissons, décongélations ;
+//    &procedes=alerte : idem + un refroidissement en retard et une cuisson hors seuil sans action.
 //    + espace gérant simulé, déjà connecté (gerant@demo.fr / demo-demo-demo).
 //  • VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY définis → vrai core + vrai Supabase (fonctions + REST/RLS).
 //  • sinon → vrai core + serveur simulé en mémoire ; espace gérant simulé branché sur ce serveur :
@@ -26,6 +29,13 @@ function createDemoCore(): CoreApi {
   const demo = params.get('demo')
   const sync = params.get('sync')
   const releves = params.get('releves')
+  const procedes = params.get('procedes')
+  const now = new Date()
+  const seeds = [
+    ...(releves === 'demo' || releves === 'alerte' ? demoTemperatureRecords(now, releves) : []),
+    ...(procedes === 'demo' || procedes === 'alerte' ? demoProcessRecords(now) : []),
+    ...(procedes === 'alerte' ? demoProcessAlerts(now) : []),
+  ].sort((a, b) => a.device_time.localeCompare(b.device_time))
   const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
   const syncPresets = {
     pending: { pending_count: 3, oldest_pending_at: hoursAgo(1) },
@@ -40,7 +50,7 @@ function createDemoCore(): CoreApi {
     sync: sync && sync in syncPresets ? syncPresets[sync as keyof typeof syncPresets] : undefined,
     autoSyncDelayMs: sync ? null : 1200,
     noStaffUntilSync: params.get('staff') === 'empty',
-    initialRecords: releves === 'demo' || releves === 'alerte' ? demoTemperatureRecords(new Date(), releves) : undefined,
+    initialRecords: seeds.length ? seeds : undefined,
   })
 }
 const TRIAL_DB_PREFIX = 'haccp-essai-'

@@ -110,10 +110,14 @@ export function slotsOfDay(day: LocalDate, times: readonly string[], timeZone: s
   })
 }
 
-/** Créneau le plus récent déjà passé (≤ now), aujourd'hui ou à défaut hier. null si aucune heure. */
-export function currentSlot(now: Date, times: readonly string[], timeZone: string): Date | null {
+/**
+ * Créneau le plus récent déjà passé (≤ now), aujourd'hui ou à défaut hier. null si aucune heure.
+ * `carryOver` false (réglage `missed_slot_carry_over`) : le créneau de la veille n'est pas reporté,
+ * rien n'est « à faire » avant le premier créneau du jour.
+ */
+export function currentSlot(now: Date, times: readonly string[], timeZone: string, carryOver = true): Date | null {
   const today = localDateOf(now, timeZone)
-  const candidates = [...slotsOfDay(addDays(today, -1), times, timeZone), ...slotsOfDay(today, times, timeZone)]
+  const candidates = [...(carryOver ? slotsOfDay(addDays(today, -1), times, timeZone) : []), ...slotsOfDay(today, times, timeZone)]
   const past = candidates.filter((s) => s.getTime() <= now.getTime())
   return past.length ? past[past.length - 1] : null
 }
@@ -156,8 +160,10 @@ export function enclosureStatuses(input: {
   now: Date
   checkTimes: readonly string[]
   timeZone: string
+  /** Réglage `missed_slot_carry_over` (défaut true). */
+  carryOver?: boolean
 }): EnclosureStatus[] {
-  const slot = currentSlot(input.now, input.checkTimes, input.timeZone)
+  const slot = currentSlot(input.now, input.checkTimes, input.timeZone, input.carryOver ?? true)
   return input.equipment.filter(isMonitoredEnclosure).map((equipment) => {
     const mine = input.readings.filter((r) => r.equipmentId === equipment.id).sort((a, b) => b.time.localeCompare(a.time))
     const last = mine[0] ?? null

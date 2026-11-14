@@ -6,7 +6,11 @@ import { ManagementScreen } from '../features/management/ManagementScreen.tsx'
 import { SetupFlow } from '../features/setup/SetupFlow.tsx'
 import { SystemTestPanel } from '../features/system-test/SystemTestPanel.tsx'
 import { TemperaturesScreen } from '../features/temperatures/TemperaturesScreen.tsx'
-import { TodayScreen } from '../features/today/TodayScreen.tsx'
+import { CookingScreen } from '../features/processes/CookingScreen.tsx'
+import { DeadlineWatcher } from '../features/processes/DeadlineWatcher.tsx'
+import { ThawingScreen } from '../features/processes/ThawingScreen.tsx'
+import { TimedProcessScreen } from '../features/processes/TimedProcessScreen.tsx'
+import { TodayScreen, type ProcessView } from '../features/today/TodayScreen.tsx'
 import { AppHeader } from './AppHeader.tsx'
 import { useCore } from './CoreContext.tsx'
 import { useAutoLock } from './hooks/useAutoLock.ts'
@@ -16,7 +20,7 @@ import { OfflineBanner } from './pwa/OfflineBanner.tsx'
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
 
 type Boot = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; device: DeviceInfo | null }
-type View = 'today' | 'system_test' | 'management' | 'temperatures'
+type View = 'today' | 'system_test' | 'management' | 'temperatures' | ProcessView
 
 /** Enchaînement des écrans : première configuration → verrouillage (PIN) → accueil / Gestion. */
 export function AppShell() {
@@ -105,16 +109,24 @@ export function AppShell() {
     content = (
       <>
         <AppHeader establishmentName={establishment?.name} timeZone={tz} staff={staff} onLock={lock} persistentStorage={persistent} />
+        <DeadlineWatcher />
         {view === 'system_test' ? (
           <SystemTestPanel onBack={() => setView('today')} timeZone={tz} />
         ) : view === 'temperatures' ? (
           <TemperaturesScreen onBack={() => setView('today')} />
+        ) : view === 'cooling' || view === 'reheating' ? (
+          <TimedProcessScreen key={view} kind={view} onBack={() => setView('today')} />
+        ) : view === 'cooking' ? (
+          <CookingScreen onBack={() => setView('today')} />
+        ) : view === 'thawing' ? (
+          <ThawingScreen onBack={() => setView('today')} />
         ) : view === 'management' && staff.role === 'manager' ? (
           <ManagementScreen onBack={() => setView('today')} meId={staff.id} />
         ) : (
           <TodayScreen
             onOpenSystemTest={() => setView('system_test')}
             onOpenTemperatures={() => setView('temperatures')}
+            onOpenProcess={setView}
             onOpenManagement={staff.role === 'manager' ? () => setView('management') : undefined}
           />
         )}

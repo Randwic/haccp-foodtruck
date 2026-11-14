@@ -133,4 +133,6 @@ export interface Settings {
   clock_suspect_minutes: number // écart device/serveur au-delà duquel on signale
   email_alerts: boolean
   daily_check_times: string[] // heures des relevés d'enceintes, ex. ['08:00', '18:00'] (heure locale de l'établissement)
+  missed_slot_carry_over: boolean // un créneau oublié la veille reste « à faire » avant le premier créneau du jour (défaut true)
+  thaw_dlc_days: number // DLC proposée après décongélation, en jours à partir de la fin (défaut 3, 0..30)
 }

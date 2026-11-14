@@ -132,3 +132,18 @@ select tests.assert((select clock_suspect from tests.clock_row('service_role', '
 -- device_now est immuable comme le reste du registre.
 select tests.throws('device_now non modifiable', 'service_role', null,
   'update public.records set device_now = now()', '%permission denied%');
+
+-- Réglages des procédés (migration 0900)
+do $$ begin
+  if (select missed_slot_carry_over from public.settings where id = 1) is distinct from true then
+    raise exception 'ÉCHEC : missed_slot_carry_over doit valoir true par défaut';
+  end if;
+  if (select thaw_dlc_days from public.settings where id = 1) <> 3 then
+    raise exception 'ÉCHEC : thaw_dlc_days doit valoir 3 par défaut';
+  end if;
+  begin
+    update public.settings set thaw_dlc_days = 31 where id = 1;
+    raise exception 'ÉCHEC : thaw_dlc_days = 31 accepté';
+  exception when check_violation then raise notice 'ok - thaw_dlc_days hors plage refusé';
+  end;
+end $$;

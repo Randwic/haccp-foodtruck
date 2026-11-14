@@ -81,6 +81,8 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
   const establishment: Establishment = { id: 'etab-demo', name: 'Food Truck (démo)', timezone: 'Europe/Paris' }
   const settings: Settings = {
     daily_check_times: ['08:00', '18:00'],
+  missed_slot_carry_over: true,
+  thaw_dlc_days: 3,
     retention_years: 3,
     auto_lock_minutes: 5,
     clock_suspect_minutes: 5,

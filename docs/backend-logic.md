@@ -11,7 +11,7 @@ supabase/functions/
     http.ts                     CORS, JSON, lecture du corps bornée, erreurs, journal JSON
     auth.ts / crypto.ts         Jeton appareil (SHA-256), Bearer JWT, aléa
     repo.ts                     Interfaces Repo injectées + traduction des erreurs `HACCP: …`
-    sync_push.ts sync_pull.ts device_enroll.ts health.ts
+    sync_push.ts sync_pull.ts device_enroll.ts health.ts bootstrap.ts
     memory_repo.ts test_helpers.ts *.test.ts   (tests uniquement)
   _adapters/supabase_repo.ts    Implémentation Repo avec supabase-js (service_role) — Deno
   <fonction>/index.ts           Point d'entrée : câblage seulement (Deno.serve)
@@ -26,6 +26,8 @@ supabase/functions/
 | `sync-pull` (GET `?since=`) | `x-device-token` | Références modifiées depuis `since` (tout si vide) → `SyncPullResponse` |
 | `device-enroll` (POST `{name}`) | JWT gérant | Crée un appareil, renvoie une seule fois son jeton → `DeviceEnrollResponse` |
 | `health` (GET/HEAD) | aucune | `{ok:true,time}` après un `select` minimal en base ; 503 `db_unavailable` sinon |
+| `bootstrap-status` (GET) | aucune | `{needs_bootstrap, establishment_name}` : `needs_bootstrap` = aucune ligne dans `managers` |
+| `bootstrap-manager` (POST) | aucune (une seule fois) | Inscription du gérant → 201 `{ok:true, staff_id}` |
 
 ### sync-push — contrôles, dans l'ordre, pour chaque enregistrement
 1. **Structure** stockable (`validateRecordStructure`) : uuid v4 minuscule, `device_time` = `toISOString()` exact (sinon le hash ne survit pas au timestamptz), hash/prev_hash hex 64, seq entier ≥ 1, payload JSON stockable en jsonb (pas de `\u0000`, ≤ 16 ko, profondeur ≤ 6) ; `device_id` = appareil du jeton.
@@ -50,6 +52,18 @@ Limites : 500 enregistrements (413 `too_many_records`), 1 Mo (413 `payload_too_l
 ### device-enroll
 JWT → `auth.getUser()`, utilisateur présent dans `managers` (sinon 401/403). `name` : 1–60 caractères, espaces normalisés. Jeton = 32 octets aléatoires en base64url (43 car.) ; **seul son SHA-256** est stocké, le jeton n'est jamais journalisé. Réponse 201.
 
+### bootstrap-manager
+Corps : `{ email, password, display_name, pin_salt, pin_hash, establishment_name }` (8 ko max). L'inscription libre Supabase reste désactivée.
+1. Un gérant existe déjà → **409 `already_bootstrapped`** (rien n'est créé).
+2. Plus de 10 échecs sur 15 min → **429 `too_many_attempts`**.
+3. Validation → 400 `invalid_request` (`detail` nomme le champ, jamais la valeur) : e-mail plausible (≤ 254, normalisé en minuscules), mot de passe 12 caractères à 72 octets (limite bcrypt d'Auth, jamais modifié), `display_name` 1–60 et `establishment_name` 1–80 (espaces normalisés, sans caractère de contrôle), `pin_salt` / `pin_hash` aux formats des contraintes `staff` (base64 de 16 / 32 octets).
+4. `auth.admin.createUser({ email, password, email_confirm: true })`. Refus d'Auth : 422 `email_exists`, 422 `weak_password`, sinon 400 `invalid_request`.
+5. `rpc('bootstrap_manager')` (transaction sous verrou, voir `backend-db.md`). `already_bootstrapped` (inscription concurrente) → 409 ; toute autre erreur → 500 générique. Dans les deux cas l'utilisateur Auth créé est **supprimé** (`auth.admin.deleteUser`) ; si cette suppression échoue, l'événement `bootstrap_orphan_user` (avec `user_id`) est journalisé pour nettoyage manuel.
+
+**Anti-abus (choix)** : table `bootstrap_attempts` dédiée plutôt que `audit_log` (append-only, réservé aux références). On compte les échecs (400/413, refus d'Auth, 409 concurrent), pas les 409 du pré-contrôle ni les 500. Compteur **global**, pas par IP : il n'y a qu'une inscription dans la vie du projet et l'IP reçue n'est pas fiable. Un tiers peut donc retarder l'inscription de 15 min au plus, mais jamais s'inscrire à la place du gérant une fois celui-ci inscrit. Les limites propres à Supabase Auth s'ajoutent.
+
+Journal : `user_id`, `staff_id`, raison d'échec ; jamais l'e-mail, le mot de passe ni le PIN. Les erreurs Auth ne journalisent que leur code et statut.
+
 ## Sécurité
 - Clé `service_role` uniquement côté fonctions (variable `SUPABASE_SERVICE_ROLE_KEY`, injectée par Supabase) ; jamais dans l'app.
 - Jeton appareil inconnu/absent → 401 `unauthorized` (sans distinguer) ; révoqué → 401 `device_revoked`.
@@ -69,10 +83,14 @@ verify_jwt = false
 verify_jwt = false
 [functions.device-enroll]
 verify_jwt = true
+[functions.bootstrap-status]
+verify_jwt = false   # aucun gérant => pas encore de JWT
+[functions.bootstrap-manager]
+verify_jwt = false
 ```
 ```bash
 supabase secrets set ALLOWED_ORIGIN=https://<app>.pages.dev
-supabase functions deploy sync-push sync-pull device-enroll health
+supabase functions deploy sync-push sync-pull device-enroll health bootstrap-status bootstrap-manager
 ```
 Les fonctions importent `../../../shared/*.ts` (hors `supabase/functions`) : vérifier au premier déploiement que le bundler l'accepte ; sinon, copier `shared/` dans `_shared/contract/` en CI avant le déploiement.
 

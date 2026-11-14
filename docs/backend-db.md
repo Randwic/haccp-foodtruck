@@ -10,11 +10,14 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 | `…0400_purge.sql` | `purge_expired_records()` |
 | `…0500_cron_purge.sql` | Planification pg_cron (quotidienne à 03:17 UTC). Si pg_cron est absent, la migration passe avec un avertissement |
 | `…0600_quarantine.sql` | Quarantaine des enregistrements refusés pour leur contenu |
+| `…0700_manager_bootstrap.sql` | `staff.user_id`, inscription unique du gérant (`bootstrap_manager()`), compteur anti-abus |
 
 ## Tables
 
 - **Références** (modifiables par le gérant, journalisées) : `establishment` (une seule ligne), `managers`, `staff`, `devices`, `equipment`, `thresholds`, `settings` (une seule ligne, `id = 1`).
 - **Registre** `records` : insertion seule. `audit_log` : insertion seule.
+- `staff.user_id` (null, unique, → `auth.users`, `on delete set null`) : relie le compte Supabase du gérant à sa fiche équipier.
+- `bootstrap_attempts` (table interne) : échecs d'inscription du gérant (horodatage + raison courte, aucune donnée personnelle). RLS sans politique, aucun privilège : accès seulement par les fonctions ci-dessous.
 - `record_chain_anchors` (table interne) : dernier maillon supprimé par la purge pour chaque appareil, pour que la chaîne puisse continuer et rester vérifiable.
 
 ## Règles de sécurité
@@ -53,13 +56,18 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
    - Un résumé `PURGE` est écrit dans `audit_log`.
    - L'exécution est réservée au propriétaire (pg_cron) et à `service_role`.
 
+8. **Inscription du gérant** (`…0700`), fonctions SECURITY DEFINER exécutables **par `service_role` seulement** :
+   - `bootstrap_manager(user_id, display_name, pin_salt, pin_hash, establishment_name)` → `staff.id`. Verrou `pg_advisory_xact_lock`, puis revérifie qu'aucun gérant n'existe (sinon `HACCP: already_bootstrapped`), insère `managers`, la fiche `staff` (role `manager`, PIN fourni, `user_id`) et renomme l'établissement (le crée s'il manque). Tout ou rien. Deux appels simultanés : le second attend le verrou puis échoue. Audit habituel (acteur `service`, PIN masqué).
+   - `bootstrap_failure_count(minutes)` et `bootstrap_record_failure(reason)` : compteur anti-abus (lignes de plus de 24 h supprimées à chaque nouvel échec).
+9. **Paramétrage par le gérant via l'API REST** (supabase-js + JWT) : `select`/`insert`/`update` (donc aussi `upsert`) sur `equipment`, `thresholds`, `staff` (PIN compris), `settings`, `establishment`. Vérifié par `85_manager_rest.sql` ; aucun changement de RLS n'a été nécessaire. Non-gérant : refus RLS ; anon : `permission denied`. Pas de DELETE (désactiver avec `active = false`).
+
 Limite connue : le propriétaire de la base (rôle `postgres` de Supabase) peut toujours désactiver un trigger par une commande DDL. La protection vise l'API et les rôles applicatifs. Il faut protéger l'accès au tableau de bord Supabase (mot de passe fort et 2FA).
 
 ## Mise en place sur Supabase
 
 1. Lier le projet et pousser les migrations : `supabase link` puis `supabase db push`. Appliquer ensuite `seed.sql` une seule fois.
 2. Activer pg_cron (Database > Extensions). Si pg_cron a été activé après la migration, relancer la commande de planification indiquée en tête de `…0500_cron_purge.sql`.
-3. Créer le compte gérant dans Auth, puis l'ajouter : `insert into public.managers (user_id) values ('<uuid>');`
+3. Laisser l'inscription libre désactivée. Le gérant crée son compte depuis l'app au premier lancement (Edge Function `bootstrap-manager`, une seule fois). En secours : créer l'utilisateur dans Auth puis `insert into public.managers (user_id) values ('<uuid>');`.
 
 ## Tests
 
@@ -74,6 +82,7 @@ Le script :
 - installe les stubs Supabase (`supabase/tests/supabase_stubs.sql` : rôles, `auth.users`, `auth.uid()`, privilèges par défaut) ;
 - applique les migrations et le seed (deux fois, pour vérifier l'idempotence), puis `helpers.sql` ;
 - exécute chaque `supabase/tests/sql/*.sql` dans une base clonée neuve ;
+- vérifie la concurrence de `bootstrap_manager()` avec deux sessions `psql` simultanées (une seule réussit) ;
 - détruit le cluster.
 
 Tout échec arrête le script avec un code ≠ 0.

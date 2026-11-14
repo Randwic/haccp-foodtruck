@@ -1,0 +1,10 @@
+// Hébergement Cloudflare (Workers, fichiers statiques uniquement : gratuit).
+// Construit par `npm run build` (sortie app/dist), publié par `npx wrangler deploy`.
+{
+  "name": "haccp-foodtruck",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./app/dist",
+    "not_found_handling": "single-page-application"
+  }
+}

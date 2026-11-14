@@ -1,0 +1,21 @@
+{
+  // Vérification de type de la logique pure (Node/Vitest) : `cd app && npx tsc -p ../supabase/functions`.
+  // Les index.ts et _adapters/ (Deno, npm:) sont vérifiés par `deno check`.
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["_shared/**/*.ts", "../../shared/**/*.ts"]
+}

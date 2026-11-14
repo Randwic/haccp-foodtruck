@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computeRecordHash } from '../../../shared/canonical.ts'
-import { GENESIS_HASH, type HaccpRecord, type SyncPushRequest } from '../../../shared/types.ts'
+import { GENESIS_HASH, type HaccpRecord, type SyncPushRequest, type SyncPushResponse } from '../../../shared/types.ts'
 import type { SyncStatus } from './api.ts'
 import { BACKOFF_MAX_MS, computeBackoffMs, createCore, CoreError, notifyActivity } from './core.ts'
 import { CoreDb } from './db.ts'
-import { DEMO_DEVICE, DEMO_EQUIPMENT, DEMO_PINS, DEMO_THRESHOLDS } from './mockTransport.ts'
-import { disposeAll, enrollAndUnlock, makeHarness, MANAGER, STAFF } from './testUtils.ts'
+import { createMockTransport, DEMO_DEVICE, DEMO_EQUIPMENT, DEMO_PINS, DEMO_THRESHOLDS, type MockTransport } from './mockTransport.ts'
+import { disposeAll, enrollAndUnlock, makeClock, makeHarness, MANAGER, STAFF, uniqueDbName } from './testUtils.ts'
 import { TransportError, type Transport } from './transport.ts'
 
 afterEach(async () => {
@@ -403,6 +403,88 @@ describe('synchronisation', () => {
     await core.syncNow()
     await new Promise((r) => setTimeout(r, 10))
     expect(seen.at(-1)?.pending_count).toBe(0)
+  })
+})
+
+describe('horloge de l’appareil (device_now)', () => {
+  /** Transport qui garde les requêtes push et leurs réponses. */
+  function spyTransport(server: MockTransport) {
+    const pushes: { req: SyncPushRequest; res: SyncPushResponse }[] = []
+    const transport: Transport = {
+      async push(req, auth) {
+        const res = await server.push(req, auth)
+        pushes.push({ req, res })
+        return res
+      },
+      pull: (since, auth) => server.pull(since, auth),
+    }
+    return { transport, pushes }
+  }
+
+  it('chaque lot envoie device_now = horloge de l’appareil au moment de l’envoi', async () => {
+    let spy: ReturnType<typeof spyTransport> | undefined
+    const h = makeHarness({ transport: (server) => (spy = spyTransport(server)).transport })
+    await enrollAndUnlock(h.core)
+    h.server.setOffline(true)
+    await h.core.addRecord('system_test', { n: 1 })
+    await h.core.whenSyncIdle()
+    h.clock.advance(3 * 3_600_000) // envoyé 3 h plus tard
+    h.server.setOffline(false)
+    await h.core.syncNow()
+    const last = spy!.pushes.at(-1)!
+    expect(last.req.device_now).toBe(new Date(h.clock.t).toISOString())
+    // Saisie hors réseau envoyée plus tard, horloges d'accord : pas d'horloge suspecte.
+    expect(last.res.accepted).toHaveLength(1)
+    expect(last.res.accepted[0].clock_suspect).toBe(false)
+  })
+
+  it('le serveur simulé marque le lot seulement si |serveur − device_now| dépasse clock_suspect_minutes', async () => {
+    const deviceClock = makeClock()
+    let serverOffsetMs = 0
+    const server = createMockTransport({ now: () => new Date(deviceClock.t + serverOffsetMs) })
+    const { transport, pushes } = spyTransport(server)
+    const core = createCore({ transport, dbName: uniqueDbName(), now: deviceClock.now, background: false })
+    try {
+      await enrollAndUnlock(core)
+      serverOffsetMs = 4 * 60_000 // 4 min d'écart : toléré (seuil 5 min)
+      await core.addRecord('system_test', { n: 1 })
+      await core.whenSyncIdle()
+      await core.syncNow()
+      expect(pushes.at(-1)!.res.accepted[0].clock_suspect).toBe(false)
+
+      serverOffsetMs = 12 * 60_000 // horloge de l'appareil en retard de 12 min
+      await core.addRecord('system_test', { n: 2 })
+      await core.whenSyncIdle()
+      await core.syncNow()
+      const res = pushes.filter((p) => p.res.accepted.length > 0).at(-1)!.res
+      expect(res.accepted.at(-1)!.clock_suspect).toBe(true)
+    } finally {
+      await core.dispose()
+    }
+  })
+
+  it('sans device_now (ancien client), repli sur device_time de chaque saisie', async () => {
+    const h = makeHarness({
+      transport: (server) => ({
+        push: (req, auth) => {
+          const { device_now: _n, ...rest } = req
+          void _n
+          return server.push(rest, auth)
+        },
+        pull: (since, auth) => server.pull(since, auth),
+      }),
+    })
+    await enrollAndUnlock(h.core)
+    h.server.setOffline(true)
+    await h.core.addRecord('system_test', { n: 1 })
+    await h.core.whenSyncIdle()
+    h.clock.advance(60 * 60_000)
+    h.server.setOffline(false)
+    await h.core.syncNow()
+    const db = new CoreDb(h.dbName)
+    const rows = await db.record_sync.toArray()
+    db.close()
+    expect(rows.find((r) => r.state === 'accepted')?.clock_suspect).toBe(true)
   })
 })
 

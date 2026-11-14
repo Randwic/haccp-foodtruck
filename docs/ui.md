@@ -11,7 +11,8 @@ L'interface ne dépend que de `CoreApi` (`app/src/core/api.ts`, via `useCore()`)
 | sans Supabase | vrai core + serveur simulé (`createMockTransport`) | `createMockManagerApi` branché sur ce serveur (écritures répercutées, état gardé dans localStorage) ; premier lancement par défaut, `?mock=seeded` = compte existant `gerant@demo.fr` / `demo-demo-demo` |
 | `?demo=…`, `?sync=…`, `?staff=…` | `createFakeCore()` | mock « seeded », déjà connecté |
 
-Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|error|stale|rejected|offline`, `?staff=empty`.
+Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|error|stale|rejected|offline`, `?staff=empty`,
+`&releves=demo` (7 jours de relevés, une correction, une action corrective) ou `&releves=alerte` (+ relevé hors seuil sans action ce matin).
 Équipiers factices : Gérant `123456`, Équipier `654321` (blocage 5 min après 5 erreurs).
 
 ## Écrans (`app/src/features/`)
@@ -19,13 +20,33 @@ Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|erro
 |---|---|---|
 | Premier lancement | `setup/SetupFlow.tsx` | si `getDevice()` est null. Hors-ligne → « Connectez l’appareil à Internet pour la première configuration ». `needs_bootstrap` → `BootstrapScreen` (4 étapes : vous, compte email + mot de passe ×2 ≥ 12 car. avec force, PIN 6 chiffres ×2, nom de l’appareil deviné « iPad »/« iPhone » + avertissement « inscription fermée définitivement ») → bootstrap → connexion → `device-enroll` → `core.enrollDevice` → `syncNow`. Sinon `ManagerLoginScreen` (email, mot de passe, nom d’appareil). 409 → bascule vers la connexion (email prérempli) ; 429, 422, mauvais mot de passe : messages lisibles |
 | Configuration avancée | `enrollment/EnrollScreen.tsx` | ancien enrôlement manuel (identifiant + jeton), lien en bas de la connexion gérant |
-| Gestion | `management/ManagementScreen.tsx` | tuile « Gestion » sur l’accueil si l’équipier déverrouillé est `manager`. Exige Internet + session gérant (sinon mot de passe redemandé, aussi si la session expire). Onglets **Équipements** (`EquipmentSection` : ajout nom + type, seuils préremplis frigo ≤ 4 °C / congélateur ≤ −18 °C « à confirmer selon votre PMS », renommer, retirer/remettre en service, seuils min/max/tolérance avec bouton ±), **Équipe** (`StaffSection` : ajout + PIN ×2, changer le PIN, désactiver/réactiver ; impossible de se désactiver soi-même), **Réglages** (`SettingsSection` : nom, verrouillage auto 1–30 min, déconnexion gérant). Confirmation pour chaque action sensible ; `core.syncNow()` après chaque écriture |
+| Gestion | `management/ManagementScreen.tsx` | tuile « Gestion » sur l’accueil si l’équipier déverrouillé est `manager`. Exige Internet + session gérant (sinon mot de passe redemandé, aussi si la session expire). Onglets **Équipements** (`EquipmentSection` : ajout nom + type, seuils préremplis frigo ≤ 4 °C / congélateur ≤ −18 °C « à confirmer selon votre PMS », renommer, retirer/remettre en service, seuils min/max/tolérance avec bouton ±), **Équipe** (`StaffSection` : ajout + PIN ×2, changer le PIN, désactiver/réactiver ; impossible de se désactiver soi-même), **Réglages** (`SettingsSection` : nom, heures des relevés `daily_check_times` 1 à 6 « HH:MM » sans doublon, verrouillage auto 1–30 min, déconnexion gérant). Confirmation pour chaque action sensible ; `core.syncNow()` après chaque écriture |
 | Verrouillage | `lock/LockScreen.tsx` | tuiles équipiers (initiales), pavé PIN, « PIN incorrect », « Bloqué, réessayez dans 4 min 32 s » ; équipe vide → message + « Réessayer » (`syncNow()`), rechargement auto sur `onSyncStatusChange` |
-| Aujourd'hui | `today/TodayScreen.tsx` | tuiles des modules (« Bientôt ») + « Test d'enregistrement » |
+| Aujourd'hui | `today/TodayScreen.tsx` | bandeau rouge si relevé hors seuil sans action corrective ; tuile **Températures** avec compteur réel (« 2 relevés à faire » ambre, « Tout est fait » vert, « 1 action corrective manquante » rouge, toujours avec icône) ; autres modules « Bientôt » ; outils |
+| Températures | `temperatures/TemperaturesScreen.tsx` | voir « Module Températures » ci-dessous |
 | Test d'enregistrement | `system-test/SystemTestPanel.tsx` | `addRecord('system_test')`, 20 derniers enregistrements (heure, auteur, statut) |
 
 Enchaînement, en-tête et verrouillage auto : `app/src/ui/AppShell.tsx`, `AppHeader.tsx`, `hooks/useAutoLock.ts`
 (`getSettings().auto_lock_minutes`, défaut 5 ; revérifié au retour au premier plan car iOS suspend les minuteries).
+
+## Module Températures (`app/src/features/temperatures/`)
+- **Calcul pur** : `schedule.ts` (créneaux `settings.daily_check_times` en heure locale de `establishment.timezone`,
+  changements d'heure compris ; créneau en cours = le plus récent passé, éventuellement celui de la veille ; une enceinte
+  est « à faire » sans relevé depuis ce créneau ; `enclosureStatuses`, `summarize`), `readings.ts` (`buildReadings` :
+  relevés reconstruits depuis le registre, corrections en chaîne rattachées à l'original, actions correctives liées au
+  relevé ou à l'une de ses corrections, `missingAction` = valeur en vigueur hors seuil sans action).
+- **Données** : `useTemperatureData.ts` (équipements `fridge`/`freezer` actifs, seuils, relevés des 9 derniers jours,
+  rechargés à chaque changement de synchro) ; seuil = celui de l'équipement pour `temperature_check`, sinon le générique,
+  sinon défaut du type (frigo ≤ 4 °C, congélateur ≤ −18 °C, affiché « par défaut »).
+- **Écrans** : liste des enceintes (dernier relevé, statut du créneau, actions manquantes), saisie (`ReadingEntry`),
+  action corrective bloquante après un relevé hors seuil, historique 7 jours par jour / enceinte (valeur, heure, auteur,
+  conformité, action liée, synchro), correction (`CorrectionView` : nouvelle valeur + motif obligatoire →
+  `addRecord('correction', { reason, replacement }, { supersedes_id: dernière version })`, original barré).
+  Payloads pré-validés par `shared/validation.ts` (`validatePayload`).
+- **Réutilisable par les procédés** : `ui/components/TemperatureInput.tsx` (interface documentée dans le fichier) +
+  `ui/temperature.ts` (`isInRange`, `formatTemperature`, `describeThreshold`) ;
+  `features/corrective-action/CorrectiveActionFlow.tsx` (`relatedRecordId`, `subject`, `detail`, `onDone`) et
+  `actions.ts` (libellés des 6 actions du contrat).
 
 ## Synchro et PWA (`app/src/ui/`)
 - `SyncIndicator.tsx` + `syncState.ts` : vert « Tout est synchronisé », orange « N saisies en attente »,
@@ -36,12 +57,15 @@ Enchaînement, en-tête et verrouillage auto : `app/src/ui/AppShell.tsx`, `AppHe
 - `requestPersistentStorage()` appelé au démarrage (résultat visible dans le détail de synchro).
 
 ## Composants (`app/src/ui/components/`)
-`Button` (≥ 56 px), `Tile` (`layout="card"` module, `"row"` outil), `Badge`, `Modal` (role=dialog, Échap, focus piégé), `PinPad` (touches ≥ 64 px, haptique, clavier physique), `PinSetup` (nouveau PIN saisi deux fois, refuse 000000/123456…), `TextField` + `Notice`, `Toast` (aria-live).
+`Button` (≥ 56 px), `Tile` (`layout="card"` module, `"row"` outil, `status`/`tone` pour un compteur),
+`TemperatureInput` (pavé numérique intégré, touche « − » et virgule, 1 décimale, −50..300, « Conforme »/« Hors seuil » en direct), `Badge`, `Modal` (role=dialog, Échap, focus piégé), `PinPad` (touches ≥ 64 px, haptique, clavier physique), `PinSetup` (nouveau PIN saisi deux fois, refuse 000000/123456…), `TextField` + `Notice`, `Toast` (aria-live).
 Les PIN sont hachés dans l’app (`hashPin`, PBKDF2) : seuls `pin_salt`/`pin_hash` sont envoyés.
 Thème clair/sombre automatique, contrastes AA, focus cyan visible, zones sûres (`safe-pt/pb/px` dans `ui/theme.css`).
 
 ## Tests
-`cd app && npx vitest run` — premier lancement (création complète avec vrai core, 409, 429, mauvais mot de passe, hors-ligne, serveur injoignable), configuration avancée, Gestion (accès, session expirée, équipements, seuils, équipe, réglages, répercussion dans la base locale), PIN OK/KO/bloqué, équipe vide, verrouillage auto, synchro, enregistrement test.
+`cd app && npx vitest run` — premier lancement (création complète avec vrai core, 409, 429, mauvais mot de passe, hors-ligne, serveur injoignable), configuration avancée, Gestion (accès, session expirée, équipements, seuils, équipe, réglages, répercussion dans la base locale), PIN OK/KO/bloqué, équipe vide, verrouillage auto, synchro, enregistrement test, températures (saisie conforme, hors seuil →
+action corrective obligatoire, action manquante signalée après rechargement, correction avec original barré, correction
+hors seuil → action, compteur de l'accueil), créneaux (Europe/Paris, changements d'heure), heures de relevé (Réglages).
 
 ## Identité visuelle (Space Diner)
 - **Jetons** : `app/src/ui/theme.css` — variables CSS (`--canvas`, `--surface`, `--elevated`, `--pressed`, `--sunken`,

@@ -11,6 +11,7 @@ import {
   type StaffMember,
   type Threshold,
 } from '../../../shared/types.ts'
+import { DEMO_EQUIPMENT, DEMO_THRESHOLDS } from '../core/mockTransport.ts'
 
 export const FAKE_STAFF_PINS: Record<string, string> = {
   'staff-gerant': '123456',
@@ -34,6 +35,20 @@ export interface FakeCoreOptions {
   settings?: Partial<Settings>
   /** Simule un enrôlement hors-ligne : listStaff() renvoie [] jusqu'à la prochaine synchro réussie. */
   noStaffUntilSync?: boolean
+  /** Enregistrements déjà présents (démo, tests) : chaînés dans l'ordre donné, `device_time` imposé. */
+  initialRecords?: FakeRecordSeed[]
+}
+
+export interface FakeRecordSeed {
+  /** id imposé (sinon uuid aléatoire). */
+  id?: string
+  type: RecordType
+  payload: Record<string, unknown>
+  author_id: string
+  device_time: string
+  supersedes_id?: string | null
+  /** Déjà accepté par le serveur (défaut true). */
+  synced?: boolean
 }
 
 export interface FakeCore extends CoreApi {
@@ -61,13 +76,8 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
     { id: 'staff-gerant', display_name: 'Gérant', role: 'manager', active: true, pin_salt: 'fake', pin_hash: 'fake', updated_at: t0 },
     { id: 'staff-equipier', display_name: 'Équipier', role: 'staff', active: true, pin_salt: 'fake', pin_hash: 'fake', updated_at: t0 },
   ]
-  const equipment: Equipment[] = [
-    { id: 'eq-frigo-1', name: 'Frigo 1', kind: 'fridge', active: true, updated_at: t0 },
-    { id: 'eq-frigo-2', name: 'Frigo 2', kind: 'fridge', active: true, updated_at: t0 },
-    { id: 'eq-congel', name: 'Congélateur', kind: 'freezer', active: true, updated_at: t0 },
-    { id: 'eq-friteuse-1', name: 'Friteuse – bac 1', kind: 'fryer_vat', active: true, updated_at: t0 },
-    { id: 'eq-friteuse-2', name: 'Friteuse – bac 2', kind: 'fryer_vat', active: true, updated_at: t0 },
-  ]
+  // Mêmes équipements et seuils que le serveur simulé (identifiants uuid, comme en production).
+  const equipment: Equipment[] = DEMO_EQUIPMENT.map((e) => ({ ...e }))
   const establishment: Establishment = { id: 'etab-demo', name: 'Food Truck (démo)', timezone: 'Europe/Paris' }
   const settings: Settings = {
     daily_check_times: ['08:00', '18:00'],
@@ -77,7 +87,7 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
     email_alerts: true,
     ...options.settings,
   }
-  const thresholds: Threshold[] = []
+  const thresholds: Threshold[] = DEMO_THRESHOLDS.map((t) => ({ ...t }))
 
   let device: DeviceInfo | null = options.enrolled
     ? { device_id: '00000000-0000-4000-8000-000000000001', name: 'iPad cuisine', enrolled_at: t0 }
@@ -85,6 +95,22 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
   let current: StaffMember | null = staff.find((s) => s.id === options.unlockedStaffId) ?? null
   const attempts = new Map<string, { failures: number; lockedUntil: number }>()
   const records: HaccpRecord[] = []
+  for (const seed of options.initialRecords ?? []) {
+    const last = records[records.length - 1]
+    records.push({
+      id: seed.id ?? uuid(),
+      type: seed.type,
+      payload: { ...seed.payload },
+      author_id: seed.author_id,
+      device_id: '00000000-0000-4000-8000-000000000001',
+      device_seq: records.length + 1,
+      device_time: seed.device_time,
+      prev_hash: last ? last.hash : GENESIS_HASH,
+      supersedes_id: seed.supersedes_id ?? null,
+      hash: fakeHash(),
+      ...(seed.synced === false ? {} : { server_time: seed.device_time }),
+    })
+  }
   const sessionListeners = new Set<(s: StaffMember | null) => void>()
   const syncListeners = new Set<(s: SyncStatus) => void>()
   const autoSyncDelay = options.autoSyncDelayMs === undefined ? 1200 : options.autoSyncDelayMs

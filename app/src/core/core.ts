@@ -265,7 +265,12 @@ export function createCore(options: CoreOptions): Core {
       if (rows.length === 0) return
       const stored = await db.records.bulkGet(rows.map((r) => r.id))
       const records = stored.filter((r): r is StoredRecord => !!r).map(toWire)
-      const resp = await transport.push({ device_id: device.device_id, records }, { device_token: device.device_token })
+      const resp = await transport.push(
+        // device_now : horloge de l'appareil à l'envoi, pour que le serveur détecte une horloge déréglée
+        // sans signaler à tort les saisies faites hors réseau et envoyées plus tard.
+        { device_id: device.device_id, device_now: now().toISOString(), records },
+        { device_token: device.device_token },
+      )
 
       const batchIds = new Set(rows.map((r) => r.id))
       let progressed = 0

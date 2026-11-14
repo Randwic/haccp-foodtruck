@@ -7,6 +7,13 @@ import { IconCheck, IconChevronLeft, IconError, IconSyncPending } from '../../ui
 
 const LIMIT = 20
 
+const TYPE_LABELS: Partial<Record<HaccpRecord['type'], string>> = {
+  system_test: 'Test système',
+  temperature_check: 'Relevé de température',
+  corrective_action: 'Action corrective',
+  correction: 'Correction',
+}
+
 /** Tuile active du lot 1 : crée un enregistrement `system_test` et liste les derniers enregistrements. */
 export function SystemTestPanel({ onBack, timeZone }: { onBack: () => void; timeZone?: string }) {
   const core = useCore()
@@ -84,7 +91,7 @@ export function SystemTestPanel({ onBack, timeZone }: { onBack: () => void; time
                   {formatDateTime(r.device_time, timeZone)} · {author(r.author_id)}
                 </div>
                 <div className="text-[15px] text-fg-muted">
-                  {r.type === 'system_test' ? 'Test système' : r.type} · n° {r.device_seq}
+                  {TYPE_LABELS[r.type] ?? r.type} · n° {r.device_seq}
                 </div>
               </div>
               {r.server_time ? (

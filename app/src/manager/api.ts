@@ -31,6 +31,8 @@ export interface ThresholdInput {
 export interface ManagerSettings {
   establishment_name: string
   auto_lock_minutes: number
+  /** Heures des relevés d'enceintes, « HH:MM » heure locale de l'établissement, 1 à 6, triées. */
+  daily_check_times: string[]
 }
 
 export type ManagerErrorCode =

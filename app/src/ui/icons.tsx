@@ -4,6 +4,7 @@
 import type { ComponentType } from 'react'
 import {
   ArrowLeft,
+  ArrowRightLeft,
   Box,
   Check,
   ChevronLeft,
@@ -11,21 +12,26 @@ import {
   CircleCheck,
   CircleExclamationPoint,
   ClipboardCheck,
+  Clock,
   CloudCheck,
   CloudExclamationPoint,
   CloudUpload,
   CookingPot,
   Delete,
   Droplets,
+  Ellipsis,
   Eye,
   EyeOff,
   Flame,
   FolderOpen,
+  History,
   Info,
   Lock,
   LogOut,
   Minus,
   Package,
+  Pencil,
+  Phone,
   Plus,
   Refrigerator,
   Settings,
@@ -36,10 +42,12 @@ import {
   SquarePlus,
   Tag,
   Thermometer,
+  Trash2,
   ThermometerSnowflake,
   TriangleExclamationPoint,
   Users,
   WifiOff,
+  Wrench,
   X,
   type LucideProps,
 } from 'lucide-react'
@@ -72,6 +80,8 @@ export const IconEye = make(Eye, 'IconEye')
 export const IconEyeOff = make(EyeOff, 'IconEyeOff')
 export const IconShare = make(Share, 'IconShare')
 export const IconAddHome = make(SquarePlus, 'IconAddHome')
+export const IconEdit = make(Pencil, 'IconEdit')
+export const IconHistory = make(History, 'IconHistory')
 
 // États
 export const IconOk = make(CircleCheck, 'IconOk')
@@ -82,6 +92,14 @@ export const IconSynced = make(CloudCheck, 'IconSynced')
 export const IconSyncPending = make(CloudUpload, 'IconSyncPending')
 export const IconSyncError = make(CloudExclamationPoint, 'IconSyncError')
 export const IconOffline = make(WifiOff, 'IconOffline')
+export const IconDue = make(Clock, 'IconDue')
+
+// Actions correctives
+export const IconDiscard = make(Trash2, 'IconDiscard')
+export const IconMove = make(ArrowRightLeft, 'IconMove')
+export const IconWrench = make(Wrench, 'IconWrench')
+export const IconPhone = make(Phone, 'IconPhone')
+export const IconMore = make(Ellipsis, 'IconMore')
 
 // Modules HACCP
 export const IconTemperature = make(Thermometer, 'IconTemperature')

@@ -1,0 +1,322 @@
+// Serveur simulé en mémoire, fidèle au contrat de shared/types.ts (sync-push / sync-pull).
+// Sert au développement de l'interface (sans Supabase) et aux tests du core.
+//
+// Règles appliquées par sync-push, enregistrement par enregistrement, dans l'ordre reçu :
+//   1. id déjà connu : même hash => accepté (idempotent, server_time d'origine) ; sinon id_conflict.
+//   2. hash recalculé différent => invalid_hash.
+//   3. device_seq ≠ dernier + 1 => seq_gap ; prev_hash ≠ dernier hash => broken_chain.
+//      (ces refus n'avancent PAS la chaîne côté serveur)
+//   4. type inconnu => unknown_type ; auteur inconnu/inactif => unknown_author ; payload non objet
+//      => invalid_payload. Ces refus « de contenu » portent sur un maillon intègre : le serveur le
+//      conserve en quarantaine et la chaîne AVANCE (sinon un seul refus bloquerait l'appareil à vie).
+//      Hypothèse à valider avec le backend (voir docs/core-offline.md).
+import { computeRecordHash } from '../../../shared/canonical.ts'
+import {
+  GENESIS_HASH,
+  type DeviceEnrollResponse,
+  type Equipment,
+  type Establishment,
+  type HaccpRecord,
+  type RejectReason,
+  type Settings,
+  type StaffMember,
+  type SyncPullResponse,
+  type SyncPushRequest,
+  type SyncPushResponse,
+  type Threshold,
+} from '../../../shared/types.ts'
+import { RECORD_TYPES } from './recordTypes.ts'
+import { TransportError, type DeviceAuth, type Transport } from './transport.ts'
+
+
+// ---------- Données de démonstration ----------
+const T0 = '2026-01-01T00:00:00.000Z'
+
+export const DEMO_ESTABLISHMENT: Establishment = {
+  id: '6f1c2a4e-0000-4000-8000-000000000001',
+  name: 'Food truck (démo)',
+  timezone: 'Europe/Paris',
+}
+
+/** PIN de démonstration : Gérant 123456, Équipier 654321 (vrais hash PBKDF2-SHA256, 210 000 itérations). */
+export const DEMO_PINS = { manager: '123456', staff: '654321' } as const
+
+export const DEMO_STAFF: StaffMember[] = [
+  {
+    id: '6f1c2a4e-0000-4000-8000-000000000101',
+    display_name: 'Gérant',
+    role: 'manager',
+    active: true,
+    pin_salt: 'Z2VyYW50LWRlbW8tc2VsMQ==',
+    pin_hash: 'bSxmlOKMlKxY8i3ahDpNxWPfIIK6noNbWllk+BDwBwg=',
+    updated_at: T0,
+  },
+  {
+    id: '6f1c2a4e-0000-4000-8000-000000000102',
+    display_name: 'Équipier',
+    role: 'staff',
+    active: true,
+    pin_salt: 'ZXF1aXBpZXItZGVtby1zMg==',
+    pin_hash: 'zODTO3oWpiCw1XA8bCJIjerNbeqek7ucCXhUpS1UueU=',
+    updated_at: T0,
+  },
+]
+
+export const DEMO_EQUIPMENT: Equipment[] = [
+  { id: '6f1c2a4e-0000-4000-8000-000000000201', name: 'Frigo 1', kind: 'fridge', active: true, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000202', name: 'Frigo 2', kind: 'fridge', active: true, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000203', name: 'Congélateur', kind: 'freezer', active: true, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000204', name: 'Friteuse – bac 1', kind: 'fryer_vat', active: true, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000205', name: 'Friteuse – bac 2', kind: 'fryer_vat', active: true, updated_at: T0 },
+]
+
+// Seuils par défaut issus du GBPH / arrêté du 21/12/2009 — [À CONFIRMER dans le PMS].
+export const DEMO_THRESHOLDS: Threshold[] = [
+  { id: '6f1c2a4e-0000-4000-8000-000000000301', equipment_id: DEMO_EQUIPMENT[0].id, check_type: 'temperature_check', min_c: null, max_c: 4, tolerance_minutes: 20, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000302', equipment_id: DEMO_EQUIPMENT[1].id, check_type: 'temperature_check', min_c: null, max_c: 4, tolerance_minutes: 20, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000303', equipment_id: DEMO_EQUIPMENT[2].id, check_type: 'temperature_check', min_c: null, max_c: -18, tolerance_minutes: 30, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000304', equipment_id: null, check_type: 'hot_holding', min_c: 63, max_c: null, tolerance_minutes: 0, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000305', equipment_id: null, check_type: 'cooling', min_c: null, max_c: 10, tolerance_minutes: 0, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000306', equipment_id: null, check_type: 'reheating', min_c: 63, max_c: null, tolerance_minutes: 0, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000307', equipment_id: null, check_type: 'cooking_check', min_c: 70, max_c: null, tolerance_minutes: 0, updated_at: T0 },
+]
+
+export const DEMO_SETTINGS: Settings = {
+  retention_years: 3,
+  auto_lock_minutes: 5, // [À CONFIRMER]
+  clock_suspect_minutes: 5,
+  email_alerts: true,
+}
+
+/** Appareil pré-enrôlé, pratique pour l'interface en développement. */
+export const DEMO_DEVICE: DeviceEnrollResponse = {
+  device_id: '6f1c2a4e-0000-4000-8000-000000000401',
+  device_token: 'demo-device-token',
+}
+
+// ---------- Serveur simulé ----------
+type RefTable = 'staff' | 'equipment' | 'thresholds'
+
+interface ServerDevice {
+  device_id: string
+  name: string
+  revoked: boolean
+  last_seq: number
+  last_hash: string
+}
+
+interface ServerRecord {
+  record: HaccpRecord
+  server_time: string
+  clock_suspect: boolean
+  /** Refus de contenu (quarantaine) : maillon intègre mais non accepté. */
+  rejected: RejectReason | null
+}
+
+export interface MockTransportOptions {
+  now?: () => Date
+  /** Latence simulée de chaque requête (défaut 0). */
+  latencyMs?: number
+  /** Charger les données de démonstration (défaut true). */
+  seed?: boolean
+}
+
+export interface MockTransport extends Transport {
+  /** Simule une absence de réseau (toutes les requêtes échouent en `network`). */
+  setOffline(offline: boolean): void
+  /** La prochaine requête push est traitée par le serveur MAIS la réponse est perdue. */
+  dropNextPushResponse(): void
+  /** La prochaine requête échoue en 5xx sans être traitée. */
+  failNextWithServerError(): void
+  enrollDevice(name: string): DeviceEnrollResponse
+  revokeDevice(device_id: string): void
+  /** Enregistrements acceptés par le serveur (copie). */
+  acceptedRecords(): HaccpRecord[]
+  /** Enregistrements en quarantaine (refus de contenu). */
+  quarantinedRecords(): { record: HaccpRecord; reason: RejectReason }[]
+  upsertStaff(s: Omit<StaffMember, 'updated_at'>): void
+  upsertEquipment(e: Omit<Equipment, 'updated_at'>): void
+  upsertThreshold(t: Omit<Threshold, 'updated_at'>): void
+  setSettings(s: Settings): void
+  /** Désactive une référence : elle apparaîtra dans `deleted` des pulls suivants. */
+  deactivate(table: RefTable, id: string): void
+  /** Compteurs d'appels, pour les tests. */
+  readonly calls: { push: number; pull: number }
+}
+
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
+
+export function createMockTransport(opts: MockTransportOptions = {}): MockTransport {
+  const now = opts.now ?? (() => new Date())
+  const latencyMs = opts.latencyMs ?? 0
+  const seed = opts.seed ?? true
+
+  const establishment: Establishment = clone(DEMO_ESTABLISHMENT)
+  let settings: Settings = clone(DEMO_SETTINGS)
+  const refs: { staff: Map<string, StaffMember>; equipment: Map<string, Equipment>; thresholds: Map<string, Threshold> } = {
+    staff: new Map(seed ? DEMO_STAFF.map((s) => [s.id, clone(s)]) : []),
+    equipment: new Map(seed ? DEMO_EQUIPMENT.map((e) => [e.id, clone(e)]) : []),
+    thresholds: new Map(seed ? DEMO_THRESHOLDS.map((t) => [t.id, clone(t)]) : []),
+  }
+  const deletedLog: { table: RefTable; id: string; at: string }[] = []
+  const devicesByToken = new Map<string, ServerDevice>()
+  const records = new Map<string, ServerRecord>()
+  let offline = false
+  let dropNextPush = false
+  let fail5xxNext = false
+  let lastIssued = 0 // ms du dernier server_now émis
+  const calls = { push: 0, pull: 0 }
+
+  devicesByToken.set(DEMO_DEVICE.device_token, {
+    device_id: DEMO_DEVICE.device_id,
+    name: 'Appareil de démonstration',
+    revoked: false,
+    last_seq: 0,
+    last_hash: GENESIS_HASH,
+  })
+
+  /** Horodatage strictement croissant : une modification est toujours > au dernier server_now émis. */
+  function stamp(): string {
+    const t = Math.max(now().getTime(), lastIssued + 1)
+    lastIssued = t
+    return new Date(t).toISOString()
+  }
+
+  async function gate(auth: DeviceAuth): Promise<ServerDevice> {
+    if (latencyMs > 0) await new Promise((r) => setTimeout(r, latencyMs))
+    if (offline) throw new TransportError('network', 'Réseau indisponible (simulation)')
+    if (fail5xxNext) {
+      fail5xxNext = false
+      throw new TransportError('server', 'Erreur serveur (503, simulation)', 503)
+    }
+    const dev = devicesByToken.get(auth.device_token)
+    if (!dev) throw new TransportError('unauthorized', 'Appareil non autorisé (401) invalid_token', 401)
+    if (dev.revoked) throw new TransportError('unauthorized', 'Appareil non autorisé (401) device_revoked', 401)
+    return dev
+  }
+
+  async function push(reqIn: SyncPushRequest, auth: DeviceAuth): Promise<SyncPushResponse> {
+    calls.push++
+    const dev = await gate(auth)
+    const req = clone(reqIn) // comme un vrai aller-retour JSON
+    if (req.device_id !== dev.device_id) throw new TransportError('unauthorized', 'device_id ne correspond pas au jeton (403)', 403)
+    if (!Array.isArray(req.records) || req.records.length > 500) throw new TransportError('client', 'Lot invalide (400)', 400)
+
+    const res: SyncPushResponse = { accepted: [], rejected: [], last_device_seq: 0 }
+    for (const r of req.records) {
+      const known = records.get(r.id)
+      if (known) {
+        if (known.record.hash !== r.hash) res.rejected.push({ id: r.id, reason: 'id_conflict' })
+        else if (known.rejected) res.rejected.push({ id: r.id, reason: known.rejected })
+        else res.accepted.push({ id: r.id, server_time: known.server_time, clock_suspect: known.clock_suspect })
+        continue
+      }
+      if (r.device_id !== dev.device_id) {
+        res.rejected.push({ id: r.id, reason: 'broken_chain', detail: 'device_id étranger' })
+        continue
+      }
+      let hash: string
+      try {
+        hash = await computeRecordHash(r)
+      } catch {
+        res.rejected.push({ id: r.id, reason: 'invalid_payload', detail: 'JSON non canonisable' })
+        continue
+      }
+      if (hash !== r.hash) {
+        res.rejected.push({ id: r.id, reason: 'invalid_hash' })
+        continue
+      }
+      if (r.device_seq !== dev.last_seq + 1) {
+        res.rejected.push({ id: r.id, reason: 'seq_gap', detail: `attendu ${dev.last_seq + 1}, reçu ${r.device_seq}` })
+        continue
+      }
+      if (r.prev_hash !== dev.last_hash) {
+        res.rejected.push({ id: r.id, reason: 'broken_chain' })
+        continue
+      }
+      // Maillon intègre : la chaîne avance quoi qu'il arrive au contenu.
+      dev.last_seq = r.device_seq
+      dev.last_hash = r.hash
+      const server_time = stamp()
+      let contentReject: RejectReason | null = null
+      const author = refs.staff.get(r.author_id)
+      if (!(RECORD_TYPES as readonly string[]).includes(r.type)) contentReject = 'unknown_type'
+      else if (!author || !author.active) contentReject = 'unknown_author'
+      else if (typeof r.payload !== 'object' || r.payload === null || Array.isArray(r.payload)) contentReject = 'invalid_payload'
+      else if (r.type === 'correction' && !r.supersedes_id) contentReject = 'invalid_payload'
+      const drift = Math.abs(Date.parse(server_time) - Date.parse(r.device_time))
+      const clock_suspect = !Number.isFinite(drift) || drift > settings.clock_suspect_minutes * 60_000
+      records.set(r.id, { record: { ...r, server_time }, server_time, clock_suspect, rejected: contentReject })
+      if (contentReject) res.rejected.push({ id: r.id, reason: contentReject })
+      else res.accepted.push({ id: r.id, server_time, clock_suspect })
+    }
+    res.last_device_seq = dev.last_seq
+    if (dropNextPush) {
+      dropNextPush = false
+      throw new TransportError('network', 'Connexion coupée pendant la réponse (simulation)')
+    }
+    return clone(res)
+  }
+
+  async function pull(since: string | null, auth: DeviceAuth): Promise<SyncPullResponse> {
+    calls.pull++
+    await gate(auth)
+    const sinceMs = since ? Date.parse(since) : Number.NEGATIVE_INFINITY
+    const changed = <T extends { updated_at: string }>(m: Map<string, T>) =>
+      [...m.values()].filter((x) => Date.parse(x.updated_at) > sinceMs)
+    const server_now = stamp()
+    return clone({
+      server_now,
+      establishment,
+      staff: changed(refs.staff),
+      equipment: changed(refs.equipment),
+      thresholds: changed(refs.thresholds),
+      settings,
+      deleted: deletedLog.filter((d) => Date.parse(d.at) > sinceMs).map(({ table, id }) => ({ table, id })),
+    })
+  }
+
+  return {
+    push,
+    pull,
+    calls,
+    setOffline: (v) => {
+      offline = v
+    },
+    dropNextPushResponse: () => {
+      dropNextPush = true
+    },
+    failNextWithServerError: () => {
+      fail5xxNext = true
+    },
+    enrollDevice(name) {
+      const device_id = crypto.randomUUID()
+      const device_token = crypto.randomUUID() + crypto.randomUUID()
+      devicesByToken.set(device_token, { device_id, name, revoked: false, last_seq: 0, last_hash: GENESIS_HASH })
+      return { device_id, device_token }
+    },
+    revokeDevice(device_id) {
+      for (const d of devicesByToken.values()) if (d.device_id === device_id) d.revoked = true
+    },
+    acceptedRecords: () =>
+      [...records.values()].filter((r) => !r.rejected).map((r) => clone(r.record)).sort((a, b) => a.device_seq - b.device_seq),
+    quarantinedRecords: () =>
+      [...records.values()].filter((r) => r.rejected).map((r) => ({ record: clone(r.record), reason: r.rejected as RejectReason })),
+    upsertStaff: (s) => void refs.staff.set(s.id, { ...clone(s), updated_at: stamp() }),
+    upsertEquipment: (e) => void refs.equipment.set(e.id, { ...clone(e), updated_at: stamp() }),
+    upsertThreshold: (t) => void refs.thresholds.set(t.id, { ...clone(t), updated_at: stamp() }),
+    setSettings: (s) => {
+      // Les settings sont renvoyés en entier à chaque pull : pas besoin d'horodatage.
+      settings = clone(s)
+    },
+    deactivate(table, id) {
+      const at = stamp()
+      if (table === 'thresholds') refs.thresholds.delete(id)
+      else {
+        const row = refs[table].get(id)
+        if (row) refs[table].set(id, { ...row, active: false, updated_at: at } as never)
+      }
+      deletedLog.push({ table, id, at })
+    },
+  }
+}

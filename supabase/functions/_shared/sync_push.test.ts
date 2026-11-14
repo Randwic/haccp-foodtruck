@@ -16,6 +16,8 @@ import {
   memoryLogger,
   newId,
   SUPPLIER_ID,
+  PRODUCT_ID,
+  RECIPE_ID,
   rehash,
   seededRepo,
 } from './test_helpers.ts'
@@ -877,5 +879,83 @@ describe('sync-push — lot 3 (réception, pertes)', () => {
     const recs = [await chain.next({ type: 'reception', payload: reception() }), await chain.next({ type: 'reception', payload: reception() })]
     expect((await push(recs)).accepted).toHaveLength(2)
     expect(repo.calls.supplierExists).toBe(1)
+  })
+})
+
+describe('sync-push — lot 4 (étiquettes)', () => {
+  const label = (over: Record<string, unknown> = {}) => ({
+    kind: 'opened',
+    product_id: PRODUCT_ID,
+    name: 'Cheddar tranches',
+    made_at: '2026-11-14T09:00:00.000Z',
+    dlc_at: '2026-11-17T09:00:00.000Z',
+    allergens: ['lait'],
+    storage: 'fridge',
+    lot: 'L2611',
+    copies: 2,
+    ...over,
+  })
+  const prepared = (over: Record<string, unknown> = {}) => {
+    const { product_id: _p, ...base } = label({ kind: 'prepared', name: 'Sauce cheddar maison', allergens: ['gluten', 'lait'] })
+    return { ...base, recipe_id: RECIPE_ID, ...over }
+  }
+  it('accepte une étiquette d’ouverture et de préparation (avec traçabilité amont)', async () => {
+    const chain = new ChainBuilder()
+    const a = await chain.next({ type: 'label_printed', payload: label({ source_record_ids: [newId()] }) })
+    const b = await chain.next({ type: 'label_printed', payload: prepared() })
+    const out = await push([a, b])
+    expect(out.rejected).toEqual([])
+    expect(out.accepted.map((x) => x.id)).toEqual([a.id, b.id])
+  })
+  it('produit / recette désactivés mais existants : acceptés (impression hors réseau)', async () => {
+    repo.products[0].active = false
+    repo.recipes[0].active = false
+    const chain = new ChainBuilder()
+    const out = await push([await chain.next({ type: 'label_printed', payload: label({ kind: 'thawed' }) }), await chain.next({ type: 'label_printed', payload: prepared() })])
+    expect(out.rejected).toEqual([])
+  })
+  it('produit ou recette inconnus → quarantaine invalid_payload, la chaîne avance', async () => {
+    const chain = new ChainBuilder()
+    const p = await chain.next({ type: 'label_printed', payload: label({ product_id: newId() }) })
+    const r = await chain.next({ type: 'label_printed', payload: prepared({ recipe_id: newId() }) })
+    const ok = await chain.next()
+    const out = await push([p, r, ok])
+    expect(out.rejected).toEqual([
+      { id: p.id, reason: 'invalid_payload', detail: expect.stringMatching(/produit inconnu/), quarantined: true },
+      { id: r.id, reason: 'invalid_payload', detail: expect.stringMatching(/recette inconnue/), quarantined: true },
+    ])
+    expect(out.accepted.map((x) => x.id)).toEqual([ok.id])
+    expect(out.last_device_seq).toBe(3)
+  })
+  it('allergènes différents de la fiche produit : accepté (pas de contrôle serveur, la fiche a pu changer)', async () => {
+    const r = await new ChainBuilder().next({ type: 'label_printed', payload: label({ allergens: ['lait', 'moutarde'] }) })
+    expect((await push([r])).rejected).toEqual([])
+  })
+  it('payload invalide (DLC avant fabrication, kind incohérent) → quarantaine', async () => {
+    const chain = new ChainBuilder()
+    const dlc = await chain.next({ type: 'label_printed', payload: label({ dlc_at: '2026-11-14T08:00:00.000Z' }) })
+    const kind = await chain.next({ type: 'label_printed', payload: label({ kind: 'prepared' }) })
+    const out = await push([dlc, kind])
+    expect(out.rejected.map((x) => [x.reason, x.quarantined])).toEqual([
+      ['invalid_payload', true],
+      ['invalid_payload', true],
+    ])
+    expect(out.rejected[0].detail).toMatch(/dlc_at/)
+    expect(out.rejected[1].detail).toMatch(/recipe_id/)
+  })
+  it('correction d’une étiquette : remplacement validé, produit vérifié', async () => {
+    const chain = new ChainBuilder()
+    const orig = await chain.next({ type: 'label_printed', payload: label() })
+    const good = await chain.next({ type: 'correction', supersedes_id: orig.id, payload: { reason: 'DLC', replacement: label({ dlc_at: '2026-11-16T09:00:00.000Z' }) } })
+    const bad = await chain.next({ type: 'correction', supersedes_id: orig.id, payload: { reason: 'r', replacement: label({ product_id: newId() }) } })
+    const out = await push([orig, good, bad])
+    expect(out.accepted.map((x) => x.id)).toEqual([orig.id, good.id])
+    expect(out.rejected).toEqual([{ id: bad.id, reason: 'invalid_payload', detail: expect.stringMatching(/produit inconnu/), quarantined: true }])
+  })
+  it('met en cache le contrôle du produit dans un lot', async () => {
+    const chain = new ChainBuilder()
+    const recs = [await chain.next({ type: 'label_printed', payload: label() }), await chain.next({ type: 'label_printed', payload: label() })]
+    expect((await push(recs)).accepted).toHaveLength(2)
+    expect(repo.calls.productExists).toBe(1)
   })
 })

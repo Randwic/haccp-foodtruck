@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { SyncPullResponse } from '../../../shared/types.ts'
 import type { MemoryRepo } from './memory_repo.ts'
 import { createSyncPullHandler, PULL_OVERLAP_MS } from './sync_pull.ts'
-import { FRIDGE_ID, INACTIVE_STAFF_ID, NOW, STAFF_ID, SUPPLIER_ID, TOKEN, memoryLogger, seededRepo } from './test_helpers.ts'
+import { FRIDGE_ID, INACTIVE_STAFF_ID, NOW, PRODUCT_ID, RECIPE_ID, STAFF_ID, SUPPLIER_ID, TOKEN, memoryLogger, seededRepo } from './test_helpers.ts'
 
 let repo: MemoryRepo
 let handler: (req: Request) => Promise<Response>
@@ -92,6 +92,26 @@ describe('sync-pull', () => {
     const since = await pull('2026-11-05T00:00:00.000Z')
     expect(since.suppliers).toEqual([])
     expect(since.deleted).toContainEqual({ table: 'suppliers', id: OLD })
+  })
+  it('produits et recettes : actifs seulement, champs du contrat, désactivés dans deleted (lot 4)', async () => {
+    const OLD_P = '00000000-0000-4000-8000-0000000000c5'
+    const OLD_R = '00000000-0000-4000-8000-0000000000c6'
+    repo.products.push({ id: OLD_P, name: 'Ancien pain', allergens: ['gluten'], storage: 'ambient', shelf_life_opened_hours: null, shelf_life_thawed_hours: null, active: false, updated_at: '2026-11-12T00:00:00.000Z' })
+    repo.recipes.push({ id: OLD_R, name: 'Ancienne sauce', ingredient_product_ids: [], extra_allergens: [], storage: 'fridge', shelf_life_hours: 24, active: false, updated_at: '2026-11-12T00:00:00.000Z' })
+    ;(repo.products[0] as unknown as Record<string, unknown>).created_at = '2026-01-01'
+    ;(repo.recipes[0] as unknown as Record<string, unknown>).notes = 'interne'
+    const all = await pull()
+    expect(all.products).toEqual([
+      { id: PRODUCT_ID, name: 'Cheddar tranches', allergens: ['lait'], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, active: true, updated_at: '2026-11-01T00:00:00.000Z' },
+    ])
+    expect(all.recipes).toEqual([
+      { id: RECIPE_ID, name: 'Sauce cheddar maison', ingredient_product_ids: [PRODUCT_ID], extra_allergens: ['gluten'], storage: 'fridge', shelf_life_hours: 72, active: true, updated_at: '2026-11-01T00:00:00.000Z' },
+    ])
+    expect(all.deleted).toEqual([])
+    const since = await pull('2026-11-05T00:00:00.000Z')
+    expect(since.products).toEqual([])
+    expect(since.recipes).toEqual([])
+    expect(since.deleted).toEqual(expect.arrayContaining([{ table: 'products', id: OLD_P }, { table: 'recipes', id: OLD_R }]))
   })
   it('400 si since n’est pas une date', async () => {
     const res = await handler(pullReq('hier'))

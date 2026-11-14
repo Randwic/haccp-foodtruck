@@ -1,7 +1,7 @@
 // Accès aux données, injecté dans la logique pure. Implémentations :
 //  - _adapters/supabase_repo.ts (Deno, supabase-js, service_role) en production ;
 //  - _shared/memory_repo.ts (en mémoire) pour les tests Vitest.
-import type { Supplier } from '../../../shared/payloads.ts'
+import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 
 export interface DeviceRow {
@@ -119,6 +119,9 @@ export interface PushRepo extends DeviceAuthRepo {
   equipmentExists(equipmentId: string): Promise<boolean>
   /** Fournisseur existant (actif ou non) : `reception.supplier_id`. */
   supplierExists(supplierId: string): Promise<boolean>
+  /** Produit / recette existants (actifs ou non) : `label_printed.product_id` / `recipe_id`. */
+  productExists(productId: string): Promise<boolean>
+  recipeExists(recipeId: string): Promise<boolean>
   /**
    * Type et payload d'enregistrements (corrections : photos reprises de l'enregistrement corrigé).
    * Ordre quelconque, id inconnus ignorés.
@@ -135,6 +138,8 @@ export interface PullRepo extends DeviceAuthRepo {
   listEquipment(since: string | null): Promise<Equipment[]>
   listThresholds(since: string | null): Promise<Threshold[]>
   listSuppliers(since: string | null): Promise<Supplier[]>
+  listProducts(since: string | null): Promise<Product[]>
+  listRecipes(since: string | null): Promise<Recipe[]>
 }
 
 export interface EnrollRepo {

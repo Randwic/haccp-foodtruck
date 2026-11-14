@@ -1,7 +1,7 @@
 // Dépôt en mémoire pour les tests : reproduit le comportement utile de la base (trigger
 // d'insertion « filet de sécurité » avec messages `HACCP: …`, clé primaire records.id,
 // unique(device_id, device_seq), server_time / clock_suspect imposés, ancres de purge).
-import type { Supplier } from '../../../shared/payloads.ts'
+import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import type { PhotoStore } from './photo_upload.ts'
 import type { PhotoRemover, PurgePhotosRepo } from './purge_photos.ts'
@@ -34,6 +34,8 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   equipment: Equipment[] = []
   thresholds: Threshold[] = []
   suppliers: Supplier[] = []
+  products: Product[] = []
+  recipes: Recipe[] = []
   establishment: Establishment | null = null
   settings: Settings | null = null
   records: (Omit<NewRecordRow, 'clock_suspect'> & { server_time: string; clock_suspect: boolean })[] = []
@@ -121,6 +123,14 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
     this.count('supplierExists')
     return this.suppliers.some((s) => s.id === supplierId)
   }
+  async productExists(productId: string): Promise<boolean> {
+    this.count('productExists')
+    return this.products.some((p) => p.id === productId)
+  }
+  async recipeExists(recipeId: string): Promise<boolean> {
+    this.count('recipeExists')
+    return this.recipes.some((r) => r.id === recipeId)
+  }
   async getPayloadsByIds(ids: string[]) {
     this.count('getPayloadsByIds')
     return this.records.filter((r) => ids.includes(r.id)).map((r) => ({ id: r.id, type: r.type, payload: structuredClone(r.payload) }))
@@ -178,6 +188,12 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   }
   async listSuppliers(since: string | null) {
     return this.since(this.suppliers, since)
+  }
+  async listProducts(since: string | null) {
+    return this.since(this.products, since)
+  }
+  async listRecipes(since: string | null) {
+    return this.since(this.recipes, since)
   }
 
   async getUserIdFromJwt(jwt: string) {

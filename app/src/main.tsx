@@ -39,6 +39,25 @@ function createDemoCore(): CoreApi {
     noStaffUntilSync: params.get('staff') === 'empty',
   })
 }
+const TRIAL_DB_PREFIX = 'haccp-essai-'
+async function cleanOldTrialDatabases() {
+  try {
+    for (const db of (await indexedDB.databases?.()) ?? []) {
+      if (db.name?.startsWith(TRIAL_DB_PREFIX)) indexedDB.deleteDatabase(db.name)
+    }
+  } catch {
+    /* sans importance */
+  }
+}
+
+function TrialBanner() {
+  return (
+    <div role="status" className="sticky top-0 z-50 bg-amber-400 px-4 py-2 text-center text-sm font-semibold text-black">
+      MODE ESSAI — rien n'est enregistré sur votre vrai serveur. Recharger la page = tout recommencer.
+    </div>
+  )
+}
+
 function createApp(): { core: CoreApi; manager: ManagerApi } {
   const params = new URLSearchParams(location.search)
   if (params.has('demo') || params.has('sync') || params.has('staff')) {
@@ -48,6 +67,15 @@ function createApp(): { core: CoreApi; manager: ManagerApi } {
   const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
   setActivityNotifier(notifyActivity)
+  // MODE ESSAI (?essai) : tout le parcours réel (création du compte gérant, PIN, Gestion…) contre un
+  // serveur simulé. Rien n'est envoyé au vrai serveur ; chaque ouverture repart de zéro.
+  if (params.has('essai')) {
+    void cleanOldTrialDatabases()
+    const server = createMockTransport({ seed: false, latencyMs: 150 })
+    const manager = createMockManagerApi({ transport: server, seeded: false, enrollAs: 'demo', latencyMs: 400 })
+    const named = withEstablishmentName(server, () => manager.simulate.state().establishment_name)
+    return { core: createCore({ transport: named, dbName: TRIAL_DB_PREFIX + Date.now() }), manager }
+  }
   if (url && anonKey) {
     return {
       core: createCore({ transport: createHttpTransport({ baseUrl: url, anonKey }) }),
@@ -70,6 +98,7 @@ const { core, manager } = createApp()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    {new URLSearchParams(location.search).has('essai') && <TrialBanner />}
     <App core={core} manager={manager} />
   </StrictMode>,
 )

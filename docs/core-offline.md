@@ -60,6 +60,10 @@ const core = createCore({ transport: createHttpTransport({ baseUrl, anonKey }) }
   l'appareil. L'interface doit alerter si `oldest_pending_at` date de plus de 24 h.
 - Pas de Background Sync sur iOS : la synchro n'a lieu que lorsque l'app est ouverte.
 - L'heure d'une saisie est celle de l'appareil. Le serveur pose `server_time` et `clock_suspect`.
+  Chaque `SyncPushRequest` porte `device_now` (horloge de l'appareil à l'envoi) : le serveur marque le lot
+  `clock_suspect` seulement si |heure serveur − `device_now`| > `settings.clock_suspect_minutes`, pour ne pas
+  signaler à tort une saisie faite hors réseau et envoyée plus tard (serveur simulé : repli sur `device_time`
+  si `device_now` est absent).
 - Le verrouillage PIN protège contre un essai à la main, pas contre quelqu'un qui lirait
   IndexedDB : un PIN à 4–6 chiffres haché reste attaquable hors-ligne. L'enjeu est la
   traçabilité de l'auteur, pas le secret.

@@ -211,17 +211,24 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
     async getSettings(): Promise<ManagerSettings> {
       const [e, s] = await Promise.all([
         run<{ name: string }>(sb.from('establishment').select('name').limit(1).single()),
-        run<{ auto_lock_minutes: number }>(sb.from('settings').select('auto_lock_minutes').eq('id', 1).single()),
+        run<{ auto_lock_minutes: number; daily_check_times: string[] | null }>(
+          sb.from('settings').select('auto_lock_minutes, daily_check_times').eq('id', 1).single(),
+        ),
       ])
-      return { establishment_name: e.name, auto_lock_minutes: s.auto_lock_minutes }
+      // Colonne time[] ou text[] : Postgres peut renvoyer « 08:00:00 », on garde HH:MM.
+      const times = (s.daily_check_times ?? []).map((t) => String(t).slice(0, 5)).sort()
+      return { establishment_name: e.name, auto_lock_minutes: s.auto_lock_minutes, daily_check_times: times }
     },
     async saveSettings(patch) {
       if (patch.establishment_name !== undefined) {
         const e = await run<{ id: string }>(sb.from('establishment').select('id').limit(1).single())
         await run(sb.from('establishment').update({ name: patch.establishment_name.trim() }).eq('id', e.id).select('id').single())
       }
-      if (patch.auto_lock_minutes !== undefined) {
-        await run(sb.from('settings').update({ auto_lock_minutes: patch.auto_lock_minutes }).eq('id', 1).select('id').single())
+      const settingsPatch: Record<string, unknown> = {}
+      if (patch.auto_lock_minutes !== undefined) settingsPatch.auto_lock_minutes = patch.auto_lock_minutes
+      if (patch.daily_check_times !== undefined) settingsPatch.daily_check_times = [...patch.daily_check_times].sort()
+      if (Object.keys(settingsPatch).length > 0) {
+        await run(sb.from('settings').update(settingsPatch).eq('id', 1).select('id').single())
       }
       return this.getSettings()
     },

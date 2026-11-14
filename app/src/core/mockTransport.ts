@@ -245,7 +245,11 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       else if (!author || !author.active) contentReject = 'unknown_author'
       else if (typeof r.payload !== 'object' || r.payload === null || Array.isArray(r.payload)) contentReject = 'invalid_payload'
       else if (r.type === 'correction' && !r.supersedes_id) contentReject = 'invalid_payload'
-      const drift = Math.abs(Date.parse(server_time) - Date.parse(r.device_time))
+      // Horloge suspecte : écart entre l'heure du serveur et `device_now` (horloge de l'appareil à
+      // l'envoi), pour tout le lot. Une saisie faite hors réseau et envoyée des heures plus tard n'est
+      // donc pas signalée. Ancien client sans `device_now` : repli sur device_time de chaque saisie.
+      const reference = typeof req.device_now === 'string' ? req.device_now : r.device_time
+      const drift = Math.abs(Date.parse(server_time) - Date.parse(reference))
       const clock_suspect = !Number.isFinite(drift) || drift > settings.clock_suspect_minutes * 60_000
       records.set(r.id, { record: { ...r, server_time }, server_time, clock_suspect, rejected: contentReject })
       if (contentReject) res.rejected.push({ id: r.id, reason: contentReject, quarantined: true })

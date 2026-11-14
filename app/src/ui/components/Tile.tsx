@@ -12,11 +12,17 @@ export interface TileProps {
   disabledLabel?: string
   /** `row` : tuile horizontale compacte (outils), `card` : tuile de module. */
   layout?: 'card' | 'row'
+  /** Ligne d'état sous le texte (compteur du module : « 2 relevés à faire »…). */
+  status?: ReactNode
+  /** Accent du contour : à faire (ambre) ou alerte (rouge). */
+  tone?: 'warn' | 'danger'
+  /** Libellé accessible complet (titre + état), si `status` est utilisé. */
+  ariaLabel?: string
   className?: string
 }
 
 /** Tuile tactile (accueil) : icône dans un carré teinté, titre, sous-titre. */
-export function Tile({ title, description, icon, onClick, disabled, disabledLabel = 'Bientôt', layout = 'card', className = '' }: TileProps) {
+export function Tile({ title, description, icon, onClick, disabled, disabledLabel = 'Bientôt', layout = 'card', status, tone, ariaLabel, className = '' }: TileProps) {
   const iconBox = icon && (
     <span
       aria-hidden="true"
@@ -29,6 +35,7 @@ export function Tile({ title, description, icon, onClick, disabled, disabledLabe
     <div className="w-full min-w-0 flex-1">
       <div className={`hyphens-auto break-words text-[17px] leading-snug font-semibold tracking-[-0.01em] ${disabled ? 'text-fg-muted' : 'text-fg'}`}>{title}</div>
       {description && <div className="mt-0.5 text-[15px] leading-snug text-fg-subtle">{description}</div>}
+      {status && <div className="mt-2.5">{status}</div>}
     </div>
   )
   return (
@@ -36,8 +43,8 @@ export function Tile({ title, description, icon, onClick, disabled, disabledLabe
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={disabled ? `${title} (${disabledLabel})` : undefined}
-      className={`relative flex w-full min-w-0 rounded-2xl border border-line bg-surface p-4 text-left shadow-card transition-[background-color,transform] duration-100 sm:p-5 ${
+      aria-label={disabled ? `${title} (${disabledLabel})` : ariaLabel}
+      className={`relative flex w-full min-w-0 rounded-2xl border bg-surface ${tone === 'danger' ? 'border-danger/55' : tone === 'warn' ? 'border-warn/55' : 'border-line'} p-4 text-left shadow-card transition-[background-color,transform] duration-100 sm:p-5 ${
         disabled ? 'cursor-default' : 'active:scale-[0.99] active:bg-pressed'
       } ${layout === 'row' ? 'min-h-20 items-center gap-4' : 'min-h-36 flex-col items-start justify-between gap-4'} ${className}`}
     >

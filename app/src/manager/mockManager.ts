@@ -39,6 +39,7 @@ interface MockState {
   session: string | null
   establishment_name: string
   auto_lock_minutes: number
+  daily_check_times: string[]
   staff: StaffMember[]
   equipment: Equipment[]
   thresholds: Threshold[]
@@ -62,7 +63,7 @@ const uuid = () => crypto.randomUUID()
 
 function initialState(seeded: boolean): MockState {
   if (!seeded) {
-    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, staff: [], equipment: [], thresholds: [] }
+    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, daily_check_times: [...DEMO_SETTINGS.daily_check_times], staff: [], equipment: [], thresholds: [] }
   }
   return {
     bootstrapped: true,
@@ -70,6 +71,7 @@ function initialState(seeded: boolean): MockState {
     session: null,
     establishment_name: DEMO_ESTABLISHMENT.name,
     auto_lock_minutes: DEMO_SETTINGS.auto_lock_minutes,
+    daily_check_times: [...DEMO_SETTINGS.daily_check_times],
     staff: clone(DEMO_STAFF),
     equipment: clone(DEMO_EQUIPMENT),
     thresholds: clone(DEMO_THRESHOLDS),
@@ -88,6 +90,15 @@ export function withEstablishmentName(transport: Transport, name: () => string):
   }
 }
 
+/** Même règle que la base : 1 à 6 heures « HH:MM » distinctes (renvoyées triées). */
+function checkCheckTimes(times: unknown): string[] {
+  if (!Array.isArray(times) || times.length < 1 || times.length > 6 || !times.every((t) => typeof t === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t))) {
+    throw new ManagerError('validation', 'Indiquez de 1 à 6 heures de relevé au format HH:MM.', 400)
+  }
+  if (new Set(times).size !== times.length) throw new ManagerError('validation', 'Chaque heure de relevé ne doit apparaître qu’une fois.', 400)
+  return [...(times as string[])].sort()
+}
+
 export function createMockManagerApi(opts: MockManagerOptions = {}): MockManagerApi {
   const latency = opts.latencyMs ?? 0
   const t = opts.transport
@@ -100,7 +111,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
   if (opts.storageKey) {
     try {
       const raw = localStorage.getItem(opts.storageKey)
-      if (raw) state = { ...state, ...(JSON.parse(raw) as MockState) }
+      if (raw) state = { ...state, ...(JSON.parse(raw) as Partial<MockState>) }
     } catch {
       /* état illisible : on repart de zéro */
     }
@@ -115,7 +126,8 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
   }
 
   // ---- répercussion vers le serveur simulé du core ----
-  const pushSettings = () => t?.setSettings({ ...DEMO_SETTINGS, auto_lock_minutes: state.auto_lock_minutes } satisfies Settings)
+  const pushSettings = () =>
+    t?.setSettings({ ...DEMO_SETTINGS, auto_lock_minutes: state.auto_lock_minutes, daily_check_times: [...state.daily_check_times] } satisfies Settings)
   const pushStaff = (s: StaffMember) => {
     if (!t) return
     const { updated_at: _u, ...rest } = s
@@ -163,7 +175,11 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     if (n.length > max) throw new ManagerError('validation', `${what} est trop long (${max} caractères au plus).`, 400)
     return n
   }
-  const settingsView = (): ManagerSettings => ({ establishment_name: state.establishment_name, auto_lock_minutes: state.auto_lock_minutes })
+  const settingsView = (): ManagerSettings => ({
+    establishment_name: state.establishment_name,
+    auto_lock_minutes: state.auto_lock_minutes,
+    daily_check_times: [...state.daily_check_times],
+  })
 
   const api: MockManagerApi = {
     mode: 'mock',
@@ -303,6 +319,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
         if (!Number.isInteger(m) || m < 1 || m > 30) throw new ManagerError('validation', 'Le délai doit être compris entre 1 et 30 minutes.', 400)
         state.auto_lock_minutes = m
       }
+      if (patch.daily_check_times !== undefined) state.daily_check_times = checkCheckTimes(patch.daily_check_times)
       pushSettings() // le nom d'établissement passe par withEstablishmentName()
       save()
       return settingsView()

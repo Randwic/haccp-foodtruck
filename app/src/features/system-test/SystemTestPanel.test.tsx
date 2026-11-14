@@ -9,7 +9,7 @@ describe('Test d’enregistrement', () => {
     renderWithCore(core)
 
     // Les modules à venir sont désactivés avec la mention « Bientôt ».
-    expect(await screen.findByRole('button', { name: 'Températures (Bientôt)' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Refroidissement (Bientôt)' })).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: /Test d’enregistrement/ }))
     expect(await screen.findByText('Aucun enregistrement pour l’instant.')).toBeInTheDocument()

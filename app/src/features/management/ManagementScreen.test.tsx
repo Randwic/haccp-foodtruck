@@ -179,6 +179,43 @@ describe('Gestion – réglages', () => {
     expect(await screen.findByText('Réglages enregistrés')).toBeInTheDocument()
     expect(manager.simulate.state()).toMatchObject({ establishment_name: 'Chez Lulu', auto_lock_minutes: 30 })
   })
+
+  it('heures des relevés : 1 à 6 heures HH:MM, sans doublon, enregistrées triées', async () => {
+    const manager = await openManagement()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Réglages' }))
+    expect(await screen.findByLabelText('Heure de relevé 1')).toHaveValue('08:00')
+    expect(screen.getByLabelText('Heure de relevé 2')).toHaveValue('18:00')
+
+    // Doublon refusé.
+    fireEvent.change(screen.getByLabelText('Heure de relevé 2'), { target: { value: '08:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les réglages' }))
+    expect(await screen.findByText('Chaque heure ne doit apparaître qu’une fois.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Heure de relevé 2'), { target: { value: '19:30' } })
+    const add = screen.getByRole('button', { name: 'Ajouter une heure' })
+    fireEvent.click(add)
+    expect(screen.getByLabelText('Heure de relevé 3')).toHaveValue('12:00')
+    for (let i = 0; i < 3; i++) fireEvent.click(add)
+    expect(screen.getByLabelText('Heure de relevé 6')).toBeInTheDocument()
+    expect(add).toBeDisabled()
+    for (const t of ['19:30', '14:00', '10:00', '16:00']) fireEvent.click(screen.getByRole('button', { name: `Retirer l’heure ${t}` }))
+    fireEvent.change(screen.getByLabelText('Heure de relevé 2'), { target: { value: '06:15' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les réglages' }))
+    expect(await screen.findByText('Réglages enregistrés')).toBeInTheDocument()
+    expect(manager.simulate.state().daily_check_times).toEqual(['06:15', '08:00'])
+
+    // Au moins une heure : la dernière ne peut pas être retirée.
+    fireEvent.click(screen.getByRole('button', { name: 'Retirer l’heure 06:15' }))
+    expect(screen.getByRole('button', { name: 'Retirer l’heure 08:00' })).toBeDisabled()
+  })
+
+  it('le mock du ManagerApi refuse des heures invalides', async () => {
+    const manager = createMockManagerApi({ seeded: true, signedIn: true })
+    await expect(manager.saveSettings({ daily_check_times: [] })).rejects.toThrow(/1 à 6/)
+    await expect(manager.saveSettings({ daily_check_times: ['8:00'] })).rejects.toThrow(/HH:MM/)
+    await expect(manager.saveSettings({ daily_check_times: ['08:00', '08:00'] })).rejects.toThrow(/une fois/)
+    expect((await manager.saveSettings({ daily_check_times: ['18:00', '07:45'] })).daily_check_times).toEqual(['07:45', '18:00'])
+  })
 })
 
 describe('Gestion – répercussion sur l’appareil (vrai core + serveur simulé)', () => {
@@ -205,4 +242,16 @@ describe('Gestion – répercussion sur l’appareil (vrai core + serveur simul�
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }))
     await waitFor(async () => expect((await core.listStaff()).map((s) => s.id)).not.toContain(DEMO_STAFF[1].id))
   }, 20_000)
+
+  it('les heures de relevé enregistrées arrivent dans les réglages de l’appareil', async () => {
+    const server = createMockTransport()
+    const manager = createMockManagerApi({ transport: server, seeded: true, signedIn: true })
+    const core = createCore({ transport: server, dbName: uniqueDbName(), background: false })
+    opened.push(core)
+    const dev = server.enrollDevice('iPad')
+    await core.enrollDevice({ ...dev, name: 'iPad' })
+    await manager.saveSettings({ daily_check_times: ['07:30', '12:00', '19:00'] })
+    await core.syncNow()
+    expect((await core.getSettings())?.daily_check_times).toEqual(['07:30', '12:00', '19:00'])
+  })
 })

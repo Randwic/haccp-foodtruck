@@ -73,6 +73,31 @@ export function formatTemperature(n: number): string {
   return `${n.toLocaleString('fr-FR', { maximumFractionDigits: 1 }).replace('-', '−')} °C`
 }
 
+/** Mêmes règles que la table `suppliers` : nom 1–80, téléphone 1–30, email plausible ≤ 254 (null = vide). */
+export function normalizeSupplierInput(input: { name?: string; phone?: string | null; email?: string | null }):
+  | { ok: true; value: { name?: string; phone?: string | null; email?: string | null } }
+  | { ok: false; field: 'name' | 'phone' | 'email'; message: string } {
+  const value: { name?: string; phone?: string | null; email?: string | null } = {}
+  if (input.name !== undefined) {
+    const name = input.name.trim().replace(/\s+/g, ' ')
+    if (!name) return { ok: false, field: 'name', message: 'Le nom du fournisseur est obligatoire.' }
+    if (name.length > 80) return { ok: false, field: 'name', message: 'Nom trop long (80 caractères au plus).' }
+    value.name = name
+  }
+  if (input.phone !== undefined) {
+    const phone = (input.phone ?? '').trim().replace(/\s+/g, ' ')
+    if (phone.length > 30) return { ok: false, field: 'phone', message: 'Numéro trop long (30 caractères au plus).' }
+    if (phone && !/^[+0-9 .()-]+$/.test(phone)) return { ok: false, field: 'phone', message: 'Numéro de téléphone invalide.' }
+    value.phone = phone || null
+  }
+  if (input.email !== undefined) {
+    const email = (input.email ?? '').trim()
+    if (email && (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) return { ok: false, field: 'email', message: 'Adresse email invalide.' }
+    value.email = email ? email.toLowerCase() : null
+  }
+  return { ok: true, value }
+}
+
 const EMAIL_KEY = 'haccp.manager.email'
 /** Mémorise l'email du gérant pour préremplir la reconnexion (jamais le mot de passe). */
 export function rememberManagerEmail(email: string): void {

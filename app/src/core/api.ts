@@ -1,6 +1,7 @@
 // Interface publique du « core » (hors-ligne, registre, synchro, PIN) utilisée par l'interface.
 // FIGÉE : l'équipe UI code contre ces signatures, l'équipe core les implémente dans ./index.ts.
 import type { HaccpRecord, RecordType, StaffMember, Equipment, Threshold, Settings, Establishment } from '../../../shared/types.ts'
+import type { Supplier } from '../../../shared/payloads.ts'
 
 export interface DeviceInfo {
   device_id: string
@@ -15,6 +16,33 @@ export interface SyncStatus {
   last_success_at: string | null
   last_error: string | null
   rejected_count: number // saisies refusées par le serveur (à examiner)
+  /**
+   * Lot 3 (ajout facultatif, absent des anciens cores) : photos référencées par une saisie et pas
+   * encore confirmées par le serveur. Les photos d'un formulaire non enregistré ne comptent pas.
+   */
+  photos_pending?: number
+  /** Lot 3 (facultatif) : photos refusées définitivement (409 photo_conflict…) — à signaler, jamais renvoyées. */
+  photos_failed?: number
+}
+
+/** Photo compressée et rangée sur l'appareil (`path` = `<device_id>/<uuid>.webp`, à mettre dans le payload). */
+export interface PhotoInfo {
+  path: string
+  size: number
+  width: number
+  height: number
+}
+
+/**
+ * État local d'une photo : draft (formulaire pas encore enregistré), pending (à envoyer), uploaded
+ * (confirmée par le serveur), failed (refus définitif, `error` = code du serveur), absent (pas sur cet
+ * appareil : prise ailleurs ou copie locale libérée — lisible par le gérant connecté).
+ */
+export interface PhotoStatus {
+  state: 'draft' | 'pending' | 'uploaded' | 'failed' | 'absent'
+  error: string | null
+  /** Octets disponibles sur l'appareil (affichage hors-ligne possible). */
+  local: boolean
 }
 
 export type UnlockResult =
@@ -44,6 +72,20 @@ export interface CoreApi {
   listEquipment(): Promise<Equipment[]>
   listThresholds(): Promise<Threshold[]>
   getSettings(): Promise<Settings | null>
+  /** Fournisseurs reçus par sync-pull (lot 3), triés par nom ; actifs seulement sauf `includeInactive`. */
+  listSuppliers(opts?: { includeInactive?: boolean }): Promise<Supplier[]>
+
+  // Photos (lot 3) — stockées sur l'appareil puis envoyées par la synchro.
+  /**
+   * Compresse (≤ 1600 px, WebP ~200 Ko) et range la photo localement, à l'état « brouillon » :
+   * elle ne part au serveur qu'une fois référencée par une saisie (`addRecord`). Renvoie son chemin.
+   */
+  addPhoto(image: Blob): Promise<PhotoInfo>
+  /** Abandonne une photo encore à l'état brouillon (retirée du formulaire). false si déjà référencée. */
+  discardPhoto(path: string): Promise<boolean>
+  /** Octets WebP de la photo si présents sur l'appareil, sinon null. */
+  getPhoto(path: string): Promise<Blob | null>
+  getPhotoStatuses(paths: readonly string[]): Promise<Record<string, PhotoStatus>>
 
   // Synchronisation
   syncNow(): Promise<SyncStatus>

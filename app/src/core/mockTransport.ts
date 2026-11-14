@@ -10,7 +10,12 @@
 //      => invalid_payload. Ces refus « de contenu » portent sur un maillon intègre : le serveur le
 //      conserve en quarantaine et la chaîne AVANCE (sinon un seul refus bloquerait l'appareil à vie).
 //      Hypothèse à valider avec le backend (voir docs/core-offline.md).
+//
+// photo-upload (lot 3) : même contrat que la fonction Supabase — chemin `<device_id>/<uuid>.webp` du
+// dossier de l'appareil, signature RIFF/WEBP, ≤ PHOTO_MAX_BYTES ; absent → 201 created ; présent de même
+// taille → 200 already_present ; taille différente → 409 photo_conflict (jamais d'écrasement).
 import { computeRecordHash } from '../../../shared/canonical.ts'
+import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Supplier } from '../../../shared/payloads.ts'
 import {
   GENESIS_HASH,
   type DeviceEnrollResponse,
@@ -25,8 +30,9 @@ import {
   type SyncPushResponse,
   type Threshold,
 } from '../../../shared/types.ts'
+import { isWebp } from './photoEncoder.ts'
 import { RECORD_TYPES } from './recordTypes.ts'
-import { TransportError, type DeviceAuth, type Transport } from './transport.ts'
+import { TransportError, type DeviceAuth, type PhotoUploadOutcome, type Transport } from './transport.ts'
 
 
 // ---------- Données de démonstration ----------
@@ -91,6 +97,13 @@ export const DEMO_SETTINGS: Settings = {
   email_alerts: true,
 }
 
+/** Fournisseurs de démonstration (lot 3). */
+export const DEMO_SUPPLIERS: Supplier[] = [
+  { id: '6f1c2a4e-0000-4000-8000-000000000501', name: 'Boucherie Martin', phone: '04 78 12 34 56', email: 'commandes@boucherie-martin.fr', active: true, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000502', name: 'Primeurs du Rhône', phone: '04 72 98 76 54', email: null, active: true, updated_at: T0 },
+  { id: '6f1c2a4e-0000-4000-8000-000000000503', name: 'Metro Lyon Nord', phone: null, email: null, active: true, updated_at: T0 },
+]
+
 /** Appareil pré-enrôlé, pratique pour l'interface en développement. */
 export const DEMO_DEVICE: DeviceEnrollResponse = {
   device_id: '6f1c2a4e-0000-4000-8000-000000000401',
@@ -98,7 +111,7 @@ export const DEMO_DEVICE: DeviceEnrollResponse = {
 }
 
 // ---------- Serveur simulé ----------
-type RefTable = 'staff' | 'equipment' | 'thresholds'
+type RefTable = 'staff' | 'equipment' | 'thresholds' | 'suppliers'
 
 interface ServerDevice {
   device_id: string
@@ -131,6 +144,13 @@ export interface MockTransport extends Transport {
   dropNextPushResponse(): void
   /** La prochaine requête échoue en 5xx sans être traitée. */
   failNextWithServerError(): void
+  /** Les `n` prochains envois de photo échouent en 5xx (sans être traités). */
+  failNextPhotoUploads(n: number): void
+  /** Photos reçues (chemin → octets), comme le bucket `photos`. */
+  storedPhotos(): Map<string, Uint8Array>
+  /** Dépose un objet dans le bucket (pour simuler un conflit). */
+  putStoredPhoto(path: string, bytes: Uint8Array): void
+  upsertSupplier(s: Omit<Supplier, 'updated_at'>): void
   enrollDevice(name: string): DeviceEnrollResponse
   revokeDevice(device_id: string): void
   /** Enregistrements acceptés par le serveur (copie). */
@@ -144,7 +164,7 @@ export interface MockTransport extends Transport {
   /** Désactive une référence : elle apparaîtra dans `deleted` des pulls suivants. */
   deactivate(table: RefTable, id: string): void
   /** Compteurs d'appels, pour les tests. */
-  readonly calls: { push: number; pull: number }
+  readonly calls: { push: number; pull: number; photo: number }
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
@@ -156,11 +176,19 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
 
   const establishment: Establishment = clone(DEMO_ESTABLISHMENT)
   let settings: Settings = clone(DEMO_SETTINGS)
-  const refs: { staff: Map<string, StaffMember>; equipment: Map<string, Equipment>; thresholds: Map<string, Threshold> } = {
+  const refs: {
+    staff: Map<string, StaffMember>
+    equipment: Map<string, Equipment>
+    thresholds: Map<string, Threshold>
+    suppliers: Map<string, Supplier>
+  } = {
     staff: new Map(seed ? DEMO_STAFF.map((s) => [s.id, clone(s)]) : []),
     equipment: new Map(seed ? DEMO_EQUIPMENT.map((e) => [e.id, clone(e)]) : []),
     thresholds: new Map(seed ? DEMO_THRESHOLDS.map((t) => [t.id, clone(t)]) : []),
+    suppliers: new Map(seed ? DEMO_SUPPLIERS.map((s) => [s.id, clone(s)]) : []),
   }
+  const photos = new Map<string, Uint8Array>()
+  let photoFailures = 0
   const deletedLog: { table: RefTable; id: string; at: string }[] = []
   const devicesByToken = new Map<string, ServerDevice>()
   const records = new Map<string, ServerRecord>()
@@ -168,7 +196,7 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
   let dropNextPush = false
   let fail5xxNext = false
   let lastIssued = 0 // ms du dernier server_now émis
-  const calls = { push: 0, pull: 0 }
+  const calls = { push: 0, pull: 0, photo: 0 }
 
   devicesByToken.set(DEMO_DEVICE.device_token, {
     device_id: DEMO_DEVICE.device_id,
@@ -278,16 +306,42 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       staff: changed(refs.staff),
       equipment: changed(refs.equipment),
       thresholds: changed(refs.thresholds),
-      suppliers: [],
+      // Comme la fonction : fournisseurs ACTIFS modifiés depuis `since` (désactivés dans `deleted`).
+      suppliers: changed(refs.suppliers).filter((s) => s.active),
       settings,
       deleted: deletedLog.filter((d) => Date.parse(d.at) > sinceMs).map(({ table, id }) => ({ table, id })),
     })
   }
 
+  async function uploadPhoto(path: string, bytesIn: Uint8Array, auth: DeviceAuth): Promise<PhotoUploadOutcome> {
+    calls.photo++
+    const dev = await gate(auth)
+    if (photoFailures > 0) {
+      photoFailures--
+      throw new TransportError('server', 'Erreur serveur (503, simulation)', 503)
+    }
+    if (!PHOTO_PATH_RE.test(path)) return { ok: false, error: 'invalid_path' }
+    if (path.split('/')[0] !== dev.device_id) return { ok: false, error: 'device_mismatch' }
+    if (bytesIn.byteLength > PHOTO_MAX_BYTES) return { ok: false, error: 'payload_too_large' }
+    const bytes = new Uint8Array(bytesIn) // copie : comme un vrai envoi
+    if (bytes.byteLength === 0 || !isWebp(bytes)) return { ok: false, error: 'invalid_photo' }
+    const existing = photos.get(path)
+    if (existing) return existing.byteLength === bytes.byteLength ? { ok: true, status: 'already_present' } : { ok: false, error: 'photo_conflict' }
+    photos.set(path, bytes)
+    return { ok: true, status: 'created' }
+  }
+
   return {
     push,
     pull,
+    uploadPhoto,
     calls,
+    failNextPhotoUploads: (n) => {
+      photoFailures = n
+    },
+    storedPhotos: () => new Map([...photos].map(([k, v]) => [k, new Uint8Array(v)])),
+    putStoredPhoto: (path, bytes) => void photos.set(path, new Uint8Array(bytes)),
+    upsertSupplier: (sup) => void refs.suppliers.set(sup.id, { ...clone(sup), updated_at: stamp() }),
     setOffline: (v) => {
       offline = v
     },

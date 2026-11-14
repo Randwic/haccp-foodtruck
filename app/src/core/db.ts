@@ -13,6 +13,7 @@ import type {
   StaffMember,
   Threshold,
 } from '../../../shared/types.ts'
+import type { Supplier } from '../../../shared/payloads.ts'
 
 /** Appareil enrôlé (une seule ligne, clé 'self'). Le jeton ne sort jamais du core. */
 export interface DeviceRow {
@@ -55,6 +56,31 @@ export interface PinAttemptsRow {
   locked_until: string | null
 }
 
+/**
+ * État local d'une photo (lot 3) :
+ * - draft    : prise mais référencée par aucune saisie (formulaire en cours) — jamais envoyée ;
+ * - pending  : référencée par une saisie du registre, à envoyer (photo-upload) ;
+ * - uploaded : confirmée par le serveur (201 créée / 200 déjà présente) ;
+ * - failed   : refus définitif du serveur (409 photo_conflict, 415 invalid_photo…) — visible, jamais renvoyée en boucle.
+ */
+export type PhotoState = 'draft' | 'pending' | 'uploaded' | 'failed'
+
+/** Photo stockée sur l'appareil : chemin `<device_id>/<uuid>.webp` + octets WebP. */
+export interface PhotoRow {
+  path: string
+  device_id: string
+  state: PhotoState
+  /** Octets WebP ; null seulement pour une photo envoyée dont la copie locale a été libérée. */
+  bytes: ArrayBuffer | null
+  size: number
+  width: number
+  height: number
+  created_at: string
+  uploaded_at: string | null
+  /** Code d'erreur du serveur (photo_conflict, invalid_photo…) quand state = failed. */
+  error: string | null
+}
+
 /** Métadonnées diverses (clé/valeur). */
 export interface MetaMap {
   since: string | null
@@ -81,6 +107,9 @@ export class CoreDb extends Dexie {
   thresholds!: Table<Threshold, string>
   pin_attempts!: Table<PinAttemptsRow, string>
   meta!: Table<MetaRow, string>
+  // Version 2 (lot 3) : photos et fournisseurs.
+  photos!: Table<PhotoRow, string>
+  suppliers!: Table<Supplier, string>
 
   constructor(name: string) {
     super(name)
@@ -95,6 +124,11 @@ export class CoreDb extends Dexie {
       thresholds: '&id',
       pin_attempts: '&staff_id',
       meta: '&key',
+    })
+    // Lot 3 : ajout de tables uniquement (aucune donnée existante modifiée, pas de fonction d'upgrade).
+    this.version(2).stores({
+      photos: '&path, state, created_at',
+      suppliers: '&id',
     })
     // Garde-fou : toute tentative de réécriture ou de suppression d'un enregistrement échoue,
     // même si un futur code l'essayait par erreur (put sur un id existant, update, delete).

@@ -2,7 +2,9 @@
 // Seule la clé publique « anon » est utilisée ; les droits viennent de la session du gérant (RLS is_manager()).
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { DeviceEnrollResponse, Equipment, Threshold } from '../../../shared/types.ts'
+import { PHOTO_BUCKET, type Supplier } from '../../../shared/payloads.ts'
 import { ManagerError, MESSAGES, type ManagedStaff, type ManagerApi, type ManagerSettings } from './api.ts'
+import { normalizeSupplierInput } from './helpers.ts'
 
 export interface SupabaseManagerOptions {
   url: string
@@ -17,6 +19,7 @@ export interface SupabaseManagerOptions {
 const EQUIPMENT_COLS = 'id,name,kind,active,updated_at'
 const THRESHOLD_COLS = 'id,equipment_id,check_type,min_c,max_c,tolerance_minutes,updated_at'
 const STAFF_COLS = 'id,display_name,role,active,updated_at'
+const SUPPLIER_COLS = 'id,name,phone,email,active,updated_at'
 
 interface PgError {
   message: string
@@ -239,6 +242,40 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
         await run(sb.from('settings').update(settingsPatch).eq('id', 1).select('id').single())
       }
       return this.getSettings()
+    },
+
+    async listSuppliers() {
+      return run<Supplier[]>(sb.from('suppliers').select(SUPPLIER_COLS).order('name'))
+    },
+    async addSupplier(input) {
+      const n = normalizeSupplierInput({ name: input.name, phone: input.phone ?? null, email: input.email ?? null })
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      return run<Supplier>(sb.from('suppliers').insert(n.value).select(SUPPLIER_COLS).single())
+    },
+    async updateSupplier(id, patch) {
+      const { active, ...fields } = patch
+      const n = normalizeSupplierInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const p: Record<string, unknown> = { ...n.value }
+      if (active !== undefined) p.active = active
+      return run<Supplier>(sb.from('suppliers').update(p).eq('id', id).select(SUPPLIER_COLS).single())
+    },
+
+    async downloadPhoto(path) {
+      let res
+      try {
+        res = await sb.storage.from(PHOTO_BUCKET).download(path)
+      } catch {
+        throw new ManagerError('network', MESSAGES.network)
+      }
+      if (res.data) return res.data
+      const e = res.error as (Error & { status?: number; statusCode?: string }) | null
+      const status = e?.status ?? (e?.statusCode ? Number(e.statusCode) : null)
+      if (status === 401) throw new ManagerError('unauthorized', MESSAGES.unauthorized, 401)
+      if (status === 403) throw new ManagerError('forbidden', MESSAGES.forbidden, 403)
+      if (status === 400 || status === 404) throw new ManagerError('validation', 'Photo introuvable sur le serveur (pas encore envoyée par l’appareil ?).', status)
+      if (e && /fetch|network|Load failed/i.test(e.message)) throw new ManagerError('network', MESSAGES.network)
+      throw new ManagerError('server', MESSAGES.server, status)
     },
   }
 }

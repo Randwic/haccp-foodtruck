@@ -2,6 +2,7 @@
 // (équipements, seuils, équipe, réglages). L'interface ne dépend que de cette interface ;
 // implémentations : Supabase (./supabaseManager.ts) et mémoire (./mockManager.ts).
 import type { DeviceEnrollResponse, Equipment, EquipmentKind, RecordType, StaffMember, StaffRole, Threshold } from '../../../shared/types.ts'
+import type { Supplier } from '../../../shared/payloads.ts'
 
 export interface BootstrapStatus {
   needs_bootstrap: boolean
@@ -37,6 +38,13 @@ export interface ManagerSettings {
   missed_slot_carry_over: boolean
   /** DLC proposée après décongélation : jours à partir de la fin (0..30). */
   thaw_dlc_days: number
+}
+
+/** Fournisseur saisi par le gérant (téléphone et email facultatifs : null pour effacer). */
+export interface SupplierInput {
+  name: string
+  phone?: string | null
+  email?: string | null
 }
 
 export type ManagerErrorCode =
@@ -117,4 +125,15 @@ export interface ManagerApi {
   // Réglages
   getSettings(): Promise<ManagerSettings>
   saveSettings(patch: Partial<ManagerSettings>): Promise<ManagerSettings>
+
+  // Fournisseurs (lot 3, table `suppliers`, RLS gérant ; jamais supprimés : active=false)
+  listSuppliers(): Promise<Supplier[]> // actifs ET désactivés, triés par nom
+  addSupplier(input: SupplierInput): Promise<Supplier>
+  updateSupplier(id: string, patch: Partial<SupplierInput> & { active?: boolean }): Promise<Supplier>
+
+  /**
+   * Photo du bucket privé `photos` (lecture réservée au gérant connecté), pour afficher une photo
+   * absente de l'appareil (prise sur un autre appareil, ou copie locale libérée).
+   */
+  downloadPhoto(path: string): Promise<Blob>
 }

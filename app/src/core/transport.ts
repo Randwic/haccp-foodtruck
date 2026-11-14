@@ -5,9 +5,25 @@ export interface DeviceAuth {
   device_token: string
 }
 
+/**
+ * Issue d'un envoi de photo (photo-upload) qui a reçu une réponse définitive du serveur.
+ * Les erreurs passagères (réseau, délai, 5xx) et 401 sont levées en TransportError (réessai / arrêt).
+ */
+export type PhotoUploadOutcome =
+  | { ok: true; status: 'created' | 'already_present' }
+  | { ok: false; error: PhotoRefusal }
+/** Refus définitifs : renvoyer le même fichier ne changerait rien. */
+export type PhotoRefusal = 'photo_conflict' | 'invalid_photo' | 'invalid_path' | 'payload_too_large' | 'device_mismatch'
+const PHOTO_REFUSALS: readonly PhotoRefusal[] = ['photo_conflict', 'invalid_photo', 'invalid_path', 'payload_too_large', 'device_mismatch']
+
 export interface Transport {
   push(req: SyncPushRequest, auth: DeviceAuth): Promise<SyncPushResponse>
   pull(since: string | null, auth: DeviceAuth): Promise<SyncPullResponse>
+  /**
+   * PUT photo-upload (lot 3). Facultatif pour rester compatible avec d'anciens transports :
+   * sans lui, les photos restent « en attente » sur l'appareil.
+   */
+  uploadPhoto?(path: string, bytes: Uint8Array, auth: DeviceAuth): Promise<PhotoUploadOutcome>
 }
 
 /**
@@ -41,6 +57,8 @@ export interface HttpTransportOptions {
   anonKey: string
   /** Délai max d'une requête (défaut 20 s). */
   timeoutMs?: number
+  /** Délai max d'un envoi de photo (défaut 60 s : réseau 4G faible). */
+  photoTimeoutMs?: number
   /** Injection pour les tests. */
   fetchImpl?: typeof fetch
 }
@@ -91,7 +109,51 @@ export function createHttpTransport(opts: HttpTransportOptions): Transport {
     }
   }
 
+  async function uploadPhoto(path: string, bytes: Uint8Array, auth: DeviceAuth): Promise<PhotoUploadOutcome> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), opts.photoTimeoutMs ?? 60_000)
+    let res: Response
+    try {
+      res = await doFetch(`${base}/functions/v1/photo-upload?path=${encodeURIComponent(path)}`, {
+        method: 'PUT',
+        signal: controller.signal,
+        headers: {
+          apikey: opts.anonKey,
+          Authorization: `Bearer ${opts.anonKey}`,
+          'x-device-token': auth.device_token,
+          'Content-Type': 'image/webp',
+        },
+        body: bytes as BodyInit,
+      })
+    } catch (e) {
+      clearTimeout(timer)
+      if (controller.signal.aborted) throw new TransportError('timeout', 'Envoi de photo : délai dépassé')
+      throw new TransportError('network', `Réseau indisponible : ${e instanceof Error ? e.message : String(e)}`)
+    }
+    try {
+      let body: { error?: string } | null = null
+      try {
+        body = (await res.json()) as { error?: string }
+      } catch {
+        body = null
+      }
+      if (res.status === 201 || res.status === 200) return { ok: true, status: res.status === 201 ? 'created' : 'already_present' }
+      const code = typeof body?.error === 'string' ? body.error : ''
+      // 403 device_mismatch : la photo appartient à un autre appareil (ré-enrôlement) — pas une révocation.
+      if ((PHOTO_REFUSALS as readonly string[]).includes(code)) return { ok: false, error: code as PhotoRefusal }
+      if (res.status === 401 || res.status === 403) throw new TransportError('unauthorized', `Appareil non autorisé (${res.status}) ${code}`.trim(), res.status)
+      if (res.status === 409) return { ok: false, error: 'photo_conflict' }
+      if (res.status === 413) return { ok: false, error: 'payload_too_large' }
+      if (res.status === 415) return { ok: false, error: 'invalid_photo' }
+      if (res.status >= 500) throw new TransportError('server', `Erreur serveur (${res.status})`, res.status)
+      throw new TransportError('client', `Envoi de photo refusé (${res.status}) ${code}`.trim(), res.status)
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   return {
+    uploadPhoto,
     push: (req, auth) => call<SyncPushResponse>('sync-push', { method: 'POST', body: JSON.stringify(req) }, auth),
     pull: (since, auth) =>
       call<SyncPullResponse>(`sync-pull?since=${encodeURIComponent(since ?? '')}`, { method: 'GET' }, auth),

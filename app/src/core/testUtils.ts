@@ -1,5 +1,6 @@
 // Aides pour les tests du core (non importées par l'application).
 import { createCore, type Core } from './core.ts'
+import { syntheticWebp, type PhotoEncoder } from './photoEncoder.ts'
 import { createMockTransport, DEMO_DEVICE, DEMO_PINS, DEMO_STAFF, type MockTransport } from './mockTransport.ts'
 import type { Transport } from './transport.ts'
 
@@ -39,12 +40,25 @@ export interface Harness {
 
 const opened: Core[] = []
 
-export function makeHarness(opts: { transport?: (server: MockTransport) => Transport } = {}): Harness {
+/**
+ * Encodeur simulé (pas de canvas sous Node) : produit un WebP synthétique valide dont la taille
+ * suit celle de l'image reçue (bornée), pour des tests déterministes.
+ */
+export const fakePhotoEncoder: PhotoEncoder = async (image) => ({
+  bytes: syntheticWebp(Math.min(Math.max(image.size, 64), 300_000)),
+  width: 1600,
+  height: 1200,
+  encoder: 'native',
+  quality: 0.82,
+})
+
+export function makeHarness(opts: { transport?: (server: MockTransport) => Transport; photoEncoder?: PhotoEncoder } = {}): Harness {
   const clock = makeClock()
   const server = createMockTransport({ now: clock.now })
   const transport = opts.transport ? opts.transport(server) : server
   const dbName = uniqueDbName()
-  const core = createCore({ transport, dbName, now: clock.now })
+  const photoEncoder = opts.photoEncoder ?? fakePhotoEncoder
+  const core = createCore({ transport, dbName, now: clock.now, photoEncoder })
   opened.push(core)
   return {
     clock,
@@ -52,7 +66,7 @@ export function makeHarness(opts: { transport?: (server: MockTransport) => Trans
     core,
     dbName,
     reopen(t?: Transport) {
-      const c = createCore({ transport: t ?? transport, dbName, now: clock.now })
+      const c = createCore({ transport: t ?? transport, dbName, now: clock.now, photoEncoder })
       opened.push(c)
       return c
     },

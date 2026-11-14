@@ -1,6 +1,9 @@
 // Implémentation EN MÉMOIRE de CoreApi, pour les tests et la démo de l'interface.
 // Aucune persistance, aucun réseau, aucune cryptographie réelle : ne jamais l'utiliser en production.
-import type { CoreApi, DeviceInfo, SyncStatus, UnlockResult } from '../core/api.ts'
+import type { CoreApi, DeviceInfo, PhotoStatus, SyncStatus, UnlockResult } from '../core/api.ts'
+import type { Supplier } from '../../../shared/payloads.ts'
+import { referencedPhotoPaths } from '../../../shared/validation.ts'
+import { createBrowserPhotoEncoder, isWebp, type PhotoEncoder } from '../core/photoEncoder.ts'
 import {
   GENESIS_HASH,
   type Equipment,
@@ -11,7 +14,7 @@ import {
   type StaffMember,
   type Threshold,
 } from '../../../shared/types.ts'
-import { DEMO_EQUIPMENT, DEMO_THRESHOLDS } from '../core/mockTransport.ts'
+import { DEMO_EQUIPMENT, DEMO_SUPPLIERS, DEMO_THRESHOLDS } from '../core/mockTransport.ts'
 
 export const FAKE_STAFF_PINS: Record<string, string> = {
   'staff-gerant': '123456',
@@ -37,6 +40,19 @@ export interface FakeCoreOptions {
   noStaffUntilSync?: boolean
   /** Enregistrements déjà présents (démo, tests) : chaînés dans l'ordre donné, `device_time` imposé. */
   initialRecords?: FakeRecordSeed[]
+  /** Fournisseurs (défaut : les 3 fournisseurs de démonstration ; désactivés compris). */
+  suppliers?: Supplier[]
+  /** Compression des photos (défaut : encodeur du navigateur ; les tests injectent un encodeur simulé). */
+  photoEncoder?: PhotoEncoder
+  /** Photos déjà présentes (démo) : chemin → image (ou fabrique, appelée à la première lecture) et état. */
+  initialPhotos?: Record<string, { image: Blob | (() => Promise<Blob>); state?: FakePhotoState }>
+}
+
+export type FakePhotoState = 'draft' | 'pending' | 'uploaded' | 'failed'
+interface FakePhoto {
+  image: Blob | (() => Promise<Blob>)
+  state: FakePhotoState
+  error: string | null
 }
 
 export interface FakeRecordSeed {
@@ -58,6 +74,10 @@ export interface FakeCore extends CoreApi {
     setOnline(online: boolean): void
     /** Marque toutes les saisies en attente comme acceptées. */
     flush(): void
+    /** Ajoute / modifie un fournisseur (comme un sync-pull après une action du gérant). */
+    upsertSupplier(s: Supplier): void
+    /** Refus définitif d'une photo par le serveur (ex. 409 photo_conflict). */
+    failPhoto(path: string, error?: string): void
   }
 }
 
@@ -90,6 +110,11 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
     ...options.settings,
   }
   const thresholds: Threshold[] = DEMO_THRESHOLDS.map((t) => ({ ...t }))
+  const suppliers: Supplier[] = (options.suppliers ?? DEMO_SUPPLIERS).map((x) => ({ ...x }))
+  const photos = new Map<string, FakePhoto>(
+    Object.entries(options.initialPhotos ?? {}).map(([path, p]) => [path, { image: p.image, state: p.state ?? 'uploaded', error: null }]),
+  )
+  let photoEncoder: PhotoEncoder | null = options.photoEncoder ?? null
 
   let device: DeviceInfo | null = options.enrolled
     ? { device_id: '00000000-0000-4000-8000-000000000001', name: 'iPad cuisine', enrolled_at: t0 }
@@ -131,8 +156,17 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
 
   const wait = () => (latency > 0 ? new Promise<void>((r) => setTimeout(r, latency)) : Promise.resolve())
   const emitSession = () => sessionListeners.forEach((cb) => cb(current))
+  const photoCounts = () => {
+    let photos_pending = 0
+    let photos_failed = 0
+    for (const p of photos.values()) {
+      if (p.state === 'pending') photos_pending++
+      else if (p.state === 'failed') photos_failed++
+    }
+    return { photos_pending, photos_failed }
+  }
   const emitSync = () => {
-    const snapshot = { ...status }
+    const snapshot = { ...status, ...photoCounts() }
     syncListeners.forEach((cb) => cb(snapshot))
   }
   const setStatus = (patch: Partial<SyncStatus>) => {
@@ -143,6 +177,7 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
   const flush = () => {
     const now = NOW()
     for (const r of records) if (!r.server_time) r.server_time = now
+    for (const p of photos.values()) if (p.state === 'pending') p.state = 'uploaded'
     staffSynced = true
     setStatus({ pending_count: 0, oldest_pending_at: null, last_success_at: now, last_error: null })
   }
@@ -235,6 +270,17 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
         hash: fakeHash(),
       }
       records.push(rec)
+      const replacement = rec.payload.replacement
+      const paths =
+        type === 'correction'
+          ? typeof replacement === 'object' && replacement !== null && !Array.isArray(replacement)
+            ? referencedPhotoPaths('reception', replacement as Record<string, unknown>)
+            : []
+          : referencedPhotoPaths(type, rec.payload)
+      for (const path of paths) {
+        const p = photos.get(path)
+        if (p?.state === 'draft') p.state = 'pending'
+      }
       setStatus({
         pending_count: status.pending_count + 1,
         oldest_pending_at: status.oldest_pending_at ?? rec.device_time,
@@ -268,15 +314,53 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
       await wait()
       return { ...settings }
     },
+    async listSuppliers(opts) {
+      await wait()
+      return suppliers
+        .filter((x) => opts?.includeInactive || x.active)
+        .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+        .map((x) => ({ ...x }))
+    },
+
+    async addPhoto(image) {
+      await wait()
+      if (!device) throw new Error('Appareil non enrôlé.')
+      photoEncoder ??= createBrowserPhotoEncoder()
+      const enc = await photoEncoder(image)
+      if (!isWebp(enc.bytes)) throw new Error('Photo : encodage WebP impossible.')
+      const path = `${device.device_id}/${uuid()}.webp`
+      photos.set(path, { image: new Blob([enc.bytes.slice().buffer], { type: 'image/webp' }), state: 'draft', error: null })
+      return { path, size: enc.bytes.byteLength, width: enc.width, height: enc.height }
+    },
+    async discardPhoto(path) {
+      const p = photos.get(path)
+      if (!p || p.state !== 'draft') return false
+      photos.delete(path)
+      return true
+    },
+    async getPhoto(path) {
+      const p = photos.get(path)
+      if (!p) return null
+      if (typeof p.image === 'function') p.image = await p.image()
+      return p.image
+    },
+    async getPhotoStatuses(paths) {
+      const out: Record<string, PhotoStatus> = {}
+      for (const path of paths) {
+        const p = photos.get(path)
+        out[path] = p ? { state: p.state, error: p.error, local: true } : { state: 'absent', error: null, local: false }
+      }
+      return out
+    },
 
     async syncNow() {
       await wait()
       if (status.online) flush()
       else setStatus({ last_error: 'Pas de réseau' })
-      return { ...status }
+      return { ...status, ...photoCounts() }
     },
     async getSyncStatus() {
-      return { ...status }
+      return { ...status, ...photoCounts() }
     },
     onSyncStatusChange(cb) {
       syncListeners.add(cb)
@@ -298,6 +382,20 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
         if (online && status.pending_count > 0) scheduleSync()
       },
       flush,
+      upsertSupplier(sup) {
+        const i = suppliers.findIndex((x) => x.id === sup.id)
+        if (i >= 0) suppliers[i] = { ...sup }
+        else suppliers.push({ ...sup })
+        emitSync()
+      },
+      failPhoto(path, error = 'photo_conflict') {
+        const p = photos.get(path)
+        if (p) {
+          p.state = 'failed'
+          p.error = error
+        }
+        emitSync()
+      },
     },
   }
   return core

@@ -7,12 +7,15 @@ import {
   DEMO_ESTABLISHMENT,
   DEMO_SETTINGS,
   DEMO_STAFF,
+  DEMO_SUPPLIERS,
   DEMO_THRESHOLDS,
   type MockTransport,
   type Transport,
 } from '../core/index.ts'
 import type { DeviceEnrollResponse, Equipment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
+import type { Supplier } from '../../../shared/payloads.ts'
 import { ManagerError, MESSAGES, type ManagedStaff, type ManagerApi, type ManagerErrorCode, type ManagerSettings } from './api.ts'
+import { normalizeSupplierInput } from './helpers.ts'
 
 /** Compte de démonstration (mode `seeded`). */
 export const MOCK_MANAGER_ACCOUNT = { email: 'gerant@demo.fr', password: 'demo-demo-demo' } as const
@@ -45,6 +48,7 @@ interface MockState {
   staff: StaffMember[]
   equipment: Equipment[]
   thresholds: Threshold[]
+  suppliers: Supplier[]
 }
 
 export interface MockManagerApi extends ManagerApi {
@@ -65,7 +69,7 @@ const uuid = () => crypto.randomUUID()
 
 function initialState(seeded: boolean): MockState {
   if (!seeded) {
-    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, daily_check_times: [...DEMO_SETTINGS.daily_check_times], missed_slot_carry_over: DEMO_SETTINGS.missed_slot_carry_over, thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days, staff: [], equipment: [], thresholds: [] }
+    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, daily_check_times: [...DEMO_SETTINGS.daily_check_times], missed_slot_carry_over: DEMO_SETTINGS.missed_slot_carry_over, thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days, staff: [], equipment: [], thresholds: [], suppliers: [] }
   }
   return {
     bootstrapped: true,
@@ -79,6 +83,7 @@ function initialState(seeded: boolean): MockState {
     staff: clone(DEMO_STAFF),
     equipment: clone(DEMO_EQUIPMENT),
     thresholds: clone(DEMO_THRESHOLDS),
+    suppliers: clone(DEMO_SUPPLIERS),
   }
 }
 
@@ -116,6 +121,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     try {
       const raw = localStorage.getItem(opts.storageKey)
       if (raw) state = { ...state, ...(JSON.parse(raw) as Partial<MockState>) }
+      state.suppliers ??= [] // état enregistré avant le lot 3
     } catch {
       /* état illisible : on repart de zéro */
     }
@@ -158,7 +164,15 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     void _u
     t.upsertThreshold(rest)
   }
+  const pushSupplier = (s: Supplier) => {
+    if (!t) return
+    const { updated_at: _u, ...rest } = s
+    void _u
+    t.upsertSupplier({ ...rest, active: true })
+    if (!s.active) t.deactivate('suppliers', s.id)
+  }
   if (t) {
+    state.suppliers.forEach(pushSupplier)
     state.staff.forEach(pushStaff)
     state.equipment.forEach(pushEquipment)
     state.thresholds.forEach(pushThreshold)
@@ -342,6 +356,40 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       pushSettings() // le nom d'établissement passe par withEstablishmentName()
       save()
       return settingsView()
+    },
+
+    async listSuppliers() {
+      await gate(true)
+      return clone(state.suppliers).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+    async addSupplier(input) {
+      await gate(true)
+      const n = normalizeSupplierInput({ name: input.name, phone: input.phone ?? null, email: input.email ?? null })
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const s: Supplier = { id: uuid(), name: n.value.name!, phone: n.value.phone ?? null, email: n.value.email ?? null, active: true, updated_at: nowIso() }
+      state.suppliers.push(s)
+      pushSupplier(s)
+      save()
+      return clone(s)
+    },
+    async updateSupplier(id, patch) {
+      await gate(true)
+      const s = state.suppliers.find((x) => x.id === id)
+      if (!s) throw new ManagerError('validation', 'Fournisseur introuvable.', 404)
+      const n = normalizeSupplierInput(patch)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      Object.assign(s, n.value)
+      if (patch.active !== undefined) s.active = patch.active
+      s.updated_at = nowIso()
+      pushSupplier(s)
+      save()
+      return clone(s)
+    },
+    async downloadPhoto(path) {
+      await gate(true)
+      const bytes = t?.storedPhotos().get(path)
+      if (!bytes) throw new ManagerError('validation', 'Photo introuvable sur le serveur (pas encore envoyée par l’appareil ?).', 404)
+      return new Blob([bytes.slice().buffer], { type: 'image/webp' })
     },
 
     simulate: {

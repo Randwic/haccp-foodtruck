@@ -13,8 +13,11 @@ import {
   type SyncPullResponse,
   type Threshold,
 } from '../../../shared/types.ts'
-import type { CoreApi, DeviceInfo, SyncStatus, UnlockResult } from './api.ts'
-import { CoreDb, type DeviceRow, type RecordSyncRow, type StoredRecord } from './db.ts'
+import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Supplier } from '../../../shared/payloads.ts'
+import { referencedPhotoPaths } from '../../../shared/validation.ts'
+import type { CoreApi, DeviceInfo, PhotoStatus, SyncStatus, UnlockResult } from './api.ts'
+import { CoreDb, type DeviceRow, type PhotoRow, type RecordSyncRow, type StoredRecord } from './db.ts'
+import { createBrowserPhotoEncoder, isWebp, type PhotoEncoder } from './photoEncoder.ts'
 import { RECORD_TYPES } from './recordTypes.ts'
 import { PIN_LOCKOUT_MS, PIN_MAX_FAILURES, verifyPin } from './pin.ts'
 import { isTransportError, type Transport } from './transport.ts'
@@ -26,6 +29,10 @@ export const BACKOFF_BASE_MS = 5_000
 export const BACKOFF_MAX_MS = 5 * 60_000
 /** Utilisé tant que les settings n'ont pas été reçus du serveur. */
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
+/** Photos envoyées : copie locale gardée 45 jours (historique hors-ligne), puis libérée. */
+export const PHOTO_LOCAL_KEEP_MS = 45 * 86_400_000
+/** Photos jamais référencées (formulaire abandonné) : supprimées après 7 jours (aucune valeur de preuve). */
+export const PHOTO_DRAFT_KEEP_MS = 7 * 86_400_000
 const AUTO_LOCK_CHECK_MS = 15_000
 const DEFAULT_DB_NAME = 'haccp-core'
 
@@ -63,6 +70,8 @@ export interface CoreOptions {
   background?: boolean
   /** Période de la synchro automatique (défaut 60 s). */
   syncIntervalMs?: number
+  /** Compression des photos (défaut : canvas du navigateur, secours WebAssembly). */
+  photoEncoder?: PhotoEncoder
 }
 
 export interface Core extends CoreApi {
@@ -114,6 +123,16 @@ function toWire(r: StoredRecord): HaccpRecord {
   }
 }
 
+/** Photos référencées par un payload (réception, perte, ou remplacement d'une correction). */
+function photoPathsOf(type: RecordType, payload: Record<string, unknown>): string[] {
+  if (type === 'correction') {
+    const r = payload.replacement
+    if (typeof r !== 'object' || r === null || Array.isArray(r)) return []
+    return referencedPhotoPaths('reception', r as Record<string, unknown>)
+  }
+  return referencedPhotoPaths(type, payload)
+}
+
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
@@ -125,6 +144,7 @@ export function createCore(options: CoreOptions): Core {
   const randomUUID = options.randomUUID ?? (() => crypto.randomUUID())
   const background = options.background ?? true
   const db = new CoreDb(options.dbName ?? DEFAULT_DB_NAME)
+  let photoEncoder: PhotoEncoder | null = options.photoEncoder ?? null
 
   let disposed = false
 
@@ -181,7 +201,11 @@ export function createCore(options: CoreOptions): Core {
     const rejected_count = await db.record_sync.where('state').equals('rejected').count()
     let oldest: string | null = null
     for (const p of pending) if (oldest === null || p.created_at < oldest) oldest = p.created_at
+    const photos_pending = await db.photos.where('state').equals('pending').count()
+    const photos_failed = await db.photos.where('state').equals('failed').count()
     return {
+      photos_pending,
+      photos_failed,
       online: typeof navigator === 'undefined' ? true : navigator.onLine,
       pending_count: pending.length,
       oldest_pending_at: oldest,
@@ -225,14 +249,17 @@ export function createCore(options: CoreOptions): Core {
   }
 
   async function applyPull(resp: SyncPullResponse): Promise<void> {
-    await db.transaction('rw', [db.staff, db.equipment, db.thresholds, db.meta], async () => {
+    await db.transaction('rw', [db.staff, db.equipment, db.thresholds, db.suppliers, db.meta], async () => {
       if (resp.staff.length) await db.staff.bulkPut(resp.staff)
       if (resp.equipment.length) await db.equipment.bulkPut(resp.equipment)
       if (resp.thresholds.length) await db.thresholds.bulkPut(resp.thresholds)
+      // `suppliers` (lot 3) : absent d'un serveur plus ancien.
+      if (Array.isArray(resp.suppliers) && resp.suppliers.length) await db.suppliers.bulkPut(resp.suppliers)
       for (const d of resp.deleted) {
-        // Staff / équipements : on garde la ligne (pour afficher l'auteur d'anciens relevés) mais inactive.
+        // Staff / équipements / fournisseurs : on garde la ligne (nom des anciens enregistrements) mais inactive.
         if (d.table === 'staff') await db.staff.update(d.id, { active: false })
         else if (d.table === 'equipment') await db.equipment.update(d.id, { active: false })
+        else if (d.table === 'suppliers') await db.suppliers.update(d.id, { active: false })
         else if (d.table === 'thresholds') await db.thresholds.delete(d.id)
       }
       await db.setMeta('establishment', resp.establishment)
@@ -302,6 +329,58 @@ export function createCore(options: CoreOptions): Core {
     }
   }
 
+  /**
+   * Envoi des photos référencées (état `pending`) de cet appareil, une par une, les plus anciennes
+   * d'abord. 201/200 → `uploaded` ; refus définitif (409 photo_conflict…) → `failed`, jamais renvoyée.
+   * Erreur passagère (réseau, 5xx) : levée → backoff de la synchro, la photo reste `pending`.
+   */
+  /**
+   * Met à jour une photo par get + put. (Pas de `update`/`modify` de Dexie : leur copie profonde ne
+   * conserve pas un ArrayBuffer, les octets seraient perdus.)
+   */
+  async function patchPhoto(path: string, patch: Partial<PhotoRow>): Promise<void> {
+    await db.transaction('rw', db.photos, async () => {
+      const row = await db.photos.get(path)
+      if (row) await db.photos.put({ ...row, ...patch })
+    })
+  }
+
+  async function uploadPhotos(device: DeviceRow): Promise<void> {
+    const upload = transport.uploadPhoto?.bind(transport)
+    if (upload) {
+      for (;;) {
+        const rows = await db.photos
+          .where('state')
+          .equals('pending')
+          .filter((r) => r.device_id === device.device_id)
+          .sortBy('created_at')
+        if (rows.length === 0) break
+        for (const row of rows) {
+          if (!row.bytes) {
+            await patchPhoto(row.path, { state: 'failed', error: 'missing_bytes' })
+            continue
+          }
+          const res = await upload(row.path, new Uint8Array(row.bytes), { device_token: device.device_token })
+          if (res.ok) await patchPhoto(row.path, { state: 'uploaded', uploaded_at: now().toISOString(), error: null })
+          else await patchPhoto(row.path, { state: 'failed', error: res.error })
+          void emitStatus()
+        }
+      }
+    }
+    // Ménage : brouillons abandonnés (jamais référencés), copies locales anciennes déjà envoyées.
+    const t = now().getTime()
+    const draftLimit = new Date(t - PHOTO_DRAFT_KEEP_MS).toISOString()
+    await db.photos.where('state').equals('draft').filter((r) => r.created_at < draftLimit).delete()
+    const keepLimit = new Date(t - PHOTO_LOCAL_KEEP_MS).toISOString()
+    await db.photos
+      .where('state')
+      .equals('uploaded')
+      .filter((r) => r.bytes !== null && (r.uploaded_at ?? r.created_at) < keepLimit)
+      .modify((r) => {
+        r.bytes = null
+      })
+  }
+
   /** Une passe complète push puis pull. Renvoie true si réussie. */
   async function syncOnce(): Promise<boolean> {
     const device = await db.device.get('self')
@@ -310,6 +389,7 @@ export function createCore(options: CoreOptions): Core {
     try {
       await pushAll(device)
       await pullOnce(device)
+      await uploadPhotos(device)
       failures = 0
       nextAttemptAt = 0
       await db.setMeta('last_success_at', now().toISOString())
@@ -498,7 +578,10 @@ export function createCore(options: CoreOptions): Core {
 
       // Une seule transaction : lecture de la tête de chaîne, hachage, écriture. IndexedDB sérialise
       // les transactions rw sur les mêmes tables : deux appels concurrents ne peuvent pas lire la même tête.
-      const record = await db.transaction('rw', [db.records, db.record_sync, db.chain], async () => {
+      // Photos référencées par la saisie (y compris dans le remplacement d'une correction) : elles
+      // quittent l'état brouillon dans la MÊME transaction et partiront à la prochaine synchro.
+      const photoPaths = photoPathsOf(type, cleanPayload)
+      const record = await db.transaction('rw', [db.records, db.record_sync, db.chain, db.photos], async () => {
         const head = (await db.chain.get(device.device_id)) ?? { device_id: device.device_id, last_seq: 0, last_hash: GENESIS_HASH }
         const recordCore: RecordCore = {
           id: randomUUID(),
@@ -528,6 +611,10 @@ export function createCore(options: CoreOptions): Core {
         }
         await db.record_sync.add(syncRow)
         await db.chain.put({ device_id: device.device_id, last_seq: stored.device_seq, last_hash: hash })
+        for (const path of photoPaths) {
+          const photo = await db.photos.get(path)
+          if (photo?.state === 'draft') await db.photos.put({ ...photo, state: 'pending' })
+        }
         return stored
       })
       void emitStatus()
@@ -561,6 +648,66 @@ export function createCore(options: CoreOptions): Core {
     },
     async getSettings(): Promise<Settings | null> {
       return db.getMeta('settings', null)
+    },
+    async listSuppliers(opts?: { includeInactive?: boolean }): Promise<Supplier[]> {
+      const all = await db.suppliers.toArray()
+      return all.filter((s) => opts?.includeInactive || s.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+
+    async addPhoto(image: Blob) {
+      const device = await db.device.get('self')
+      if (!device) throw new CoreError('not_enrolled', 'Appareil non enrôlé')
+      photoEncoder ??= createBrowserPhotoEncoder()
+      let encoded
+      try {
+        encoded = await photoEncoder(image)
+      } catch (e) {
+        throw new CoreError('invalid_input', `Photo : ${errorMessage(e)}`)
+      }
+      const bytes = encoded.bytes
+      if (!isWebp(bytes)) throw new CoreError('invalid_input', 'Photo : le fichier produit n’est pas une image WebP')
+      if (bytes.byteLength > PHOTO_MAX_BYTES) throw new CoreError('invalid_input', 'Photo trop volumineuse')
+      const path = `${device.device_id}/${randomUUID()}.webp`
+      if (!PHOTO_PATH_RE.test(path)) throw new CoreError('invalid_input', `Chemin de photo invalide : ${path}`)
+      const row: PhotoRow = {
+        path,
+        device_id: device.device_id,
+        state: 'draft',
+        bytes: bytes.slice().buffer,
+        size: bytes.byteLength,
+        width: encoded.width,
+        height: encoded.height,
+        created_at: now().toISOString(),
+        uploaded_at: null,
+        error: null,
+      }
+      await db.photos.add(row)
+      touch()
+      return { path, size: row.size, width: row.width, height: row.height }
+    },
+
+    async discardPhoto(path: string) {
+      return db.transaction('rw', db.photos, async () => {
+        const row = await db.photos.get(path)
+        if (!row || row.state !== 'draft') return false
+        await db.photos.delete(path)
+        return true
+      })
+    },
+
+    async getPhoto(path: string) {
+      const row = await db.photos.get(path)
+      return row?.bytes ? new Blob([row.bytes], { type: 'image/webp' }) : null
+    },
+
+    async getPhotoStatuses(paths: readonly string[]) {
+      const rows = await db.photos.bulkGet([...paths])
+      const out: Record<string, PhotoStatus> = {}
+      paths.forEach((p, i) => {
+        const r = rows[i]
+        out[p] = r ? { state: r.state, error: r.error, local: r.bytes !== null } : { state: 'absent', error: null, local: false }
+      })
+      return out
     },
 
     async syncNow() {

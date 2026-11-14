@@ -86,6 +86,8 @@ export function SyncIndicator({ timeZone, persistentStorage = null }: { timeZone
           {row('Saisies en attente', String(status.pending_count))}
           {row('Plus ancienne en attente', status.oldest_pending_at ? formatDateTime(status.oldest_pending_at, timeZone) : '—')}
           {row('Saisies refusées', String(status.rejected_count))}
+          {status.photos_pending !== undefined && row('Photos en attente d’envoi', String(status.photos_pending))}
+          {(status.photos_failed ?? 0) > 0 && row('Photos refusées', String(status.photos_failed))}
           {row('Dernière synchro réussie', status.last_success_at ? formatDateTime(status.last_success_at, timeZone) : 'Jamais')}
           {persistentStorage !== null && row('Stockage protégé sur l’appareil', persistentStorage ? 'Oui' : 'Non – installez l’app')}
         </dl>

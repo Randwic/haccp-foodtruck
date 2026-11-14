@@ -35,6 +35,8 @@ export interface TemperatureData {
   enclosures: Equipment[]
   thresholds: Threshold[]
   checkTimes: string[]
+  /** Réglage `missed_slot_carry_over` : créneau oublié la veille reporté (défaut true). */
+  carryOver: boolean
   timeZone: string
   readings: Reading[]
   staff: StaffMember[]
@@ -61,6 +63,7 @@ export function useTemperatureData() {
         enclosures: equipment.filter(isMonitoredEnclosure),
         thresholds,
         checkTimes: normalizeCheckTimes(settings?.daily_check_times),
+        carryOver: settings?.missed_slot_carry_over ?? true,
         timeZone: establishment?.timezone || DEFAULT_TIMEZONE,
         readings: buildReadings(lists.flat()),
         staff,
@@ -93,7 +96,7 @@ export function useTemperatureStatus(): {
   const { data, error, reload } = useTemperatureData()
   const now = useNow(30_000)
   const statuses = useMemo(
-    () => (data ? enclosureStatuses({ equipment: data.enclosures, readings: data.readings, now, checkTimes: data.checkTimes, timeZone: data.timeZone }) : []),
+    () => (data ? enclosureStatuses({ equipment: data.enclosures, readings: data.readings, now, checkTimes: data.checkTimes, timeZone: data.timeZone, carryOver: data.carryOver }) : []),
     [data, now],
   )
   const summary = useMemo(() => (data ? summarize(statuses) : null), [data, statuses])

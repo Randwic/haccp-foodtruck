@@ -8,6 +8,8 @@ import { ConfirmModal, useManagement } from './common.tsx'
 
 const MIN_LOCK = 1
 const MAX_LOCK = 30
+const MIN_DLC_DAYS = 0
+const MAX_DLC_DAYS = 30
 
 /** Première heure ronde libre, pour « Ajouter une heure ». */
 function nextFreeTime(times: string[]): string {
@@ -25,6 +27,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
   const [name, setName] = useState('')
   const [minutes, setMinutes] = useState(5)
   const [times, setTimes] = useState<string[]>([])
+  const [carryOver, setCarryOver] = useState(true)
+  const [dlcDays, setDlcDays] = useState(3)
   const [timesError, setTimesError] = useState<string>()
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -41,6 +45,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
         setName(s.establishment_name)
         setMinutes(s.auto_lock_minutes)
         setTimes(s.daily_check_times)
+        setCarryOver(s.missed_slot_carry_over)
+        setDlcDays(s.thaw_dlc_days)
         setLoaded(true)
       },
       (e) => alive && setLoadError(errorText(e)),
@@ -61,12 +67,20 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
     setError(null)
     try {
       const s = await run(
-        () => manager.saveSettings({ establishment_name: name.trim(), auto_lock_minutes: minutes, daily_check_times: [...times].sort() }),
+        () => manager.saveSettings({
+            establishment_name: name.trim(),
+            auto_lock_minutes: minutes,
+            daily_check_times: [...times].sort(),
+            missed_slot_carry_over: carryOver,
+            thaw_dlc_days: dlcDays,
+          }),
         'Réglages enregistrés',
       )
       setName(s.establishment_name)
       setMinutes(s.auto_lock_minutes)
       setTimes(s.daily_check_times)
+      setCarryOver(s.missed_slot_carry_over)
+      setDlcDays(s.thaw_dlc_days)
     } catch (err) {
       setError(errorText(err))
     } finally {
@@ -78,6 +92,7 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
   if (!loaded) return <p className="text-[17px] text-fg-muted">Chargement…</p>
 
   const step = (d: number) => setMinutes((m) => Math.min(MAX_LOCK, Math.max(MIN_LOCK, m + d)))
+  const stepDlc = (d: number) => setDlcDays((m) => Math.min(MAX_DLC_DAYS, Math.max(MIN_DLC_DAYS, m + d)))
   const stepBtn = 'flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-line-strong bg-elevated text-fg shadow-card transition-transform active:scale-[0.96] active:bg-pressed disabled:opacity-40'
 
   return (
@@ -143,6 +158,52 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
               <Notice>{timesError}</Notice>
             </div>
           )}
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p id="carry-over-label" className="mb-1.5 text-[15px] font-semibold text-fg">
+              Créneau oublié la veille reste à faire
+            </p>
+            <p id="carry-over-hint" className="text-[15px] text-fg-muted">
+              {carryOver
+                ? 'Activé : si le dernier relevé de la veille manque, il est demandé dès l’ouverture, avant le premier créneau du jour.'
+                : 'Désactivé : rien n’est « à faire » avant le premier créneau du jour.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={carryOver}
+            aria-labelledby="carry-over-label"
+            aria-describedby="carry-over-hint"
+            onClick={() => setCarryOver((v) => !v)}
+            className={`relative mt-1 h-10 w-[4.25rem] shrink-0 rounded-full border transition-colors ${carryOver ? 'border-accent bg-accent' : 'border-line-strong bg-sunken'}`}
+          >
+            <span
+              aria-hidden="true"
+              className={`absolute top-1 left-1 h-[1.875rem] w-[1.875rem] rounded-full shadow-card transition-transform ${carryOver ? 'translate-x-7 bg-on-accent' : 'bg-fg-subtle'}`}
+            />
+          </button>
+        </div>
+        <div>
+          <p id="dlc-label" className="mb-1.5 text-[15px] font-semibold text-fg">
+            DLC après décongélation (jours)
+          </p>
+          <p className="mb-3 text-[15px] text-fg-muted">DLC proposée à la fin d’une décongélation : date de fin + ce nombre de jours (modifiable à chaque saisie). À fixer selon votre PMS.</p>
+          <div className="flex items-center gap-4" role="group" aria-labelledby="dlc-label">
+            <button type="button" className={stepBtn} onClick={() => stepDlc(-1)} disabled={dlcDays <= MIN_DLC_DAYS} aria-label="Diminuer d’un jour">
+              <IconMinus size={22} />
+            </button>
+            <output aria-live="polite" className="min-w-28 text-center text-[28px] font-semibold tracking-[-0.02em] text-fg tabular-nums">
+              J+{dlcDays}
+            </output>
+            <button type="button" className={stepBtn} onClick={() => stepDlc(1)} disabled={dlcDays >= MAX_DLC_DAYS} aria-label="Augmenter d’un jour">
+              <IconPlus size={22} />
+            </button>
+          </div>
+          <p className="mt-2 text-[15px] text-fg-subtle">
+            Entre {MIN_DLC_DAYS} et {MAX_DLC_DAYS} jours.
+          </p>
         </div>
         <div>
           <p id="lock-label" className="mb-1.5 text-[15px] font-semibold text-fg">

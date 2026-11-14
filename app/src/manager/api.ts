@@ -33,6 +33,10 @@ export interface ManagerSettings {
   auto_lock_minutes: number
   /** Heures des relevés d'enceintes, « HH:MM » heure locale de l'établissement, 1 à 6, triées. */
   daily_check_times: string[]
+  /** Un créneau de relevé oublié la veille reste « à faire » avant le premier créneau du jour. */
+  missed_slot_carry_over: boolean
+  /** DLC proposée après décongélation : jours à partir de la fin (0..30). */
+  thaw_dlc_days: number
 }
 
 export type ManagerErrorCode =

@@ -40,6 +40,8 @@ interface MockState {
   establishment_name: string
   auto_lock_minutes: number
   daily_check_times: string[]
+  missed_slot_carry_over: boolean
+  thaw_dlc_days: number
   staff: StaffMember[]
   equipment: Equipment[]
   thresholds: Threshold[]
@@ -63,7 +65,7 @@ const uuid = () => crypto.randomUUID()
 
 function initialState(seeded: boolean): MockState {
   if (!seeded) {
-    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, daily_check_times: [...DEMO_SETTINGS.daily_check_times], staff: [], equipment: [], thresholds: [] }
+    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, daily_check_times: [...DEMO_SETTINGS.daily_check_times], missed_slot_carry_over: DEMO_SETTINGS.missed_slot_carry_over, thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days, staff: [], equipment: [], thresholds: [] }
   }
   return {
     bootstrapped: true,
@@ -72,6 +74,8 @@ function initialState(seeded: boolean): MockState {
     establishment_name: DEMO_ESTABLISHMENT.name,
     auto_lock_minutes: DEMO_SETTINGS.auto_lock_minutes,
     daily_check_times: [...DEMO_SETTINGS.daily_check_times],
+    missed_slot_carry_over: DEMO_SETTINGS.missed_slot_carry_over,
+    thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days,
     staff: clone(DEMO_STAFF),
     equipment: clone(DEMO_EQUIPMENT),
     thresholds: clone(DEMO_THRESHOLDS),
@@ -127,7 +131,13 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
 
   // ---- répercussion vers le serveur simulé du core ----
   const pushSettings = () =>
-    t?.setSettings({ ...DEMO_SETTINGS, auto_lock_minutes: state.auto_lock_minutes, daily_check_times: [...state.daily_check_times] } satisfies Settings)
+    t?.setSettings({
+      ...DEMO_SETTINGS,
+      auto_lock_minutes: state.auto_lock_minutes,
+      daily_check_times: [...state.daily_check_times],
+      missed_slot_carry_over: state.missed_slot_carry_over ?? DEMO_SETTINGS.missed_slot_carry_over,
+      thaw_dlc_days: state.thaw_dlc_days ?? DEMO_SETTINGS.thaw_dlc_days,
+    } satisfies Settings)
   const pushStaff = (s: StaffMember) => {
     if (!t) return
     const { updated_at: _u, ...rest } = s
@@ -179,6 +189,9 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     establishment_name: state.establishment_name,
     auto_lock_minutes: state.auto_lock_minutes,
     daily_check_times: [...state.daily_check_times],
+    // États enregistrés avant l'ajout de ces réglages : valeurs par défaut.
+    missed_slot_carry_over: state.missed_slot_carry_over ?? DEMO_SETTINGS.missed_slot_carry_over,
+    thaw_dlc_days: state.thaw_dlc_days ?? DEMO_SETTINGS.thaw_dlc_days,
   })
 
   const api: MockManagerApi = {
@@ -320,6 +333,12 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
         state.auto_lock_minutes = m
       }
       if (patch.daily_check_times !== undefined) state.daily_check_times = checkCheckTimes(patch.daily_check_times)
+      if (patch.missed_slot_carry_over !== undefined) state.missed_slot_carry_over = patch.missed_slot_carry_over === true
+      if (patch.thaw_dlc_days !== undefined) {
+        const d = patch.thaw_dlc_days
+        if (!Number.isInteger(d) || d < 0 || d > 30) throw new ManagerError('validation', 'La DLC après décongélation doit être comprise entre 0 et 30 jours.', 400)
+        state.thaw_dlc_days = d
+      }
       pushSettings() // le nom d'établissement passe par withEstablishmentName()
       save()
       return settingsView()

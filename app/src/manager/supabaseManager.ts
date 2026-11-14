@@ -211,13 +211,19 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
     async getSettings(): Promise<ManagerSettings> {
       const [e, s] = await Promise.all([
         run<{ name: string }>(sb.from('establishment').select('name').limit(1).single()),
-        run<{ auto_lock_minutes: number; daily_check_times: string[] | null }>(
-          sb.from('settings').select('auto_lock_minutes, daily_check_times').eq('id', 1).single(),
+        run<{ auto_lock_minutes: number; daily_check_times: string[] | null; missed_slot_carry_over: boolean | null; thaw_dlc_days: number | null }>(
+          sb.from('settings').select('auto_lock_minutes, daily_check_times, missed_slot_carry_over, thaw_dlc_days').eq('id', 1).single(),
         ),
       ])
       // Colonne time[] ou text[] : Postgres peut renvoyer « 08:00:00 », on garde HH:MM.
       const times = (s.daily_check_times ?? []).map((t) => String(t).slice(0, 5)).sort()
-      return { establishment_name: e.name, auto_lock_minutes: s.auto_lock_minutes, daily_check_times: times }
+      return {
+        establishment_name: e.name,
+        auto_lock_minutes: s.auto_lock_minutes,
+        daily_check_times: times,
+        missed_slot_carry_over: s.missed_slot_carry_over ?? true,
+        thaw_dlc_days: s.thaw_dlc_days ?? 3,
+      }
     },
     async saveSettings(patch) {
       if (patch.establishment_name !== undefined) {
@@ -227,6 +233,8 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
       const settingsPatch: Record<string, unknown> = {}
       if (patch.auto_lock_minutes !== undefined) settingsPatch.auto_lock_minutes = patch.auto_lock_minutes
       if (patch.daily_check_times !== undefined) settingsPatch.daily_check_times = [...patch.daily_check_times].sort()
+      if (patch.missed_slot_carry_over !== undefined) settingsPatch.missed_slot_carry_over = patch.missed_slot_carry_over
+      if (patch.thaw_dlc_days !== undefined) settingsPatch.thaw_dlc_days = patch.thaw_dlc_days
       if (Object.keys(settingsPatch).length > 0) {
         await run(sb.from('settings').update(settingsPatch).eq('id', 1).select('id').single())
       }

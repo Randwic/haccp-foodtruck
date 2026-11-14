@@ -44,6 +44,18 @@ describe('créneaux (Europe/Paris)', () => {
     expect(currentSlot(new Date(), [], TZ)).toBeNull()
   })
 
+  it('report du créneau oublié désactivé : rien à faire avant le premier créneau du jour', () => {
+    const times = ['08:00', '18:00']
+    // 14/11 06:00 Paris : pas de report → aucun créneau en cours
+    expect(currentSlot(new Date('2026-11-14T05:00:00Z'), times, TZ, false)).toBeNull()
+    // Après 08:00, comportement identique
+    expect(iso(currentSlot(new Date('2026-11-14T08:30:00Z'), times, TZ, false))).toBe('2026-11-14T07:00:00.000Z')
+    const now = new Date('2026-11-14T05:00:00Z')
+    const input = { equipment: [eq('F1')], readings: [], now, checkTimes: times, timeZone: TZ }
+    expect(summarize(enclosureStatuses(input)).due).toBe(1)
+    expect(summarize(enclosureStatuses({ ...input, carryOver: false })).due).toBe(0)
+  })
+
   it('heures normalisées : valides, uniques, triées', () => {
     expect(normalizeCheckTimes(['18:00', '8:00', '08:00', '25:00', '08:00'])).toEqual(['08:00', '18:00'])
   })

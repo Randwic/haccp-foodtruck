@@ -199,3 +199,65 @@ export interface LabelPrintedPayload {
   source_record_ids?: string[] // 0..20 : réceptions / décongélations utilisées (traçabilité amont→aval)
   copies: number // 1..20
 }
+
+// ───────────────────────────── Lot 5 : nettoyage, checklists, huiles ─────────────────────────────
+
+export type CleaningFrequency = 'after_service' | 'daily' | 'weekly' | 'monthly'
+
+/** Tâche du plan de nettoyage et désinfection (référence gérée dans Gestion, transmise par sync-pull). */
+export interface CleaningTask {
+  id: string
+  name: string // zone / équipement, 1..80 (ex. « Plan de travail », « Friteuse »)
+  frequency: CleaningFrequency
+  product: string | null // produit utilisé, 0..80
+  method: string | null // mode opératoire, 0..500
+  active: boolean
+  updated_at: string
+}
+
+/** Nettoyage réalisé — type 'cleaning_done'. */
+export interface CleaningDonePayload {
+  task_id: string
+  comment?: string // 0..300
+  photo_paths?: string[] // 0..3 (format PHOTO_PATH_RE)
+}
+
+export interface ChecklistItem {
+  id: string // identifiant stable dans la checklist (1..40, [a-z0-9_-])
+  label: string // 1..120
+  required: boolean
+}
+
+/** Checklist (ouverture, fermeture, nuisibles…) — référence gérée dans Gestion, transmise par sync-pull. */
+export interface Checklist {
+  id: string
+  name: string // 1..80
+  kind: 'opening' | 'closing' | 'pest_control' | 'other'
+  items: ChecklistItem[] // 1..40
+  active: boolean
+  updated_at: string
+}
+
+/** Checklist remplie — type 'checklist_done'. Tout point « non » requiert un commentaire. */
+export interface ChecklistDonePayload {
+  checklist_id: string
+  answers: { item_id: string; ok: boolean; comment?: string }[] // 1..40, un par point de la checklist
+  all_ok: boolean // calculé par l'app (tous les points ok)
+}
+
+/** Contrôle de l'huile de friture — type 'oil_check' (composés polaires, limite légale 25 %, décret 2008-184). */
+export interface OilCheckPayload {
+  equipment_id: string // bac de friteuse (kind 'fryer_vat')
+  polar_percent: number // 0..50, 1 décimale
+  method: 'tester' | 'strip' // testeur électronique ou bandelette
+  in_range: boolean // calculé par l'app : polar_percent ≤ settings.oil_polar_max
+}
+
+/** Changement d'huile — type 'oil_change'. */
+export interface OilChangePayload {
+  equipment_id: string // bac de friteuse
+  comment?: string // 0..300
+}
+
+/** Réglages huile (ajoutés à Settings) : limite 25 % (légale), alerte préventive 22 % (par défaut). */
+export const DEFAULT_OIL_SETTINGS = { oil_polar_max: 25, oil_polar_warn: 22 } as const

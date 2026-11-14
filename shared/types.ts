@@ -139,4 +139,6 @@ export interface Settings {
   daily_check_times: string[] // heures des relevés d'enceintes, ex. ['08:00', '18:00'] (heure locale de l'établissement)
   missed_slot_carry_over: boolean // un créneau oublié la veille reste « à faire » avant le premier créneau du jour (défaut true)
   thaw_dlc_days: number // DLC proposée après décongélation, en jours à partir de la fin (défaut 3, 0..30)
+  oil_polar_max: number // limite des composés polaires en % (défaut 25, légal), 10..30
+  oil_polar_warn: number // seuil d'alerte préventive en % (défaut 22), < oil_polar_max
 }

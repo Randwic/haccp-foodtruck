@@ -75,6 +75,8 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
       daily_check_times: [...settings.daily_check_times],
       missed_slot_carry_over: settings.missed_slot_carry_over ?? true,
       thaw_dlc_days: settings.thaw_dlc_days ?? 3,
+      oil_polar_max: Number(settings.oil_polar_max ?? 25),
+      oil_polar_warn: Number(settings.oil_polar_warn ?? 22),
     },
     suppliers: suppliers
       .filter((s) => s.active)

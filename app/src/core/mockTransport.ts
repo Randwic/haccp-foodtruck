@@ -93,6 +93,8 @@ export const DEMO_SETTINGS: Settings = {
   thaw_dlc_days: 3,
   oil_polar_max: 25,
   oil_polar_warn: 22,
+  sensor_silent_minutes: 60,
+  alert_repeat_minutes: 15,
     retention_years: 3,
   auto_lock_minutes: 5, // [À CONFIRMER]
   clock_suspect_minutes: 5,
@@ -315,6 +317,8 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       recipes: [],
       cleaning_tasks: [],
       checklists: [],
+      sensors: [],
+      alerts: [],
       settings,
       deleted: deletedLog.filter((d) => Date.parse(d.at) > sinceMs).map(({ table, id }) => ({ table, id })),
     })

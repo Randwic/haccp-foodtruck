@@ -105,6 +105,8 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
   thaw_dlc_days: 3,
   oil_polar_max: 25,
   oil_polar_warn: 22,
+    sensor_silent_minutes: 60,
+    alert_repeat_minutes: 15,
     retention_years: 3,
     auto_lock_minutes: 5,
     clock_suspect_minutes: 5,

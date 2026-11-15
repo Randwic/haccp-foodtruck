@@ -65,3 +65,21 @@ verify_jwt = false
 # (secret PURGE_PHOTOS_SECRET), pas de JWT.
 [functions.purge-photos]
 verify_jwt = false
+
+# Lot 6 : mesures des capteurs (webhooks Shelly…) : jeton du capteur dans l'URL (?token=) ou
+# l'en-tête x-sensor-token — les webhooks Shelly ne savent pas envoyer de JWT.
+[functions.sensor-ingest]
+verify_jwt = false
+
+# Moteur d'alertes planifié (pg_cron + pg_net, toutes les 5 min) : en-tête x-alerts-secret
+# (secret ALERTS_EVALUATE_SECRET), pas de JWT.
+[functions.alerts-evaluate]
+verify_jwt = false
+
+# Abonnement Web Push d'un appareil (jeton x-device-token, comme sync-push).
+[functions.push-subscribe]
+verify_jwt = false
+
+# Clé publique VAPID (publique par nature).
+[functions.push-config]
+verify_jwt = false

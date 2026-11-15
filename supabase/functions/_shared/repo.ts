@@ -1,7 +1,7 @@
 // Accès aux données, injecté dans la logique pure. Implémentations :
 //  - _adapters/supabase_repo.ts (Deno, supabase-js, service_role) en production ;
 //  - _shared/memory_repo.ts (en mémoire) pour les tests Vitest.
-import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Alert, AlertKind, Checklist, CleaningTask, Product, Recipe, Sensor, Supplier } from '../../../shared/payloads.ts'
 import type { Equipment, EquipmentKind, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 
 export interface DeviceRow {
@@ -131,6 +131,8 @@ export interface PushRepo extends DeviceAuthRepo {
    * Ordre quelconque, id inconnus ignorés.
    */
   getPayloadsByIds(ids: string[]): Promise<{ id: string; type: string; payload: unknown }[]>
+  /** Alerte existante (résolue ou non) : `alert_ack.alert_id` (lot 6). */
+  alertExists(alertId: string): Promise<boolean>
   insertRecord(row: NewRecordRow): Promise<InsertResult>
 }
 
@@ -146,6 +148,102 @@ export interface PullRepo extends DeviceAuthRepo {
   listRecipes(since: string | null): Promise<Recipe[]>
   listCleaningTasks(since: string | null): Promise<CleaningTask[]>
   listChecklists(since: string | null): Promise<Checklist[]>
+  /** Capteurs (actifs ou non) avec updated_at ≥ since ; tous si since = null. Jamais le token_hash. */
+  listSensors(since: string | null): Promise<Sensor[]>
+  /** Alertes ouvertes (resolved_at null) ∪ alertes modifiées depuis since (updated_at ≥ since). */
+  listAlerts(since: string | null): Promise<Alert[]>
+}
+
+// ───────────────────────────── Lot 6 : capteurs, alertes, Web Push ─────────────────────────────
+
+/** Capteur retrouvé par le SHA-256 de son jeton d'envoi. */
+export interface SensorAuthRow {
+  id: string
+  name: string
+  equipment_id: string
+  active: boolean
+  last_seen_at: string | null
+}
+
+/** Résultat de `sensor_record_reading()` (verrou, limite de débit, insertion, télémétrie : tout ou rien). */
+export type RecordReadingResult = 'stored' | 'rate_limited' | 'inactive' | 'unknown_sensor'
+
+export interface SensorIngestRepo {
+  findSensorByTokenHash(tokenHash: string): Promise<SensorAuthRow | null>
+  recordSensorReading(row: {
+    sensor_id: string
+    /** null : heure du serveur. */
+    measured_at: string | null
+    value_c: number
+    battery_percent: number | null
+    min_interval_seconds: number
+  }): Promise<RecordReadingResult>
+}
+
+/** Capteur pour le moteur d'alertes (created_at : « muet depuis la création » s'il n'a jamais émis). */
+export interface SensorForAlerts extends Sensor {
+  created_at: string
+}
+
+export interface SensorReadingRow {
+  sensor_id: string
+  measured_at: string
+  value_c: number
+}
+
+/** Enregistrement du registre utile au moteur d'alertes (hors quarantaine). */
+export interface EngineRecord {
+  id: string
+  type: string
+  payload: Record<string, unknown>
+  device_time: string
+  supersedes_id: string | null
+}
+
+export interface NewAlertRow {
+  kind: AlertKind
+  equipment_id: string | null
+  sensor_id: string | null
+  related_record_id: string | null
+  message: string
+}
+
+export interface PushSubscriptionRow {
+  id: string
+  device_id: string
+  endpoint: string
+  p256dh: string
+  auth: string
+  failures: number
+}
+
+export interface AlertsRepo {
+  getSettings(): Promise<Settings | null>
+  getEstablishment(): Promise<Establishment | null>
+  listEquipment(since: null): Promise<Equipment[]>
+  listThresholds(since: null): Promise<Threshold[]>
+  listSensorsForAlerts(): Promise<SensorForAlerts[]>
+  /** Mesures des capteurs donnés avec measured_at ≥ since, ordre quelconque. */
+  listSensorReadings(sensorIds: string[], since: string): Promise<SensorReadingRow[]>
+  /** Enregistrements HORS QUARANTAINE des types donnés, reçus (server_time) depuis `sinceServerTime`. */
+  listRecentRecords(sinceServerTime: string, types: readonly string[]): Promise<EngineRecord[]>
+  listOpenAlerts(): Promise<Alert[]>
+  /** Ouvre une alerte ; null si une alerte ouverte existe déjà pour ce sujet (index unique). */
+  openAlert(row: NewAlertRow): Promise<Alert | null>
+  resolveAlerts(ids: string[]): Promise<void>
+  markAlertsNotified(ids: string[]): Promise<void>
+  listPushSubscriptions(): Promise<PushSubscriptionRow[]>
+  recordPushSuccess(id: string, at: string): Promise<void>
+  /** failures + 1 ; renvoie le nouveau compteur. */
+  recordPushFailure(id: string): Promise<number>
+  deletePushSubscriptionById(id: string): Promise<void>
+}
+
+export interface PushSubscribeRepo extends DeviceAuthRepo {
+  /** Crée ou met à jour (même endpoint : clés et appareil remplacés, échecs remis à zéro). */
+  upsertPushSubscription(row: { device_id: string; endpoint: string; p256dh: string; auth: string }): Promise<'created' | 'updated'>
+  /** Supprime l'abonnement de CET appareil ; false s'il n'existait pas. */
+  removePushSubscription(deviceId: string, endpoint: string): Promise<boolean>
 }
 
 export interface EnrollRepo {

@@ -271,18 +271,18 @@ describe('sync-push — quarantaine (chaîne intègre, contenu refusé)', () => 
     expect(second.last_device_seq).toBe(2)
     expect(repo.records).toHaveLength(2)
   })
-  it('type hors contrat → quarantaine unknown_type (stocké tel quel)', async () => {
+  it('type hors contrat → quarantaine unknown_type (stocké tel quel) ; alert_ack (lot 6) pris en charge', async () => {
     const chain = new ChainBuilder()
     const pizza = await chain.next({ type: 'pizza' as never })
     const ack = await chain.next({ type: 'alert_ack', payload: {} })
     const out = await push([pizza, ack])
     expect(out.rejected.map((r) => [r.reason, r.detail])).toEqual([
       ['unknown_type', Q('unknown_type')],
-      ['unknown_type', Q('unknown_type')],
+      ['invalid_payload', Q('invalid_payload')],
     ])
     expect(repo.records.map((r) => [r.type, r.quarantine_reason])).toEqual([
       ['pizza', 'unknown_type'],
-      ['alert_ack', 'unknown_type'],
+      ['alert_ack', 'invalid_payload'],
     ])
     expect(out.last_device_seq).toBe(2)
   })

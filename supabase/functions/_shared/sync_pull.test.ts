@@ -63,7 +63,7 @@ describe('sync-pull', () => {
     expect(out.staff[0]).toMatchObject({ pin_salt: 'c2Fs', pin_hash: 'aGFzaA==' })
     expect(out.equipment.map((e) => e.id)).toEqual([FRIDGE_ID])
     expect(out.thresholds).toHaveLength(1)
-    expect(out.settings).toEqual({ retention_years: 3, auto_lock_minutes: 2, clock_suspect_minutes: 5, email_alerts: true, daily_check_times: ['08:00', '18:00'], missed_slot_carry_over: true, thaw_dlc_days: 3, oil_polar_max: 25, oil_polar_warn: 22 })
+    expect(out.settings).toEqual({ retention_years: 3, auto_lock_minutes: 2, clock_suspect_minutes: 5, email_alerts: true, daily_check_times: ['08:00', '18:00'], missed_slot_carry_over: true, thaw_dlc_days: 3, oil_polar_max: 25, oil_polar_warn: 22, sensor_silent_minutes: 60, alert_repeat_minutes: 15 })
     expect(out.deleted).toEqual([])
   })
   it('since vide = tout', async () => {
@@ -164,6 +164,50 @@ describe('sync-pull', () => {
     expect(since.cleaning_tasks).toEqual([])
     expect(since.checklists).toEqual([])
     expect(since.deleted).toEqual(expect.arrayContaining([{ table: 'cleaning_tasks', id: OLD_T }, { table: 'checklists', id: OLD_C }]))
+  })
+  it('lot 6 : capteurs actifs sans jeton, alertes ouvertes ou modifiées depuis since, réglages d’alerte', async () => {
+    const S1 = '00000000-0000-4000-8000-0000000005e1'
+    const S2 = '00000000-0000-4000-8000-0000000005e2'
+    const base = { equipment_id: FRIDGE_ID, vendor: 'shelly_ht' as const, last_value_c: null, battery_percent: null, created_at: '2026-11-01T00:00:00.000Z' }
+    repo.sensors.push(
+      { id: S1, name: 'Shelly frigo', active: true, last_seen_at: '2026-11-14T09:59:00.000Z', ...base, last_value_c: 3.4, battery_percent: 90, updated_at: '2026-11-14T09:59:00.000Z', token_hash: 'a'.repeat(64) },
+      { id: S2, name: 'Ancien', active: false, last_seen_at: null, ...base, updated_at: '2026-11-10T00:00:00.000Z', token_hash: 'b'.repeat(64) },
+    )
+    const alert = (id: string, over: Record<string, unknown>) => ({
+      id,
+      kind: 'sensor_silent' as const,
+      equipment_id: FRIDGE_ID,
+      sensor_id: S1,
+      related_record_id: null,
+      message: 'm',
+      opened_at: '2026-11-01T00:00:00.000Z',
+      resolved_at: null,
+      acknowledged_at: null,
+      last_notified_at: null,
+      acknowledged_by_record_id: null,
+      updated_at: '2026-11-01T00:00:00.000Z',
+      ...over,
+    })
+    const OPEN = '00000000-0000-4000-8000-0000000007a1'
+    const OLD = '00000000-0000-4000-8000-0000000007a2'
+    const RECENT = '00000000-0000-4000-8000-0000000007a3'
+    repo.alerts.push(
+      alert(OPEN, {}),
+      alert(OLD, { resolved_at: '2026-11-02T00:00:00.000Z', updated_at: '2026-11-02T00:00:00.000Z' }),
+      alert(RECENT, { resolved_at: '2026-11-14T09:00:00.000Z', updated_at: '2026-11-14T09:00:00.000Z' }),
+    )
+    const all = await pull()
+    expect(all.sensors).toEqual([
+      { id: S1, name: 'Shelly frigo', equipment_id: FRIDGE_ID, vendor: 'shelly_ht', active: true, last_seen_at: '2026-11-14T09:59:00.000Z', last_value_c: 3.4, battery_percent: 90, updated_at: '2026-11-14T09:59:00.000Z' },
+    ])
+    expect(JSON.stringify(all)).not.toContain('token_hash')
+    expect(all.alerts.map((a) => a.id)).toEqual([OPEN])
+    expect(Object.keys(all.alerts[0]).sort()).toEqual(['acknowledged_at', 'equipment_id', 'id', 'kind', 'last_notified_at', 'message', 'opened_at', 'related_record_id', 'resolved_at', 'sensor_id'])
+    const since = await pull('2026-11-05T00:00:00.000Z')
+    expect(since.sensors.map((s) => s.id)).toEqual([S1])
+    expect(since.deleted).toEqual(expect.arrayContaining([{ table: 'sensors', id: S2 }]))
+    expect(since.alerts.map((a) => a.id).sort()).toEqual([OPEN, RECENT])
+    expect(since.settings).toMatchObject({ sensor_silent_minutes: 60, alert_repeat_minutes: 15 })
   })
   it('400 si since n’est pas une date', async () => {
     const res = await handler(pullReq('hier'))

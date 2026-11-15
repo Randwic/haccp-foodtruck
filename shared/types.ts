@@ -1,6 +1,6 @@
 // Contrat partagé app <-> backend. NE PAS MODIFIER sans accord du chef de projet.
 // Fichier sans dépendance : importé par l'app (Vite) et les Edge Functions (Deno).
-import type { Checklist, CleaningTask, Product, Recipe, Supplier } from './payloads.ts'
+import type { Alert, Checklist, CleaningTask, Product, Recipe, Sensor, Supplier } from './payloads.ts'
 
 export type RecordType =
   | 'system_test'
@@ -85,6 +85,8 @@ export interface SyncPullResponse {
   recipes: Recipe[] // recettes actives (lot 4)
   cleaning_tasks: CleaningTask[] // tâches du plan de nettoyage actives (lot 5)
   checklists: Checklist[] // checklists actives (lot 5)
+  sensors: Sensor[] // capteurs actifs (lot 6), sans jeton d'envoi
+  alerts: Alert[] // alertes ouvertes, ou modifiées depuis `since` (lot 6)
   deleted: { table: string; id: string }[] // références désactivées depuis `since`
 }
 
@@ -143,4 +145,6 @@ export interface Settings {
   thaw_dlc_days: number // DLC proposée après décongélation, en jours à partir de la fin (défaut 3, 0..30)
   oil_polar_max: number // limite des composés polaires en % (défaut 25, légal), 10..30
   oil_polar_warn: number // seuil d'alerte préventive en % (défaut 22), < oil_polar_max
+  sensor_silent_minutes: number // capteur muet au-delà (défaut 60, 15..1440) — lot 6
+  alert_repeat_minutes: number // rappel d'une alerte non prise en compte (défaut 15, 5..1440) — lot 6
 }

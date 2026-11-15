@@ -5,6 +5,7 @@ import {
   isCanonicalIsoTime,
   isPlainObject,
   isUuid,
+  referencedAlertId,
   referencedChecklistId,
   referencedCleaningTaskId,
   referencedEquipmentId,
@@ -143,6 +144,7 @@ export async function processPush(
     recipes: new Map(),
     cleaningTasks: new Map(),
     checklists: new Map(),
+    alerts: new Map(),
   }
   const state: { blockedBy: { id: string; reason: RejectReason } | null } = { blockedBy: null }
 
@@ -303,6 +305,7 @@ interface ContentCaches {
   recipes: Map<string, boolean>
   cleaningTasks: Map<string, boolean>
   checklists: Map<string, boolean>
+  alerts: Map<string, boolean>
 }
 
 /** Contrôles de contenu d'un enregistrement à la chaîne intègre. */
@@ -364,6 +367,13 @@ async function checkContent(r: HaccpRecord, deviceId: string, repo: PushRepo, ca
   if (cl !== null) {
     if (!caches.checklists.has(cl)) caches.checklists.set(cl, await repo.checklistExists(cl))
     if (!caches.checklists.get(cl)) return q('invalid_payload', 'checklist_id : checklist inconnue')
+  }
+  // Prise en compte d'une alerte (lot 6) : l'alerte doit exister (résolue ou non). La prise en compte
+  // elle-même est posée par la base, à l'insertion (trigger records_alert_ack).
+  const alert = referencedAlertId(effectiveType, effectivePayload)
+  if (alert !== null) {
+    if (!caches.alerts.has(alert)) caches.alerts.set(alert, await repo.alertExists(alert))
+    if (!caches.alerts.get(alert)) return q('invalid_payload', 'alert_id : alerte inconnue')
   }
   // Fournisseur référencé (réception) : doit exister (même désactivé depuis : saisie hors réseau).
   const sup = referencedSupplierId(effectiveType, effectivePayload)

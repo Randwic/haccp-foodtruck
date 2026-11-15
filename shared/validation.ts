@@ -41,7 +41,7 @@ type _Exhaustive = Exclude<RecordType, (typeof RECORD_TYPES)[number]> extends ne
 const _exhaustive: _Exhaustive = true
 void _exhaustive
 
-/** Types dont le schéma de payload est défini (lots 1 à 5). Les autres sont refusés en `unknown_type`. */
+/** Types dont le schéma de payload est défini (lots 1 à 6). Les autres sont refusés en `unknown_type`. */
 export const SUPPORTED_RECORD_TYPES = [
   'system_test',
   'temperature_check',
@@ -58,6 +58,7 @@ export const SUPPORTED_RECORD_TYPES = [
   'checklist_done',
   'oil_check',
   'oil_change',
+  'alert_ack',
   'correction',
 ] as const
 
@@ -116,6 +117,8 @@ export const LIMITS = {
   /** Commentaire d'un point de checklist (borne non précisée par le contrat : alignée sur les autres commentaires du lot). */
   checklistCommentMax: 300,
   oilCommentMax: 300,
+  /** Lot 6 (prise en compte d'une alerte) — borne de shared/payloads.ts. */
+  alertAckCommentMax: 300,
   polarMin: 0,
   polarMax: 50,
   valueMinC: -50,
@@ -448,6 +451,7 @@ type SchemaType =
   | 'checklist_done'
   | 'oil_check'
   | 'oil_change'
+  | 'alert_ack'
 
 const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
   system_test: {
@@ -539,6 +543,11 @@ const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
     equipment_id: { check: uuidField },
     comment: { check: str({ max: LIMITS.oilCommentMax }), optional: true },
   },
+  alert_ack: {
+    alert_id: { check: uuidField },
+    comment: { check: str({ max: LIMITS.alertAckCommentMax }), optional: true },
+    corrective_action_id: { check: uuidField, optional: true },
+  },
 }
 
 /**
@@ -582,6 +591,15 @@ export function referencedProductId(type: RecordType | string, payload: Record<s
 }
 export function referencedRecipeId(type: RecordType | string, payload: Record<string, unknown>): string | null {
   return type === 'label_printed' && typeof payload.recipe_id === 'string' ? payload.recipe_id : null
+}
+
+/**
+ * Alerte prise en compte (`alert_ack.alert_id`), ou null. Le serveur exige qu'elle existe
+ * (sinon quarantaine `invalid_payload`) ; `corrective_action_id` n'est pas vérifié (choix : l'action
+ * corrective est un enregistrement du registre, éventuellement envoyé dans le même lot ou plus tard).
+ */
+export function referencedAlertId(type: RecordType | string, payload: Record<string, unknown>): string | null {
+  return type === 'alert_ack' && typeof payload.alert_id === 'string' ? payload.alert_id : null
 }
 
 /** Fournisseur référencé par un payload valide (réception), ou null. */

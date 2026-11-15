@@ -206,7 +206,7 @@ describe('Historique, correction, pertes', () => {
       initialRecords: [
         seedReception(30, reception([{ product: 'Poulet', storage: 'fridge', temperature_c: 9, accepted: false, refusal_reason: 'Trop chaud', photo_paths: [PHOTO] }])),
       ],
-      initialPhotos: { [PHOTO]: { image: new Blob([syntheticWebp(100)]), state: 'pending' } },
+      initialPhotos: { [PHOTO]: { image: new Blob([syntheticWebp(100).slice().buffer]), state: 'pending' } },
     })
     await openReception()
     press('Historique')
@@ -247,7 +247,7 @@ describe('Accueil', () => {
       initialRecords: [
         seedReception(18, reception([{ product: 'Poulet', storage: 'fridge', temperature_c: 9, accepted: false, refusal_reason: 'Trop chaud', photo_paths: [PHOTO] }])),
       ],
-      initialPhotos: { [PHOTO]: { image: new Blob([syntheticWebp(100)]), state: 'pending' } },
+      initialPhotos: { [PHOTO]: { image: new Blob([syntheticWebp(100).slice().buffer]), state: 'pending' } },
     })
     expect(await screen.findByRole('button', { name: 'Réception : Dernière réception : aujourd’hui à 09:12, 1 photo en attente d’envoi, 1 refus cette semaine' })).toBeInTheDocument()
     core.simulate.flush()

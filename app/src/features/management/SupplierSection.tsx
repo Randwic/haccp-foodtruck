@@ -44,7 +44,7 @@ export function SupplierSection() {
         <h2 id="sup-title" className="sr-only">
           Fournisseurs
         </h2>
-        <p className="max-w-xl text-[17px] text-fg-muted">Fournisseurs proposés à la réception des livraisons. Un fournisseur désactivé reste dans l’historique.</p>
+        <p className="max-w-xl text-[17px] text-fg-muted">Fournisseurs et magasins (cash & carry, grossistes) proposés dans Achats & réception. Un fournisseur désactivé reste dans l’historique.</p>
         <Button onClick={() => setDialog({ kind: 'add' })} icon={<IconPlus size={20} />}>
           Ajouter un fournisseur
         </Button>
@@ -98,7 +98,7 @@ export function SupplierSection() {
           onConfirm={() => run(() => manager.updateSupplier(dialog.s.id, { active: false }), `« ${dialog.s.name} » désactivé`).then(load)}
         >
           <p>
-            <strong>{dialog.s.name}</strong> ne sera plus proposé à la réception. Les réceptions passées sont conservées ; vous pourrez le réactiver à tout moment.
+            <strong>{dialog.s.name}</strong> ne sera plus proposé dans Achats & réception. Les achats passés sont conservées ; vous pourrez le réactiver à tout moment.
           </p>
         </ConfirmModal>
       )}
@@ -111,7 +111,7 @@ export function SupplierSection() {
           onConfirm={() => run(() => manager.updateSupplier(dialog.s.id, { active: true }), `« ${dialog.s.name} » réactivé`).then(load)}
         >
           <p>
-            <strong>{dialog.s.name}</strong> sera de nouveau proposé à la réception.
+            <strong>{dialog.s.name}</strong> sera de nouveau proposé dans Achats & réception.
           </p>
         </ConfirmModal>
       )}

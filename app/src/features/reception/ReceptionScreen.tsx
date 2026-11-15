@@ -53,7 +53,7 @@ export function ReceptionScreen({ onBack, canAddSupplier }: { onBack: () => void
         <CorrectiveActionFlow
           key={view.relatedRecordId}
           relatedRecordId={view.relatedRecordId}
-          subject={`Réception — ${view.supplierName}`}
+          subject={`Approvisionnement — ${view.supplierName}`}
           detail={<span className="font-semibold text-danger">Accepté hors température : {outOfRangeDetail(view.items)}</span>}
           onDone={async () => {
             await reload()
@@ -67,7 +67,7 @@ export function ReceptionScreen({ onBack, canAddSupplier }: { onBack: () => void
       const back: Back = view.name === 'correct' ? view.back : { name: 'home' }
       body =
         view.name === 'correct' && !correcting ? (
-          <Notice>Réception introuvable.</Notice>
+          <Notice>Approvisionnement introuvable.</Notice>
         ) : (
           <ReceptionForm
             key={view.name === 'correct' ? view.entryId : 'new'}
@@ -82,7 +82,7 @@ export function ReceptionScreen({ onBack, canAddSupplier }: { onBack: () => void
               const alreadyHandled = correcting ? correcting.correctiveActions.length > 0 : false
               const refused = payload.items.filter((i) => !i.accepted).length
               toast(
-                correcting ? 'Correction enregistrée' : `Réception enregistrée${refused ? ` (${plural(refused, 'produit refusé', 'produits refusés')})` : ''}`,
+                correcting ? 'Correction enregistrée' : `Approvisionnement enregistré${refused ? ` (${plural(refused, 'produit refusé', 'produits refusés')})` : ''}`,
                 'ok',
               )
               if (out.length > 0 && !alreadyHandled) {
@@ -94,7 +94,7 @@ export function ReceptionScreen({ onBack, canAddSupplier }: { onBack: () => void
     } else if (view.name === 'waste') {
       body = (
         <>
-          <BackButton label="Réception" onClick={() => setView({ name: 'home' })} />
+          <BackButton label="Achats & réception" onClick={() => setView({ name: 'home' })} />
           <WasteForm
             data={data}
             onCancel={() => setView({ name: 'home' })}
@@ -109,7 +109,7 @@ export function ReceptionScreen({ onBack, canAddSupplier }: { onBack: () => void
       const back: Back = view
       body = (
         <>
-          <BackButton label="Réception" onClick={() => setView({ name: 'home' })} />
+          <BackButton label="Achats & réception" onClick={() => setView({ name: 'home' })} />
           <ReceptionHistory
             data={data}
             now={now}
@@ -132,8 +132,8 @@ export function ReceptionScreen({ onBack, canAddSupplier }: { onBack: () => void
         <>
           <BackButton label="Accueil" onClick={onBack} />
           <PageTitle
-            title="Réception"
-            subtitle="Contrôle des livraisons, traçabilité des lots et pertes"
+            title="Achats & réception"
+            subtitle="Contrôle de la marchandise à l’arrivée au camion, traçabilité des lots et pertes"
             actions={
               <Button variant="secondary" onClick={history} icon={<IconHistory size={20} />}>
                 Historique
@@ -182,19 +182,19 @@ export function ReceptionScreen({ onBack, canAddSupplier }: { onBack: () => void
 
           <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
             <ActionCard
-              title="Nouvelle réception"
-              description="Fournisseur, contrôles, produits, lots, DLC, températures, photos"
+              title="Nouvel approvisionnement"
+              description="Fournisseur ou magasin, transport, produits, lots, DLC, températures, photos"
               icon={<IconTruck size={26} />}
               primary
               onClick={() => setView({ name: 'new' })}
             />
-            <ActionCard title="Perte / produit jeté" description="Produit non conforme, date dépassée, rappel" icon={<IconWaste size={26} />} onClick={() => setView({ name: 'waste' })} />
+            <ActionCard title="Produit jeté" description="Date dépassée, non conforme, abîmé, rappel" icon={<IconWaste size={26} />} onClick={() => setView({ name: 'waste' })} />
           </div>
 
           <section className="mt-8" aria-labelledby="rc-today">
             <SectionLabel id="rc-today">Aujourd’hui</SectionLabel>
             {today.length === 0 ? (
-              <EmptyCard>Aucune réception aujourd’hui.</EmptyCard>
+              <EmptyCard>Aucun approvisionnement enregistré aujourd’hui.</EmptyCard>
             ) : (
               <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
                 {today.map((e) => (

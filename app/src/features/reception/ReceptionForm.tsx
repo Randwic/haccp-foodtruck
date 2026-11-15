@@ -1,4 +1,5 @@
-// Parcours guidé d'une réception : 1. Livraison → 2. Produits → 3. Validation.
+// Parcours guidé d'une réception (achats faits par le gérant : cash & carry, grossiste) :
+// 1. Approvisionnement → 2. Produits → 3. Validation. Libellés seulement : le contrat `reception` est inchangé.
 // Sert aussi à la correction (pré-rempli, motif obligatoire ; l'original reste dans le registre).
 import { useMemo, useState, type ReactNode } from 'react'
 import type { ReceptionItem, ReceptionPayload, Supplier } from '../../../../shared/payloads.ts'
@@ -18,7 +19,7 @@ import type { ReceptionData } from './useReceptionData.ts'
 
 type Step = 'delivery' | 'items' | 'review'
 const STEPS: { id: Step; label: string }[] = [
-  { id: 'delivery', label: 'Livraison' },
+  { id: 'delivery', label: 'Approvisionnement' },
   { id: 'items', label: 'Produits' },
   { id: 'review', label: 'Validation' },
 ]
@@ -176,14 +177,14 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-10">
         <section aria-labelledby="supplier-title">
           <h2 id="supplier-title" className="mb-3 text-[19px] font-semibold text-fg">
-            Fournisseur
+            Fournisseur / magasin
           </h2>
           {suppliers.length === 0 && (
             <p className="mb-3 rounded-2xl border border-dashed border-line-strong p-4 text-[16px] text-fg-muted">
-              Aucun fournisseur. {canAddSupplier ? 'Ajoutez-en un ci-dessous.' : 'Demandez au gérant de les ajouter dans Gestion › Fournisseurs.'}
+              Aucun fournisseur ni magasin. {canAddSupplier ? 'Ajoutez-en un ci-dessous.' : 'Demandez au gérant de les ajouter dans Gestion › Fournisseurs.'}
             </p>
           )}
-          <div role="radiogroup" aria-label="Fournisseur" className="grid gap-2.5 sm:grid-cols-2">
+          <div role="radiogroup" aria-label="Fournisseur / magasin" className="grid gap-2.5 sm:grid-cols-2">
             {suppliers.map((s) => {
               const on = draft.supplierId === s.id
               return (
@@ -210,13 +211,13 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
                 className="flex min-h-16 items-center gap-3 rounded-2xl border-2 border-dashed border-line-strong px-4 py-3 text-left text-[17px] font-semibold text-accent active:bg-pressed"
               >
                 <IconPlus size={22} />
-                Nouveau fournisseur
+                Nouveau fournisseur / magasin
               </button>
             )}
           </div>
           <TextField
             className="mt-6 max-w-md"
-            label="N° de bon de livraison (facultatif)"
+            label="N° de ticket ou de facture (facultatif)"
             value={draft.deliveryNote}
             onChange={(deliveryNote) => set({ deliveryNote })}
             maxLength={LIMITS.deliveryNoteMax}
@@ -224,7 +225,7 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
           />
           <div className="mt-6">
             <PhotoPicker
-              label="Photo du bon de livraison"
+              label="Photo du ticket ou de la facture"
               hint="Facultatif."
               paths={draft.notePhotos}
               onChange={(notePhotos) => set({ notePhotos })}
@@ -236,14 +237,14 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
         </section>
         <section aria-labelledby="checks-title" className="space-y-6">
           <h2 id="checks-title" className="text-[19px] font-semibold text-fg">
-            Contrôles à l’arrivée
+            Contrôles à l’arrivée au camion
           </h2>
-          {yesNo('Véhicule propre et à bonne température ?', draft.vehicleOk, (vehicleOk) => set({ vehicleOk }), 'Précisez-le en commentaire ; contrôlez chaque produit avec soin.')}
+          {yesNo('Transport conforme (glacière / caisson isotherme, trajet court) ?', draft.vehicleOk, (vehicleOk) => set({ vehicleOk }), 'Précisez-le en commentaire ; contrôlez la température de chaque produit frais ou surgelé.')}
           {yesNo('Emballages intacts ?', draft.packagingOk, (packagingOk) => set({ packagingOk }), 'Refusez les produits dont l’emballage est abîmé.')}
           <Button size="lg" block disabled={!deliveryDone} onClick={() => setStep('items')} icon={<IconChevronRight size={22} />}>
             Continuer : produits
           </Button>
-          {!deliveryDone && <p className="text-[14px] text-fg-subtle">Choisissez le fournisseur et répondez aux deux contrôles.</p>}
+          {!deliveryDone && <p className="text-[14px] text-fg-subtle">Choisissez le fournisseur ou le magasin et répondez aux deux contrôles.</p>}
         </section>
       </div>
     )
@@ -268,7 +269,7 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
             className="flex min-h-28 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line-strong p-5 text-[17px] font-semibold text-accent active:bg-pressed"
           >
             <IconPlus size={26} />
-            Ajouter le premier produit livré
+            Ajouter le premier produit acheté
           </button>
         ) : (
           <ul className="grid gap-3 lg:grid-cols-2">
@@ -316,9 +317,9 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-10">
         <section aria-label="Récapitulatif" className="space-y-4">
           <div className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
-            <p className="text-[20px] font-semibold text-fg">{supplier?.name ?? 'Fournisseur'}</p>
+            <p className="text-[20px] font-semibold text-fg">{supplier?.name ?? 'Fournisseur / magasin'}</p>
             <p className="mt-0.5 text-[15px] text-fg-muted">
-              {draft.deliveryNote.trim() ? `BL ${draft.deliveryNote.trim()} · ` : ''}Véhicule {draft.vehicleOk ? 'conforme' : 'non conforme'} · Emballages{' '}
+              {draft.deliveryNote.trim() ? `Ticket / facture ${draft.deliveryNote.trim()} · ` : ''}Transport {draft.vehicleOk ? 'conforme' : 'non conforme'} · Emballages{' '}
               {draft.packagingOk ? 'intacts' : 'abîmés'}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -364,12 +365,12 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
           {correcting && <ReasonField value={reason} onChange={setReason} quick={['Erreur de saisie', 'Photo ou lot oublié']} />}
           <ErrorNotice error={error} />
           <Button size="lg" block onClick={submit} disabled={busy || (correcting !== undefined && !reason.trim())} icon={<IconCheck size={22} strokeWidth={2.25} />}>
-            {busy ? 'Enregistrement…' : correcting ? 'Enregistrer la correction' : 'Enregistrer la réception'}
+            {busy ? 'Enregistrement…' : correcting ? 'Enregistrer la correction' : 'Enregistrer l’approvisionnement'}
           </Button>
           <Button variant="secondary" block onClick={() => setStep('items')}>
             Retour aux produits
           </Button>
-          {correcting && <Notice tone="info">La réception d’origine reste visible, barrée, dans l’historique. Rien n’est supprimé du registre.</Notice>}
+          {correcting && <Notice tone="info">L’enregistrement d’origine reste visible, barrée, dans l’historique. Rien n’est supprimé du registre.</Notice>}
         </section>
       </div>
     )
@@ -378,7 +379,7 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <h1 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">{correcting ? 'Corriger une réception' : 'Nouvelle réception'}</h1>
+        <h1 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">{correcting ? 'Corriger un approvisionnement' : 'Nouvel approvisionnement'}</h1>
         <Button variant="ghost" onClick={cancel}>
           Annuler
         </Button>
@@ -423,7 +424,7 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
       )}
       <Modal
         open={confirmCancel}
-        title="Abandonner cette réception ?"
+        title="Abandonner cet approvisionnement ?"
         onClose={() => setConfirmCancel(false)}
         footer={
           <>

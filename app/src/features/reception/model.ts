@@ -211,9 +211,9 @@ export function diffReception(prev: ReceptionPayload, next: ReceptionPayload, su
   const push = (label: string, a: string, b: string) => {
     if (a !== b) out.push({ label, before: a, after: b })
   }
-  push('Fournisseur', supplierName(prev.supplier_id), supplierName(next.supplier_id))
-  push('Bon de livraison', prev.delivery_note ?? '—', next.delivery_note ?? '—')
-  push('Véhicule', yesNo(prev.vehicle_ok), yesNo(next.vehicle_ok))
+  push('Fournisseur / magasin', supplierName(prev.supplier_id), supplierName(next.supplier_id))
+  push('Ticket / facture', prev.delivery_note ?? '—', next.delivery_note ?? '—')
+  push('Transport', yesNo(prev.vehicle_ok), yesNo(next.vehicle_ok))
   push('Emballages', yesNo(prev.packaging_ok), yesNo(next.packaging_ok))
   const n = Math.max(prev.items.length, next.items.length)
   for (let k = 0; k < n; k++) {
@@ -241,7 +241,7 @@ export function diffReception(prev: ReceptionPayload, next: ReceptionPayload, su
     push(`${name} — décision`, a.accepted ? 'accepté' : `refusé (${a.refusal_reason ?? ''})`, b.accepted ? 'accepté' : `refusé (${b.refusal_reason ?? ''})`)
     push(`${name} — photos`, String(a.photo_paths?.length ?? 0), String(b.photo_paths?.length ?? 0))
   }
-  push('Photos du bon', String(prev.photo_paths?.length ?? 0), String(next.photo_paths?.length ?? 0))
+  push('Photos du ticket', String(prev.photo_paths?.length ?? 0), String(next.photo_paths?.length ?? 0))
   push('Commentaire', prev.comment ?? '—', next.comment ?? '—')
   return out
 }

@@ -21,7 +21,7 @@ export function SupplierFields(props: {
 }) {
   return (
     <div className="space-y-5">
-      <TextField label="Nom du fournisseur" value={props.name} onChange={(name) => props.set({ name })} error={props.errors.name} maxLength={80} autoCapitalize="words" autoFocus={props.autoFocus} />
+      <TextField label="Nom du fournisseur ou du magasin" value={props.name} onChange={(name) => props.set({ name })} error={props.errors.name} maxLength={80} autoCapitalize="words" autoFocus={props.autoFocus} />
       <div className="grid gap-5 sm:grid-cols-2">
         <TextField label="Téléphone (facultatif)" type="tel" inputMode="tel" value={props.phone} onChange={(phone) => props.set({ phone })} error={props.errors.phone} maxLength={30} />
         <TextField label="Email (facultatif)" type="email" inputMode="email" value={props.email} onChange={(email) => props.set({ email })} error={props.errors.email} maxLength={254} />
@@ -76,9 +76,9 @@ export function NewSupplierModal({ onClose, onCreated }: { onClose: () => void; 
   }
 
   return (
-    <Modal open title="Nouveau fournisseur" onClose={onClose}>
+    <Modal open title="Nouveau fournisseur / magasin" onClose={onClose}>
       <form onSubmit={submit} noValidate className="space-y-6">
-        {!online && <Notice tone="warn">L’ajout d’un fournisseur nécessite une connexion Internet.</Notice>}
+        {!online && <Notice tone="warn">L’ajout d’un fournisseur ou d’un magasin nécessite une connexion Internet.</Notice>}
         <SupplierFields name={f.name} phone={f.phone} email={f.email} set={(p) => setF({ ...f, ...p })} errors={errors} autoFocus />
         {needAuth && (
           <div className="space-y-4 rounded-2xl border border-line bg-sunken p-4">
@@ -93,7 +93,7 @@ export function NewSupplierModal({ onClose, onCreated }: { onClose: () => void; 
             Annuler
           </Button>
           <Button type="submit" disabled={busy || !online}>
-            {busy ? 'Enregistrement…' : 'Ajouter le fournisseur'}
+            {busy ? 'Enregistrement…' : 'Ajouter'}
           </Button>
         </div>
       </form>

@@ -14,6 +14,9 @@ import { TimedProcessScreen } from '../features/processes/TimedProcessScreen.tsx
 import { TodayScreen, type ProcessView } from '../features/today/TodayScreen.tsx'
 import { AllergenTableScreen } from '../features/labels/AllergenTableScreen.tsx'
 import { LabelsScreen } from '../features/labels/LabelsScreen.tsx'
+import { CleaningScreen } from '../features/cleaning/CleaningScreen.tsx'
+import { OilScreen } from '../features/oil/OilScreen.tsx'
+import { WasteScreen } from '../features/reception/WasteScreen.tsx'
 import { AppHeader } from './AppHeader.tsx'
 import { useCore } from './CoreContext.tsx'
 import { useAutoLock } from './hooks/useAutoLock.ts'
@@ -23,7 +26,7 @@ import { OfflineBanner } from './pwa/OfflineBanner.tsx'
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
 
 type Boot = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; device: DeviceInfo | null }
-type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | ProcessView
+type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | 'cleaning' | 'oil' | 'waste' | ProcessView
 
 /** Enchaînement des écrans : première configuration → verrouillage (PIN) → accueil / Gestion. */
 export function AppShell() {
@@ -34,6 +37,8 @@ export function AppShell() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [persistent, setPersistent] = useState<boolean | null>(null)
   const [view, setView] = useState<View>('today')
+  // Rappel d'une checklist sur l'accueil : ouverture directe de la checklist.
+  const [checklistToOpen, setChecklistToOpen] = useState<string | undefined>(undefined)
   // Tableau des allergènes : ouvert depuis l'accueil, les étiquettes ou la gestion (retour au même endroit).
   const [allergensFrom, setAllergensFrom] = useState<'today' | 'labels' | 'management'>('today')
   const openAllergens = (from: 'today' | 'labels' | 'management') => {
@@ -131,6 +136,12 @@ export function AppShell() {
           <ReceptionScreen onBack={() => setView('today')} canAddSupplier={staff.role === 'manager'} />
         ) : view === 'thawing' ? (
           <ThawingScreen onBack={() => setView('today')} />
+        ) : view === 'cleaning' ? (
+          <CleaningScreen key={checklistToOpen ?? 'home'} onBack={() => setView('today')} openChecklistId={checklistToOpen} />
+        ) : view === 'oil' ? (
+          <OilScreen onBack={() => setView('today')} />
+        ) : view === 'waste' ? (
+          <WasteScreen onBack={() => setView('today')} />
         ) : view === 'labels' ? (
           <LabelsScreen onBack={() => setView('today')} onOpenAllergens={() => openAllergens('labels')} />
         ) : view === 'allergens' ? (
@@ -146,6 +157,12 @@ export function AppShell() {
             onOpenTemperatures={() => setView('temperatures')}
             onOpenReception={() => setView('reception')}
             onOpenLabels={() => setView('labels')}
+            onOpenCleaning={(checklistId) => {
+              setChecklistToOpen(checklistId)
+              setView('cleaning')
+            }}
+            onOpenOil={() => setView('oil')}
+            onOpenWaste={() => setView('waste')}
             onOpenAllergens={() => openAllergens('today')}
             onOpenProcess={setView}
             onOpenManagement={staff.role === 'manager' ? () => setView('management') : undefined}

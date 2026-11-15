@@ -48,7 +48,7 @@ export function ReceptionHistory({ data, now, filter, onFilter, onCorrect, onCor
     <div role="tablist" aria-label="Historique" className="mb-5 grid max-w-md grid-cols-2 gap-1 rounded-xl bg-sunken p-1">
       {(
         [
-          ['receptions', 'Réceptions', IconTruck],
+          ['receptions', 'Approvisionnements', IconTruck],
           ['wastes', 'Pertes', IconWaste],
         ] as const
       ).map(([t, label, Icon]) => (
@@ -90,7 +90,7 @@ export function ReceptionHistory({ data, now, filter, onFilter, onCorrect, onCor
     body = (
       <>
         {usedSuppliers.length > 1 && (
-          <div role="group" aria-label="Filtrer par fournisseur" className="mb-6 flex flex-wrap gap-2">
+          <div role="group" aria-label="Filtrer par fournisseur ou magasin" className="mb-6 flex flex-wrap gap-2">
             <button type="button" className={chipClass(filter.supplierId === null)} aria-pressed={filter.supplierId === null} onClick={() => onFilter({ tab: 'receptions', supplierId: null })}>
               Tous
             </button>
@@ -102,7 +102,7 @@ export function ReceptionHistory({ data, now, filter, onFilter, onCorrect, onCor
           </div>
         )}
         {list.length === 0 ? (
-          <EmptyCard>Aucune réception sur cette période.</EmptyCard>
+          <EmptyCard>Aucun approvisionnement sur cette période.</EmptyCard>
         ) : (
           groupByDay(list, tz).map(([key, items]) => (
             <section key={key} aria-label={dayLabel(items[0].time, now, tz)} className="mb-7">
@@ -129,7 +129,7 @@ export function ReceptionHistory({ data, now, filter, onFilter, onCorrect, onCor
 
   return (
     <>
-      <PageTitle title="Historique — réception" subtitle={`Les ${RECEPTION_HISTORY_DAYS} derniers jours. Une erreur se corrige, elle ne s’efface pas.`} />
+      <PageTitle title="Historique — achats & réception" subtitle={`Les ${RECEPTION_HISTORY_DAYS} derniers jours. Une erreur se corrige, elle ne s’efface pas.`} />
       {tabs}
       {body}
     </>
@@ -174,7 +174,7 @@ function ReceptionCard(props: {
   const accepted = p.items.length - e.refused.length
   return (
     <li
-      aria-label={`Réception de ${formatTime(e.time, tz)}, ${name}${e.refused.length ? `, ${plural(e.refused.length, 'produit refusé', 'produits refusés')}` : ''}`}
+      aria-label={`Approvisionnement de ${formatTime(e.time, tz)}, ${name}${e.refused.length ? `, ${plural(e.refused.length, 'produit refusé', 'produits refusés')}` : ''}`}
       className={`rounded-2xl border bg-surface p-4 shadow-card sm:p-5 ${e.missingAction ? 'border-danger/50' : e.refused.length ? 'border-danger/30' : 'border-line'}`}
     >
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
@@ -182,7 +182,7 @@ function ReceptionCard(props: {
         <div className="min-w-0 flex-1 basis-56">
           <p className="text-[20px] leading-snug font-semibold text-fg">{name}</p>
           <p className="mt-0.5 text-[15px] text-fg-muted">
-            {p.delivery_note ? `BL ${p.delivery_note} · ` : ''}par {author(e.authorId)} · {plural(p.items.length, 'produit', 'produits')}
+            {p.delivery_note ? `Ticket / facture ${p.delivery_note} · ` : ''}par {author(e.authorId)} · {plural(p.items.length, 'produit', 'produits')}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge tone="ok">
@@ -193,7 +193,7 @@ function ReceptionCard(props: {
                 <IconBan size={14} /> {e.refused.length} refusé{e.refused.length > 1 ? 's' : ''}
               </Badge>
             )}
-            {!p.vehicle_ok && <Badge tone="warn">Véhicule non conforme</Badge>}
+            {!p.vehicle_ok && <Badge tone="warn">Transport non conforme</Badge>}
             {!p.packaging_ok && <Badge tone="warn">Emballages abîmés</Badge>}
             {e.corrected && (
               <Badge tone="neutral">
@@ -204,7 +204,7 @@ function ReceptionCard(props: {
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2.5 max-sm:w-full max-sm:flex-row max-sm:items-center max-sm:justify-between">
           <SyncBadge records={entryRecords(e)} />
-          <Button variant="secondary" onClick={props.onCorrect} icon={<IconEdit size={18} />} aria-label={`Corriger la réception de ${formatTime(e.time, tz)} (${name})`}>
+          <Button variant="secondary" onClick={props.onCorrect} icon={<IconEdit size={18} />} aria-label={`Corriger l’approvisionnement de ${formatTime(e.time, tz)} (${name})`}>
             Corriger
           </Button>
         </div>
@@ -218,8 +218,8 @@ function ReceptionCard(props: {
 
       {(p.photo_paths?.length ?? 0) > 0 && (
         <div className="mt-4">
-          <p className="mb-2 text-[14px] font-semibold text-fg-muted">Bon de livraison</p>
-          <PhotoGallery paths={p.photo_paths!} label={`Bon de livraison — ${name}`} status={data.photoStatus} />
+          <p className="mb-2 text-[14px] font-semibold text-fg-muted">Ticket ou facture</p>
+          <PhotoGallery paths={p.photo_paths!} label={`Ticket ou facture — ${name}`} status={data.photoStatus} />
         </div>
       )}
       {p.comment && <p className="mt-3 text-[15px] text-fg">Commentaire : {p.comment}</p>}
@@ -275,7 +275,7 @@ function ReceptionCard(props: {
   )
 }
 
-function WasteRow({ waste: w, data, author, supplierName }: { waste: WasteEntry; data: ReceptionData; author: (id: string) => string; supplierName: (id: string) => string }) {
+export function WasteRow({ waste: w, data, author, supplierName }: { waste: WasteEntry; data: ReceptionData; author: (id: string) => string; supplierName: (id: string) => string }) {
   const tz = data.timeZone
   const p = w.payload
   const related = p.related_record_id ? data.receptions.find((r) => r.id === p.related_record_id || r.versions.some((v) => v.record.id === p.related_record_id)) : undefined
@@ -293,7 +293,7 @@ function WasteRow({ waste: w, data, author, supplierName }: { waste: WasteEntry;
         {p.comment && <p className="mt-1 text-[15px] text-fg">{p.comment}</p>}
         {related && (
           <p className="mt-1 text-[15px] text-fg-muted">
-            Réception liée : {supplierName(related.payload.supplier_id)}, {dayLabel(related.time, new Date(), tz).toLowerCase()} à {formatTime(related.time, tz)}
+            Approvisionnement lié : {supplierName(related.payload.supplier_id)}, {dayLabel(related.time, new Date(), tz).toLowerCase()} à {formatTime(related.time, tz)}
           </p>
         )}
         {(p.photo_paths?.length ?? 0) > 0 && (

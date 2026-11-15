@@ -12,7 +12,7 @@ import { chipClass, EntryLayout, ErrorNotice, ProductField, StickyActions, useRe
 import { matchingReceptions, PHOTOS_PER_FIELD, supplierNameOf, supplierProducts, WASTE_REASON_LABELS, WASTE_REASON_ORDER, type WasteReason } from './model.ts'
 import type { ReceptionData } from './useReceptionData.ts'
 
-export function WasteForm({ data, onSaved, onCancel }: { data: ReceptionData; onSaved: (rec: HaccpRecord) => void; onCancel: () => void }) {
+export function WasteForm({ data, onSaved, onCancel, suggestions: extraSuggestions }: { data: ReceptionData; onSaved: (rec: HaccpRecord) => void; onCancel: () => void; /** Suggestions de produits (sinon : produits récemment reçus). */ suggestions?: readonly string[] }) {
   const core = useCore()
   const toast = useToast()
   const { save, busy, error } = useRecordSaver()
@@ -25,7 +25,7 @@ export function WasteForm({ data, onSaved, onCancel }: { data: ReceptionData; on
   const [related, setRelated] = useState<string | null>(null)
   const supplierName = supplierNameOf(data.suppliers)
 
-  const suggestions = useMemo(() => supplierProducts(data.receptions, null).map((s) => s.product), [data.receptions])
+  const suggestions = useMemo(() => extraSuggestions ?? supplierProducts(data.receptions, null).map((s) => s.product), [data.receptions, extraSuggestions])
   const matches = useMemo(() => matchingReceptions(data.receptions, product).slice(0, 6), [data.receptions, product])
   const lots = useMemo(() => {
     const p = product.trim().toLocaleLowerCase('fr-FR')
@@ -50,7 +50,7 @@ export function WasteForm({ data, onSaved, onCancel }: { data: ReceptionData; on
     if (photos.length) payload.photo_paths = photos
     const rec = await save('waste', { ...payload })
     if (!rec) return
-    toast(`Perte enregistrée : ${payload.product}`, 'ok')
+    toast(`Produit jeté enregistré : ${payload.product}`, 'ok')
     onSaved(rec)
   }
 
@@ -63,8 +63,8 @@ export function WasteForm({ data, onSaved, onCancel }: { data: ReceptionData; on
               <IconWaste size={24} />
             </span>
             <div className="min-w-0">
-              <h1 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">Perte / produit jeté</h1>
-              <p className="text-[16px] text-fg-muted">Produit non conforme découvert après la réception, date dépassée, rappel…</p>
+              <h1 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">Produit jeté</h1>
+              <p className="text-[16px] text-fg-muted">Date dépassée, produit non conforme ou abîmé, rappel…</p>
             </div>
           </div>
           <div className="mt-6 space-y-6">
@@ -128,8 +128,8 @@ export function WasteForm({ data, onSaved, onCancel }: { data: ReceptionData; on
         <div className="space-y-6">
           <PhotoPicker label="Photo" hint="Facultatif : produit, étiquette, défaut constaté." paths={photos} onChange={setPhotos} max={PHOTOS_PER_FIELD} />
           {matches.length > 0 && (
-            <div role="radiogroup" aria-label="Réception concernée (facultatif)">
-              <p className="mb-2 text-[15px] font-semibold text-fg">Réception concernée (facultatif)</p>
+            <div role="radiogroup" aria-label="Achat concerné (facultatif)">
+              <p className="mb-2 text-[15px] font-semibold text-fg">Achat concerné (facultatif)</p>
               <div className="grid gap-2">
                 {matches.map((m) => {
                   const on = related === m.latest.id
@@ -157,7 +157,7 @@ export function WasteForm({ data, onSaved, onCancel }: { data: ReceptionData; on
           <ErrorNotice error={error} />
           <StickyActions>
             <Button size="lg" block onClick={submit} disabled={missing.length > 0 || busy} icon={<IconCheck size={22} strokeWidth={2.25} />}>
-              {busy ? 'Enregistrement…' : 'Enregistrer la perte'}
+              {busy ? 'Enregistrement…' : 'Enregistrer le produit jeté'}
             </Button>
             {missing.length > 0 && <p className="text-[14px] text-fg-subtle">À indiquer : {missing.join(', ')}.</p>}
             <Button

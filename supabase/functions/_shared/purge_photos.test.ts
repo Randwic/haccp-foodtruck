@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it } from 'vitest'
+import { DOCUMENT_BUCKET, PHOTO_BUCKET } from '../../../shared/payloads.ts'
 import { MemoryPhotoStore, MemoryPurgeRepo } from './memory_repo.ts'
 import { createPurgePhotosHandler, PURGE_LIMITS, PURGE_SECRET_HEADER } from './purge_photos.ts'
 import { DEVICE_ID, NOW, memoryLogger } from './test_helpers.ts'
@@ -63,5 +64,15 @@ describe('purge-photos', () => {
     expect((await unconfigured(req('court'))).status).toBe(503)
     expect((await handler(req(SECRET, 'GET'))).status).toBe(405)
     expect(repo.logs).toEqual([])
+  })
+})
+
+describe('purge-photos et bucket documents (lot 7)', () => {
+  it("le seul bucket utilisé par la purge (PHOTO_BUCKET) n'est jamais celui des documents", () => {
+    // _adapters/supabase_storage.ts n'ouvre que storage.from(PHOTO_BUCKET) ; photos_to_purge() filtre
+    // bucket_id = 'photos' (vérifié aussi en SQL : 99_lot7_documents.sql).
+    expect(PHOTO_BUCKET).toBe('photos')
+    expect(DOCUMENT_BUCKET).toBe('documents')
+    expect(PHOTO_BUCKET).not.toBe(DOCUMENT_BUCKET)
   })
 })

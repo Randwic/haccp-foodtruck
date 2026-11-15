@@ -45,7 +45,7 @@ export function OilGauge({ value, limits, label }: { value: number | null; limit
       </div>
       <div aria-hidden="true" className="relative mt-1.5 h-5 text-[13px] text-fg-subtle tabular-nums">
         <span className="absolute left-0">0</span>
-        <span className="absolute -translate-x-1/2" style={{ left: pct(limits.warn) }}>
+        <span className="absolute -translate-x-full pr-1 max-sm:hidden" style={{ left: pct(limits.warn) }}>
           {formatPercent(limits.warn)}
         </span>
         <span className="absolute -translate-x-1/2 font-semibold text-danger" style={{ left: pct(limits.max) }}>

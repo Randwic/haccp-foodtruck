@@ -15,7 +15,10 @@ Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|erro
 `&releves=demo` (7 jours de relevés, une correction, une action corrective) ou `&releves=alerte` (+ relevé hors seuil sans action ce matin),
 `&procedes=demo` (lots en cours, cuissons, décongélations, historique avec correction et action) ou `&procedes=alerte` (+ refroidissement en retard, cuisson hors seuil sans action),
 `&etiquettes=demo` (étiquettes : DLC dépassée / aujourd'hui / demain, correction, perte liée, décongélation terminée à reprendre, lots reçus, plats de la carte pour le tableau des allergènes),
-`&receptions=demo` (réceptions sur 3 jours avec refus, photos d'étiquettes dessinées, photos en attente, correction, action corrective, une perte) ou `&receptions=alerte` (+ produit accepté hors température sans action).
+`&receptions=demo` (réceptions sur 3 jours avec refus, photos d'étiquettes dessinées, photos en attente, correction, action corrective, une perte) ou `&receptions=alerte` (+ produit accepté hors température sans action),
+`&nettoyage=demo` (10 jours de nettoyages : tâches à jour, à faire, en retard ambre / rouge ; checklists dont un « Non » ; une correction),
+`&huiles=demo` (contrôles depuis le dernier changement, bac 2 « à surveiller », correction) ou `&huiles=alerte` (bac 2 hors limite sans action),
+`&pertes=demo` (produits jetés de la semaine).
 Équipiers factices : Gérant `123456`, Équipier `654321` (blocage 5 min après 5 erreurs).
 
 ## Écrans (`app/src/features/`)
@@ -25,10 +28,13 @@ Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|erro
 | Configuration avancée | `enrollment/EnrollScreen.tsx` | ancien enrôlement manuel (identifiant + jeton), lien en bas de la connexion gérant |
 | Gestion | `management/ManagementScreen.tsx` | tuile « Gestion » sur l’accueil si l’équipier déverrouillé est `manager`. Exige Internet + session gérant (sinon mot de passe redemandé, aussi si la session expire). Onglets **Équipements** (`EquipmentSection` : ajout nom + type, seuils préremplis frigo ≤ 4 °C / congélateur ≤ −18 °C « à confirmer selon votre PMS », renommer, retirer/remettre en service, seuils min/max/tolérance avec bouton ±), **Équipe** (`StaffSection` : ajout + PIN ×2, changer le PIN, désactiver/réactiver ; impossible de se désactiver soi-même), **Réglages** (`SettingsSection` : nom, heures des relevés `daily_check_times` 1 à 6 « HH:MM » sans doublon, verrouillage auto 1–30 min, interrupteur « Créneau oublié la veille reste à faire » (`missed_slot_carry_over`), « DLC après décongélation (jours) » 0–30 (`thaw_dlc_days`), déconnexion gérant). Confirmation pour chaque action sensible ; `core.syncNow()` après chaque écriture |
 | Verrouillage | `lock/LockScreen.tsx` | tuiles équipiers (initiales), pavé PIN, « PIN incorrect », « Bloqué, réessayez dans 4 min 32 s » ; équipe vide → message + « Réessayer » (`syncNow()`), rechargement auto sur `onSyncStatusChange` |
-| Aujourd'hui | `today/TodayScreen.tsx` | bandeaux rouges (relevé ou procédé hors seuil sans action corrective) ; rappel des lots chronométrés en cours (« 1 refroidissement en cours · 1 h 12 restante », ambre puis rouge) ; tuiles **Températures**, **Refroidissement**, **Remise en température**, **Cuisson & maintien**, **Décongélation** avec compteurs réels (icône + texte) ; autres modules « Bientôt » ; outils |
+| Aujourd'hui | `today/TodayScreen.tsx` | bandeaux rouges (relevé ou procédé hors seuil sans action corrective) ; rappel des lots chronométrés en cours (« 1 refroidissement en cours · 1 h 12 restante », ambre puis rouge) ; tuiles **Températures**, **Refroidissement**, **Remise en température**, **Cuisson & maintien**, **Décongélation**, **Achats & réception**, **Étiquettes DLC**, **Produits jetés**, **Nettoyage**, **Huiles de friture** avec compteurs réels ; rappels des checklists (icône + texte) ; autres modules « Bientôt » ; outils |
 | Procédés | `processes/` | voir « Module Procédés » ci-dessous |
 | Températures | `temperatures/TemperaturesScreen.tsx` | voir « Module Températures » ci-dessous |
-| Réception | `reception/ReceptionScreen.tsx` | voir « Module Réception » ci-dessous |
+| Achats & réception | `reception/ReceptionScreen.tsx` | voir « Module Réception » ci-dessous |
+| Produits jetés | `reception/WasteScreen.tsx` | tuile dédiée : voir « Produits jetés » ci-dessous |
+| Nettoyage | `cleaning/CleaningScreen.tsx` | voir « Module Nettoyage » ci-dessous |
+| Huiles de friture | `oil/OilScreen.tsx` | voir « Module Huiles » ci-dessous |
 | Étiquettes DLC | `labels/LabelsScreen.tsx` | voir « Module Étiquettes » ci-dessous |
 | Tableau des allergènes | `labels/AllergenTableScreen.tsx` | depuis l'accueil (Outils), les Étiquettes et Gestion › Recettes |
 | Test d'enregistrement | `system-test/SystemTestPanel.tsx` | `addRecord('system_test')`, 20 derniers enregistrements (heure, auteur, statut) |
@@ -74,7 +80,47 @@ Enchaînement, en-tête et verrouillage auto : `app/src/ui/AppShell.tsx`, `AppHe
   correction de la DLC). Corrections : `CorrectionForms.tsx` (motif obligatoire, remplacement complet, original barré).
   Tous les payloads passent par `validatePayload` avant `addRecord`.
 
+## Module Nettoyage (`app/src/features/cleaning/`, lot 5)
+- **Calcul pur** (`schedule.ts`, testé dans `cleaning.test.ts`, jours locaux de `establishment.timezone`) : `after_service`
+  = une fois par jour de service (jour local avec au moins une saisie HACCP) ; services manqués depuis la dernière fois :
+  1 → ambre, ≥ 2 → rouge. `daily` : 1–2 jours de retard → ambre, ≥ 3 → rouge. `weekly` : 7 jours glissants depuis la
+  dernière fois (1–2 j → ambre, ≥ 3 → rouge). `monthly` : 30 jours (1–6 j → ambre, ≥ 7 → rouge). Jamais faite dans la
+  fenêtre de 45 jours → « à faire » sans retard. Rappels des checklists : ouverture chaque jour avant le premier créneau
+  de relevé (ambre ensuite), fermeture une fois le dernier créneau passé, nuisibles hebdomadaire, « autre » sur demande.
+- **Données** (`model.ts`, `useCleaningData.ts`) : tâches et checklists (désactivées comprises) via
+  `core.listCleaningTasks/listChecklists`, 45 jours de `cleaning_done`/`checklist_done`/`correction`, jours de service
+  (saisies des 10 derniers jours), état des photos ; corrections en chaîne (`buildEntries`).
+- **Écrans** : « À faire maintenant » (plus urgent d'abord, badge icône + texte), « À jour », checklists, « Fait
+  aujourd'hui » ; fiche d'une tâche (`TaskSheet` : produit, mode opératoire, commentaire facultatif, 0..3 photos,
+  « Fait » → `cleaning_done`) ; `ChecklistRun` : gros Oui/Non par point, « Point critique » pour `required`, commentaire
+  obligatoire pour tout « Non », `all_ok` = toutes les réponses ok (`checklistPayload`, sinon quarantaine serveur), tous
+  les points doivent être renseignés (contrat : une réponse par point) ; historique 30 jours (onglets Nettoyages /
+  Checklists) et correction (motif obligatoire, valeurs d'origine barrées via `diffCleaning`/`diffChecklist`).
+- **Accueil** : rappels « Checklist … » (ouverture directe), tuile Nettoyage (très en retard / en retard / à faire /
+  checklists à faire).
+
+## Module Huiles de friture (`app/src/features/oil/`, lot 5)
+- **Calcul pur** (`model.ts`, testé dans `OilScreen.test.tsx`) : limites `settings.oil_polar_max` / `oil_polar_warn`
+  (défauts `DEFAULT_OIL_SETTINGS`), niveau vert < alerte ≤ ambre ≤ limite < rouge, `in_range` = valeur ≤ limite (calculé à la
+  saisie), par bac : dernier contrôle / changement, contrôles depuis le dernier changement (graphe), actions manquantes.
+- **Écrans** : un panneau par bac `fryer_vat` (valeur, jauge `OilGauge` role=meter, graphe SVG `OilTrend` depuis le
+  changement, « Contrôle », « Changer l'huile », « Historique ») ; contrôle au `NumberPad` (0..50, une décimale) + méthode
+  testeur / bandelette (dernière méthode mémorisée sur l'appareil) ; au-delà de la limite : écran bloquant d'action
+  corrective — « Changer l'huile » enregistre `oil_change` + `corrective_action` (`discard`, commentaire), ou « Autre action
+  corrective » (`CorrectiveActionFlow`) ; historique 30 jours par bac, correction d'un contrôle (conformité recalculée,
+  action exigée si la correction est hors limite) ou du commentaire d'un changement.
+- **Gestion › Réglages** : limite (10..30 %, pas de 0,5) et seuil d'alerte (< limite), avertissement au-delà de 25 %.
+
+## Produits jetés (`reception/WasteScreen.tsx`, lot 5)
+Tuile dédiée (total des 7 derniers jours) : « Déclarer un produit jeté » (même `WasteForm`, suggestions
+`wasteSuggestions` : étiquettes en cours, produits récemment achetés, catalogue), total de la semaine par motif, historique
+30 jours. Toujours accessible depuis Achats & réception et par le bouton « Jeté » des étiquettes.
+
 ## Module Réception (`app/src/features/reception/`, lot 3)
+Libellés « achats » (lot 5, le gérant va chercher sa marchandise) : « Achats & réception », étape « Approvisionnement »,
+« Fournisseur / magasin », « N° de ticket ou de facture (facultatif) », « Transport conforme (glacière / caisson isotherme,
+trajet court) ? », « Emballages intacts ? » ; contrat `reception` inchangé (`delivery_note`, `vehicle_ok`).
+
 - **Calcul pur** (`model.ts`, testé dans `reception.test.ts`) : lecture des payloads `reception`/`waste`, réceptions
   reconstruites par `buildEntries` (corrections en chaîne, actions correctives liées à une version), seuils par
   conservation `RECEPTION_THRESHOLDS` (frigo ≤ 4 °C, congélateur ≤ −18 °C, ambiant sans contrôle — « à confirmer selon
@@ -139,6 +185,13 @@ Enchaînement, en-tête et verrouillage auto : `app/src/ui/AppShell.tsx`, `AppHe
   produits », date de mise à jour = dernière modification d'une recette ou d'un produit affiché, mention légale,
   impression A4 (PDF partagé ou `window.print` sur `#a4-print-root`, `@page A4 landscape`).
 
+## Gestion › Nettoyage et Checklists (lot 5)
+`management/CleaningSection.tsx` (zone / équipement, fréquence, produit, mode opératoire) et `ChecklistSection.tsx` (nom,
+nature, points ordonnés : ajouter / retirer / monter / descendre, libellé, point critique) : ajout, modification,
+désactivation (jamais de suppression). Identifiants de points stables : un point existant garde son id ; un nouveau point
+reçoit un slug unique (`checklistItemId`, [a-z0-9_], ≤ 40). `ManagerApi` : `listCleaningTasks`, `addCleaningTask`,
+`updateCleaningTask`, `listChecklists`, `addChecklist`, `updateChecklist` ; `ManagerSettings.oil_polar_max/oil_polar_warn`.
+
 ## Gestion › Produits et Recettes (lot 4)
 `management/ProductSection.tsx`, `RecipeSection.tsx`, `catalogFields.tsx` : ajout / modification / désactivation (jamais de
 suppression) ; 14 allergènes en grandes cases à cocher ; conservation Frigo / Congélateur / Ambiant ; durées de vie saisies
@@ -166,7 +219,7 @@ ajout (nom, téléphone, email facultatifs, `normalizeSupplierInput`), modificat
 
 ## Composants (`app/src/ui/components/`)
 `Button` (≥ 56 px), `Tile` (`layout="card"` module, `"row"` outil, `status`/`tone` pour un compteur),
-`TemperatureInput` (pavé numérique intégré, touche « − » et virgule, 1 décimale, −50..300, « Conforme »/« Hors seuil » en direct), `Badge`, `Modal` (role=dialog, Échap, focus piégé), `PinPad` (touches ≥ 64 px, haptique, clavier physique), `PinSetup` (nouveau PIN saisi deux fois, refuse 000000/123456…), `TextField` + `Notice`, `Toast` (aria-live).
+`TemperatureInput` (pavé numérique intégré, touche « − » et virgule, 1 décimale, −50..300, « Conforme »/« Hors seuil » en direct), `NumberPad` (pavé générique : `min`, `max`, `decimals`, `unit`, `status`, `tone` ; calcul pur dans `ui/numberPad.ts`), `Badge`, `Modal` (role=dialog, Échap, focus piégé), `PinPad` (touches ≥ 64 px, haptique, clavier physique), `PinSetup` (nouveau PIN saisi deux fois, refuse 000000/123456…), `TextField` + `Notice`, `Toast` (aria-live).
 Les PIN sont hachés dans l’app (`hashPin`, PBKDF2) : seuls `pin_salt`/`pin_hash` sont envoyés.
 Thème clair/sombre automatique, contrastes AA, focus cyan visible, zones sûres (`safe-pt/pb/px` dans `ui/theme.css`).
 
@@ -176,7 +229,7 @@ action corrective obligatoire, action manquante signalée après rechargement, c
 hors seuil → action, compteur de l'accueil), créneaux (Europe/Paris, changements d'heure, report du créneau oublié
 désactivable), heures de relevé, report et DLC après décongélation (Réglages), procédés (refroidissement conforme, hors délai →
 action corrective, lot en cours après rechargement, remise en température, cuisson hors seuil, décongélation avec DLC,
-correction d'une étape, compteurs de l'accueil), étiquettes (DLC Europe/Paris et changement d'heure, allergènes d'une recette, parcours ouverture / préparation / décongélation jusqu'au `label_printed`, partage d'un PDF 62 mm, échéances et « Jeté », correction), PDF (175,7 × 141,7 pt, une page par copie, A4), Gestion › Produits / Recettes / hauteur d'étiquette, tableau des allergènes, migration Dexie v3.
+correction d'une étape, compteurs de l'accueil), étiquettes (DLC Europe/Paris et changement d'heure, allergènes d'une recette, parcours ouverture / préparation / décongélation jusqu'au `label_printed`, partage d'un PDF 62 mm, échéances et « Jeté », correction), PDF (175,7 × 141,7 pt, une page par copie, A4), Gestion › Produits / Recettes / hauteur d'étiquette, tableau des allergènes, migration Dexie v3 ; lot 5 : échéances du nettoyage (Europe/Paris, changement d'heure, jours de service), rappels des checklists, tâche faite avec photo, checklist avec un « Non » (commentaire obligatoire, `all_ok`), corrections, contrôle d'huile conforme / à surveiller / hors limite (action corrective, « Changer l'huile »), historique et correction, `NumberPad`, réglages huile, Gestion › Nettoyage / Checklists (ids stables, répercussion dans la base locale), produits jetés (suggestions, total de la semaine), libellés Achats & réception.
 
 ## Identité visuelle (Space Diner)
 - **Jetons** : `app/src/ui/theme.css` — variables CSS (`--canvas`, `--surface`, `--elevated`, `--pressed`, `--sunken`,

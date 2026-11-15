@@ -75,6 +75,18 @@ const core = createCore({ transport: createHttpTransport({ baseUrl, anonKey }) }
   triés par nom. Serveur simulé : `DEMO_PRODUCTS` / `DEMO_RECIPES` = données initiales de la migration lot 4
   (mêmes identifiants), `upsertProduct`, `upsertRecipe`, `deactivate('products' | 'recipes', id)`.
 
+## Plan de nettoyage et checklists (lot 5)
+
+- Tables déjà présentes depuis la version 3 de la base locale : aucune migration.
+- **API** (ajouts rétro-compatibles à `CoreApi`) : `listCleaningTasks({ includeInactive? })`,
+  `listChecklists({ includeInactive? })`, triées par nom ; une ligne désactivée (`deleted`) reste lisible avec
+  `includeInactive` (nom des anciens nettoyages / checklists remplies).
+- **Serveur simulé** : `DEMO_CLEANING_TASKS` (11 tâches) / `DEMO_CHECKLISTS` (ouverture, fermeture, nuisibles) = données
+  initiales de `supabase/migrations/20261114001300_lot5_nettoyage.sql` (mêmes identifiants, fréquences, points) ; renvoyées par
+  sync-pull (actives seulement), `upsertCleaningTask`, `upsertChecklist`, `deactivate('cleaning_tasks' | 'checklists', id)`.
+- Photos d'un `cleaning_done` (0..3) : même circuit que les réceptions (`referencedPhotoPaths`), y compris dans le
+  remplacement d'une correction.
+
 ## Garanties
 
 - Aucune fonction de modification ni de suppression d'un enregistrement. Une correction est

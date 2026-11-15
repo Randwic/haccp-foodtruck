@@ -283,6 +283,8 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       suppliers: [],
       products: [],
       recipes: [],
+      cleaning_tasks: [],
+      checklists: [],
       settings,
       deleted: deletedLog.filter((d) => Date.parse(d.at) > sinceMs).map(({ table, id }) => ({ table, id })),
     })

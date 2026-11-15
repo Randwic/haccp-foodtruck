@@ -40,7 +40,7 @@ describe('Nettoyage — accueil', () => {
   it('tuile : tâches à faire et checklists à faire ; rappels d’ouverture (en retard après 08:00) et de nuisibles', async () => {
     setup()
     expect(await screen.findByRole('button', { name: 'Nettoyage : 11 tâches à faire, 2 checklists à faire' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Checklist Ouverture — En retard : à faire avant le relevé de 08:00' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Checklist Ouverture — En retard depuis 08:00' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Checklist Contrôle nuisibles — À faire cette semaine' })).toBeInTheDocument()
     // La fermeture n'est rappelée qu'après le dernier relevé (18:00).
     expect(screen.queryByRole('button', { name: /^Checklist Fermeture/ })).toBeNull()

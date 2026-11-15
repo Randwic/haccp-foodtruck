@@ -155,7 +155,7 @@ export function checklistStatus(input: { checklist: Checklist; lastAt: string | 
       if (!first) return out('due', 'À faire à l’ouverture')
       return now.getTime() < first.getTime()
         ? out('due', `À faire avant ${formatTime(first, tz)}`)
-        : out('late', `En retard : à faire avant le relevé de ${formatTime(first, tz)}`)
+        : out('late', `En retard depuis ${formatTime(first, tz)}`)
     }
     case 'closing': {
       if (doneToday) return out('done', doneLabel())

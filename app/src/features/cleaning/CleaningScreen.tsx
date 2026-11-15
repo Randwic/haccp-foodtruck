@@ -148,7 +148,7 @@ export function CleaningScreen({ onBack, openChecklistId }: CleaningScreenProps)
                 <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
                   {upToDate.map((s) => (
                     <li key={s.task.id}>
-                      <button type="button" onClick={() => setView({ name: 'task', taskId: s.task.id })} className="flex min-h-16 w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left active:bg-pressed sm:px-5">
+                      <button type="button" onClick={() => setView({ name: 'task', taskId: s.task.id })} aria-label={`${s.task.name} — ${s.label}`} className="flex min-h-16 w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left active:bg-pressed sm:px-5">
                         <IconOk size={20} className="shrink-0 text-ok" />
                         <span className="min-w-0 flex-1 text-[16px] font-semibold text-fg">{s.task.name}</span>
                         <span className="text-[15px] text-fg-muted">{s.label}</span>

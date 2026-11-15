@@ -9,6 +9,7 @@ import { demoTemperatureRecords } from './features/temperatures/demoData.ts'
 import { demoProcessAlerts, demoProcessRecords } from './features/processes/demoData.ts'
 import { demoReceptions } from './features/reception/demoData.ts'
 import { DEMO_MENU_RECIPES, demoLabels } from './features/labels/demoData.ts'
+import { demoCleaningRecords, demoOilRecords, demoWasteRecords } from './features/cleaning/demoData.ts'
 import { createCore, createHttpTransport, createMockTransport, notifyActivity } from './core/index.ts'
 import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, type ManagerApi } from './manager/index.ts'
 
@@ -23,6 +24,9 @@ import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, 
 //    &receptions=alerte : idem + un produit accepté hors température sans action corrective.
 //    &etiquettes=demo : étiquettes (DLC dépassée, aujourd'hui, demain, correction, perte), décongélation
 //      terminée à reprendre, lots reçus, et plats de la carte pour le tableau des allergènes.
+//    &nettoyage=demo : 10 jours de nettoyages (tâches à jour, à faire, en retard), checklists (dont un « Non »), correction ;
+//    &huiles=demo : contrôles depuis le dernier changement (bac 2 à surveiller) ; &huiles=alerte : bac 2 hors limite sans action ;
+//    &pertes=demo : produits jetés de la semaine.
 //    + espace gérant simulé, déjà connecté (gerant@demo.fr / demo-demo-demo).
 //  • VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY définis → vrai core + vrai Supabase (fonctions + REST/RLS).
 //  • sinon → vrai core + serveur simulé en mémoire ; espace gérant simulé branché sur ce serveur :
@@ -38,6 +42,7 @@ function createDemoCore(): CoreApi {
   const procedes = params.get('procedes')
   const receptions = params.get('receptions')
   const etiquettes = params.get('etiquettes') === 'demo'
+  const huiles = params.get('huiles')
   const now = new Date()
   const rc = receptions === 'demo' || receptions === 'alerte' ? demoReceptions(now, receptions) : null
   const seeds = [
@@ -46,6 +51,9 @@ function createDemoCore(): CoreApi {
     ...(procedes === 'alerte' ? demoProcessAlerts(now) : []),
     ...(rc?.records ?? []),
     ...(etiquettes ? demoLabels(now) : []),
+    ...(params.get('nettoyage') === 'demo' ? demoCleaningRecords(now) : []),
+    ...(huiles === 'demo' || huiles === 'alerte' ? demoOilRecords(now, huiles) : []),
+    ...(params.get('pertes') === 'demo' ? demoWasteRecords(now) : []),
   ].sort((a, b) => a.device_time.localeCompare(b.device_time))
   const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
   const syncPresets = {

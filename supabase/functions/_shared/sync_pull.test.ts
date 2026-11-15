@@ -109,22 +109,31 @@ describe('sync-pull', () => {
   it('produits et recettes : actifs seulement, champs du contrat, désactivés dans deleted (lot 4)', async () => {
     const OLD_P = '00000000-0000-4000-8000-0000000000c5'
     const OLD_R = '00000000-0000-4000-8000-0000000000c6'
-    repo.products.push({ id: OLD_P, name: 'Ancien pain', allergens: ['gluten'], storage: 'ambient', shelf_life_opened_hours: null, shelf_life_thawed_hours: null, active: false, updated_at: '2026-11-12T00:00:00.000Z' })
-    repo.recipes.push({ id: OLD_R, name: 'Ancienne sauce', ingredient_product_ids: [], extra_allergens: [], storage: 'fridge', shelf_life_hours: 24, active: false, updated_at: '2026-11-12T00:00:00.000Z' })
+    repo.products.push({ id: OLD_P, name: 'Ancien pain', allergens: ['gluten'], storage: 'ambient', shelf_life_opened_hours: null, shelf_life_thawed_hours: null, may_contain: [], cook_min_c: null, active: false, updated_at: '2026-11-12T00:00:00.000Z' })
+    repo.recipes.push({ id: OLD_R, name: 'Ancienne sauce', kind: 'preparation', category: null, ingredient_product_ids: [], ingredient_recipe_ids: [], extra_allergens: [], may_contain: [], storage: 'fridge', shelf_life_hours: 24, active: false, updated_at: '2026-11-12T00:00:00.000Z' })
     ;(repo.products[0] as unknown as Record<string, unknown>).created_at = '2026-01-01'
     ;(repo.recipes[0] as unknown as Record<string, unknown>).notes = 'interne'
     const all = await pull()
     expect(all.products).toEqual([
-      { id: PRODUCT_ID, name: 'Cheddar tranches', allergens: ['lait'], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, active: true, updated_at: '2026-11-01T00:00:00.000Z' },
+      { id: PRODUCT_ID, name: 'Cheddar tranches', allergens: ['lait'], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, may_contain: [], cook_min_c: null, active: true, updated_at: '2026-11-01T00:00:00.000Z' },
     ])
     expect(all.recipes).toEqual([
-      { id: RECIPE_ID, name: 'Sauce cheddar maison', ingredient_product_ids: [PRODUCT_ID], extra_allergens: ['gluten'], storage: 'fridge', shelf_life_hours: 72, active: true, updated_at: '2026-11-01T00:00:00.000Z' },
+      { id: RECIPE_ID, name: 'Sauce cheddar maison', kind: 'preparation', category: null, ingredient_product_ids: [PRODUCT_ID], ingredient_recipe_ids: [], extra_allergens: ['gluten'], may_contain: [], storage: 'fridge', shelf_life_hours: 72, active: true, updated_at: '2026-11-01T00:00:00.000Z' },
     ])
     expect(all.deleted).toEqual([])
     const since = await pull('2026-11-05T00:00:00.000Z')
     expect(since.products).toEqual([])
     expect(since.recipes).toEqual([])
     expect(since.deleted).toEqual(expect.arrayContaining([{ table: 'products', id: OLD_P }, { table: 'recipes', id: OLD_R }]))
+  })
+  it('lot 4 bis : traces, cuisson à cœur, plats du menu et sous-recettes transmis', async () => {
+    const PORC = '00000000-0000-4000-8000-0000000000c7'
+    const MENU = '00000000-0000-4000-8000-0000000000c8'
+    repo.products.push({ id: PORC, name: 'Porc BBQ cuit', allergens: ['moutarde'], may_contain: ['gluten'], storage: 'fridge', shelf_life_opened_hours: null, shelf_life_thawed_hours: null, cook_min_c: 63, active: true, updated_at: '2026-11-02T00:00:00.000Z' })
+    repo.recipes.push({ id: MENU, name: 'Supernova', kind: 'menu_item', category: "Croq'Brioche", ingredient_product_ids: [PORC], ingredient_recipe_ids: [RECIPE_ID], extra_allergens: [], may_contain: ['sesame'], storage: 'fridge', shelf_life_hours: null, active: true, updated_at: '2026-11-02T00:00:00.000Z' })
+    const all = await pull()
+    expect(all.products.find((p) => p.id === PORC)).toEqual({ id: PORC, name: 'Porc BBQ cuit', allergens: ['moutarde'], storage: 'fridge', shelf_life_opened_hours: null, shelf_life_thawed_hours: null, may_contain: ['gluten'], cook_min_c: 63, active: true, updated_at: '2026-11-02T00:00:00.000Z' })
+    expect(all.recipes.find((r) => r.id === MENU)).toEqual({ id: MENU, name: 'Supernova', kind: 'menu_item', category: "Croq'Brioche", ingredient_product_ids: [PORC], ingredient_recipe_ids: [RECIPE_ID], extra_allergens: [], may_contain: ['sesame'], storage: 'fridge', shelf_life_hours: null, active: true, updated_at: '2026-11-02T00:00:00.000Z' })
   })
   it('tâches de nettoyage et checklists : actives seulement, champs du contrat, désactivées dans deleted (lot 5)', async () => {
     const OLD_T = '00000000-0000-4000-8000-000000000502'

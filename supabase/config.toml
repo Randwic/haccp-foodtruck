@@ -83,3 +83,8 @@ verify_jwt = false
 # Clé publique VAPID (publique par nature).
 [functions.push-config]
 verify_jwt = false
+
+# Lot 7 : vérification d'intégrité du registre, réservée au gérant connecté (JWT Supabase,
+# puis contrôle dans managers par la fonction).
+[functions.verify-integrity]
+verify_jwt = true

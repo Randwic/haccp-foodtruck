@@ -31,7 +31,7 @@ fi
 
 if [ "$WHAT" = functions ] || [ "$WHAT" = all ]; then
   for spec in sync-push:false sync-pull:false health:false device-enroll:true bootstrap-status:false bootstrap-manager:false photo-upload:false purge-photos:false \
-              sensor-ingest:false alerts-evaluate:false push-subscribe:false push-config:false; do
+              sensor-ingest:false alerts-evaluate:false push-subscribe:false push-config:false verify-integrity:true; do
     slug=${spec%%:*}; vj=${spec#*:}; args=()
     for f in "supabase/functions/$slug/index.ts" supabase/functions/_adapters/*.ts supabase/functions/_shared/*.ts shared/*.ts; do
       case "$f" in *.test.ts|*memory_repo.ts|*test_helpers.ts) continue;; esac

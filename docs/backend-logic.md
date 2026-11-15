@@ -1,6 +1,6 @@
 # Backend — logique serveur (Edge Functions)
 
-Lots 1 à 6. Supabase offre gratuite (UE), Edge Functions Deno. Contrat : `shared/types.ts` et `shared/payloads.ts` (payloads des lots 2 à 6). Configuration des capteurs : [`backend-shelly.md`](backend-shelly.md).
+Lots 1 à 7. Supabase offre gratuite (UE), Edge Functions Deno. Contrat : `shared/types.ts` et `shared/payloads.ts` (payloads des lots 2 à 6). Configuration des capteurs : [`backend-shelly.md`](backend-shelly.md).
 
 ## Organisation
 
@@ -18,11 +18,13 @@ supabase/functions/
     webpush.ts                  Lot 6 : Web Push RFC 8291 (aes128gcm) + VAPID RFC 8292, WebCrypto seul
     email.ts                    Lot 6 : EmailSender (Resend, désactivé sans configuration)
     push_subscribe.ts           Lot 6 : push-subscribe et push-config
+    verify_integrity.ts         Lot 7 : vérification pure de la chaîne de hachage (en flux, par appareil)
     schedule.ts                 Lot 6 : créneaux de relevé (copie de app/…/temperatures/schedule.ts, test de parité)
     memory_repo.ts test_helpers.ts *.test.ts   (tests uniquement)
   _adapters/supabase_repo.ts    Implémentation Repo avec supabase-js (service_role) — Deno
   _adapters/supabase_storage.ts Bucket `photos` (API Storage) + RPC de purge des photos — Deno
   _adapters/supabase_alerts.ts  Lot 6 : capteurs, alertes, abonnements push (supabase-js) — Deno
+  _adapters/supabase_integrity.ts Lot 7 : lecture paginée du registre + journal VERIFY_INTEGRITY — Deno
   <fonction>/index.ts           Point d'entrée : câblage seulement (Deno.serve)
   tsconfig.json                 Vérif. de type de _shared hors Deno
 ```
@@ -43,6 +45,7 @@ supabase/functions/
 | `alerts-evaluate` (POST) | `x-alerts-secret` | Ouvre / résout les alertes, envoie Web Push et e-mail (planifiée, toutes les 5 min) |
 | `push-subscribe` (POST/DELETE) | `x-device-token` | Abonnement Web Push de l'appareil (`PushSubscribeRequest`) / désabonnement |
 | `push-config` (GET) | aucune | `{ enabled, vapid_public_key }` pour `pushManager.subscribe()` |
+| `verify-integrity` (GET/POST) | JWT gérant | Recalcule hashes et chaînes de tout le registre → `IntegrityReport` |
 
 ### sync-push — contrôles, dans l'ordre, pour chaque enregistrement
 1. **Structure** stockable (`validateRecordStructure`) : uuid v4 minuscule, `device_time` = `toISOString()` exact (sinon le hash ne survit pas au timestamptz), hash/prev_hash hex 64, seq entier ≥ 1, payload JSON stockable en jsonb (pas de `\u0000`, ≤ 16 ko, profondeur ≤ 6) ; `device_id` = appareil du jeton.
@@ -154,6 +157,17 @@ Cet appel toutes les 5 minutes sert aussi de « keep-alive » du projet gratuit.
 - iPhone / iPad : le Web Push ne marche que pour la PWA **ajoutée à l'écran d'accueil** (iOS/iPadOS 16.4+), et la permission doit être demandée après un geste de l'utilisateur.
 - **Clés VAPID** : `node scripts/generate-vapid.mjs mailto:<adresse>` affiche `VAPID_PUBLIC_KEY` (65 octets base64url), `VAPID_PRIVATE_KEY` (scalaire d, 32 octets base64url, format de la bibliothèque `web-push`) et `VAPID_SUBJECT`. Changer de paire invalide tous les abonnements (il faut se réabonner).
 
+### verify-integrity (lot 7)
+`POST` (ou `GET`) `/functions/v1/verify-integrity`, `Authorization: Bearer <JWT>` ; depuis l'app : `supabase.functions.invoke('verify-integrity')`. `verify_jwt = true`, puis utilisateur présent dans `managers` (401 `unauthorized` / 403 `forbidden`, rien n'est lu). Lecture avec la clé `service_role`.
+- Pour **chaque appareil** (révoqués compris, triés par nom ; un appareil sans enregistrement apparaît avec `records: 0, first_seq: 0, last_seq: 0`), lecture de `records` par pages de 1000 (clé `device_seq > dernier lu`, ordre croissant), un seul maillon gardé en mémoire.
+- `hash_mismatch` : `computeRecordHash` des colonnes relues, `device_time` remis au format `toISOString()` (le timestamptz revient en `…+00:00`), différent de `hash` (ou `device_id` ≠ appareil). Quarantaine comprise (type hors contrat haché tel quel).
+- `broken_chain` : `prev_hash` ≠ hash **stocké** du maillon `seq − 1` ; premier maillon ≠ `GENESIS_HASH` ; après purge, maillon `ancre + 1` ≠ hash de l'ancre (`record_chain_anchors`).
+- `seq_gap` : maillon `seq − 1` absent alors qu'il n'est pas sous l'ancre (sans ancre : tout trou, y compris un début de chaîne manquant).
+- Purge de conservation : la chaîne reprend à l'ancre (`anchors_used` = appareils ayant une ancre). Les originaux expirés conservés parce qu'une correction les cite (sous l'ancre) sont vérifiés pour leur hash ; leur lien vers un maillon purgé ne peut pas l'être (pas une anomalie).
+- `problems` : 1000 au plus par appareil (au-delà, `ok` reste faux). `ok` = tous les appareils sans anomalie.
+- Journal : `record_integrity_check()` → `audit_log` `VERIFY_INTEGRITY` (acteur = gérant ; `ok`, `total_records`, nombre d'appareils / d'anomalies / d'ancres, compteurs par appareil, 20 premières anomalies ; jamais de payload). Si ce journal échoue, le rapport est quand même rendu (événement `verify_integrity_audit_failed`).
+- Limites : la disparition des **derniers** maillons d'une chaîne n'est pas détectable (aucun suivant ne les cite ; empêchée par les triggers). Coût : un SHA-256 par enregistrement — quelques dizaines de milliers d'enregistrements restent dans les limites de l'offre gratuite ; au-delà, surveiller la limite CPU des Edge Functions.
+
 ### device-enroll
 JWT → `auth.getUser()`, utilisateur présent dans `managers` (sinon 401/403). `name` : 1–60 caractères, espaces normalisés. Jeton = 32 octets aléatoires en base64url (43 car.) ; **seul son SHA-256** est stocké, le jeton n'est jamais journalisé. Réponse 201.
 
@@ -204,6 +218,8 @@ verify_jwt = false   # auth par x-alerts-secret
 verify_jwt = false   # auth par jeton appareil
 [functions.push-config]
 verify_jwt = false   # public
+[functions.verify-integrity]
+verify_jwt = true    # gérant connecté (lot 7)
 ```
 ```bash
 supabase secrets set ALLOWED_ORIGIN=https://<app>.pages.dev PURGE_PHOTOS_SECRET=<32+ caractères aléatoires>
@@ -212,7 +228,7 @@ supabase secrets set ALERTS_EVALUATE_SECRET=<32+ caractères aléatoires>
 node scripts/generate-vapid.mjs mailto:<adresse>   # puis :
 supabase secrets set VAPID_PUBLIC_KEY=<…> VAPID_PRIVATE_KEY=<…> VAPID_SUBJECT=mailto:<adresse>
 # Facultatif (e-mail, plus tard) : supabase secrets set RESEND_API_KEY=re_… ALERT_EMAIL_TO=<adresse> [ALERT_EMAIL_FROM='HACCP <alertes@domaine-vérifié>']
-supabase functions deploy sync-push sync-pull device-enroll health bootstrap-status bootstrap-manager photo-upload purge-photos sensor-ingest alerts-evaluate push-subscribe push-config
+supabase functions deploy sync-push sync-pull device-enroll health bootstrap-status bootstrap-manager photo-upload purge-photos sensor-ingest alerts-evaluate push-subscribe push-config verify-integrity
 ```
 Puis planifier `alerts-evaluate` (SQL ci-dessus). Sans les secrets VAPID, `alerts-evaluate` fonctionne quand même (alertes calculées et visibles dans l'app), sans Web Push (`push_not_configured` au démarrage).
 Les fonctions importent `../../../shared/*.ts` (hors `supabase/functions`) : vérifier au premier déploiement que le bundler l'accepte ; sinon, copier `shared/` dans `_shared/contract/` en CI avant le déploiement.

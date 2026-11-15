@@ -12,7 +12,7 @@ import type {
   ThawingPayload,
   WastePayload,
 } from './payloads.ts'
-import { GENESIS_HASH } from './types.ts'
+import { GENESIS_HASH, type RecordType } from './types.ts'
 import {
   CORRECTIVE_ACTIONS,
   RECORD_TYPES,
@@ -26,6 +26,7 @@ import {
   referencedRecipeId,
   referencedCleaningTaskId,
   referencedChecklistId,
+  referencedAlertId,
   requiredEquipmentKind,
   validatePayload,
   validateRecordSemantics,
@@ -274,7 +275,7 @@ describe('validatePayload — correction', () => {
     expectFail(res, 'invalid_payload', /replacement \(temperature_check\) : replacement\.value_c/)
   })
   it('refuse de corriger vers un type non pris en charge ou « correction »', () => {
-    expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'alert_ack' }), 'unknown_type')
+    expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'inconnu' as RecordType }), 'unknown_type')
     expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'correction' }))
   })
   it('refuse un champ en trop', () => {
@@ -837,5 +838,31 @@ describe('validatePayload — lot 5 (nettoyage, checklists, huiles)', () => {
     expect(requiredEquipmentKind('temperature_check')).toBeNull()
     expect(referencedPhotoPaths('cleaning_done', rec({ ...cleaning, photo_paths: [photo(1), photo(1)] }))).toEqual([photo(1)])
     expect(referencedPhotoPaths('checklist_done', rec(checklist))).toEqual([])
+  })
+})
+
+describe('validatePayload — lot 6 : alert_ack', () => {
+  const A = '00000000-0000-4000-8000-0000000000aa'
+  const CA = '00000000-0000-4000-8000-0000000000ab'
+  it('est pris en charge ; payloads valides acceptés', () => {
+    expect(SUPPORTED_RECORD_TYPES as readonly string[]).toContain('alert_ack')
+    expect(validatePayload('alert_ack', { alert_id: A }).ok).toBe(true)
+    expect(validatePayload('alert_ack', { alert_id: A, comment: 'é'.repeat(300), corrective_action_id: CA }).ok).toBe(true)
+    expect(validatePayload('alert_ack', { alert_id: A, comment: '' }).ok).toBe(true)
+  })
+  it('refuse alert_id absent ou mal formé, commentaire trop long, champ inconnu', () => {
+    expectFail(validatePayload('alert_ack', {}), 'invalid_payload', /alert_id : obligatoire/)
+    expectFail(validatePayload('alert_ack', { alert_id: A.toUpperCase() }), 'invalid_payload', /alert_id/)
+    expectFail(validatePayload('alert_ack', { alert_id: A, comment: 'x'.repeat(301) }), 'invalid_payload', /comment/)
+    expectFail(validatePayload('alert_ack', { alert_id: A, corrective_action_id: 'x' }), 'invalid_payload', /corrective_action_id/)
+    expectFail(validatePayload('alert_ack', { alert_id: A, kind: 'sensor_silent' }), 'invalid_payload')
+  })
+  it('correction d’un alert_ack : remplacement validé selon le même schéma', () => {
+    expect(validatePayload('correction', { reason: 'r', replacement: { alert_id: A } }, { supersededType: 'alert_ack' }).ok).toBe(true)
+    expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'alert_ack' }), 'invalid_payload', /replacement\.alert_id/)
+  })
+  it('referencedAlertId', () => {
+    expect(referencedAlertId('alert_ack', { alert_id: A })).toBe(A)
+    expect(referencedAlertId('temperature_check', { alert_id: A })).toBeNull()
   })
 })

@@ -1,4 +1,5 @@
 // sync-pull : téléchargement incrémental des données de référence par un appareil.
+import { DEFAULT_ALERT_SETTINGS } from '../../../shared/payloads.ts'
 import type { SyncPullResponse } from '../../../shared/types.ts'
 import { authenticateDevice } from './auth.ts'
 import { HttpError, jsonResponse, withHttp, type HttpEnv } from './http.ts'
@@ -21,7 +22,7 @@ export function parseSince(raw: string | null): Date | null {
 export async function processPull(since: Date | null, repo: PullRepo, now: Date): Promise<SyncPullResponse> {
   const serverNow = now.toISOString() // capturé AVANT les lectures
   const from = since ? new Date(since.getTime() - PULL_OVERLAP_MS).toISOString() : null
-  const [establishment, settings, staff, equipment, thresholds, suppliers, products, recipes, cleaningTasks, checklists] = await Promise.all([
+  const [establishment, settings, staff, equipment, thresholds, suppliers, products, recipes, cleaningTasks, checklists, sensors, alerts] = await Promise.all([
     repo.getEstablishment(),
     repo.getSettings(),
     repo.listStaff(from),
@@ -32,6 +33,8 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
     repo.listRecipes(from),
     repo.listCleaningTasks(from),
     repo.listChecklists(from),
+    repo.listSensors(from),
+    repo.listAlerts(from),
   ])
   if (!establishment || !settings) throw new HttpError(503, 'not_configured', 'établissement ou paramètres absents')
 
@@ -44,6 +47,7 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
     for (const r of recipes) if (!r.active) deleted.push({ table: 'recipes', id: r.id })
     for (const t of cleaningTasks) if (!t.active) deleted.push({ table: 'cleaning_tasks', id: t.id })
     for (const c of checklists) if (!c.active) deleted.push({ table: 'checklists', id: c.id })
+    for (const s of sensors) if (!s.active) deleted.push({ table: 'sensors', id: s.id })
   }
   return {
     server_now: serverNow,
@@ -81,6 +85,8 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
       thaw_dlc_days: settings.thaw_dlc_days ?? 3,
       oil_polar_max: Number(settings.oil_polar_max ?? 25),
       oil_polar_warn: Number(settings.oil_polar_warn ?? 22),
+      sensor_silent_minutes: settings.sensor_silent_minutes ?? DEFAULT_ALERT_SETTINGS.sensor_silent_minutes,
+      alert_repeat_minutes: settings.alert_repeat_minutes ?? DEFAULT_ALERT_SETTINGS.alert_repeat_minutes,
     },
     suppliers: suppliers
       .filter((s) => s.active)
@@ -130,6 +136,33 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
         active: c.active,
         updated_at: c.updated_at,
       })),
+    // Capteurs actifs, sans jeton d'envoi (jamais lu par le dépôt).
+    sensors: sensors
+      .filter((s) => s.active)
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        equipment_id: s.equipment_id,
+        vendor: s.vendor,
+        active: s.active,
+        last_seen_at: s.last_seen_at ?? null,
+        last_value_c: s.last_value_c ?? null,
+        battery_percent: s.battery_percent ?? null,
+        updated_at: s.updated_at,
+      })),
+    // Alertes ouvertes, et celles modifiées depuis since (résolues / prises en compte entre-temps).
+    alerts: alerts.map((a) => ({
+      id: a.id,
+      kind: a.kind,
+      equipment_id: a.equipment_id,
+      sensor_id: a.sensor_id,
+      related_record_id: a.related_record_id,
+      message: a.message,
+      opened_at: a.opened_at,
+      resolved_at: a.resolved_at,
+      acknowledged_at: a.acknowledged_at,
+      last_notified_at: a.last_notified_at,
+    })),
     deleted,
   }
 }
@@ -155,6 +188,8 @@ export function createSyncPullHandler(deps: SyncPullDeps): (req: Request) => Pro
       recipes: res.recipes.length,
       cleaning_tasks: res.cleaning_tasks.length,
       checklists: res.checklists.length,
+      sensors: res.sensors.length,
+      alerts: res.alerts.length,
       deleted: res.deleted.length,
     })
     return jsonResponse(200, res)

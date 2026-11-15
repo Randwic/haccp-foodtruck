@@ -1,7 +1,7 @@
 // Adaptateur Deno : implémente les interfaces Repo avec supabase-js (clé service_role).
 // Seul endroit (avec les index.ts) qui dépend de Deno / npm. Non couvert par Vitest.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import type { Checklist, ChecklistItem, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Alert, Checklist, ChecklistItem, CleaningTask, Product, Recipe, Sensor, Supplier } from '../../../shared/payloads.ts'
 import type { Equipment, EquipmentKind, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import { jsonLogger, parseAllowedOrigins, type HttpEnv } from '../_shared/http.ts'
 import { classifyDbError } from '../_shared/repo.ts'
@@ -38,15 +38,15 @@ export function serviceClient(): SupabaseClient {
 }
 
 /** Erreur base sans détail exploitable côté client (le message part seulement dans les logs). */
-class DbError extends Error {
+export class DbError extends Error {
   constructor(op: string, err: { code?: string; message?: string }) {
     super(`${op} : ${err.code ?? '?'} ${err.message ?? ''}`.trim())
     this.name = 'DbError'
   }
 }
 
-const iso = (v: string | null): string | null => (v === null ? null : new Date(v).toISOString())
-const isoReq = (v: string): string => new Date(v).toISOString()
+export const iso = (v: string | null): string | null => (v === null ? null : new Date(v).toISOString())
+export const isoReq = (v: string): string => new Date(v).toISOString()
 
 /**
  * Erreur Supabase Auth sans son message (qui pourrait reprendre une donnée saisie) :
@@ -63,7 +63,7 @@ class AuthAdminError extends Error {
 const IN_CHUNK = 100
 
 export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, BootstrapRepo {
-  constructor(private readonly db: SupabaseClient) {}
+  constructor(protected readonly db: SupabaseClient) {}
 
   // ---- appareils ----
   async findDeviceByTokenHash(tokenHash: string): Promise<DeviceRow | null> {
@@ -80,7 +80,7 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
   async getSettings(): Promise<Settings | null> {
     const { data, error } = await this.db
       .from('settings')
-      .select('retention_years, auto_lock_minutes, clock_suspect_minutes, email_alerts, daily_check_times, missed_slot_carry_over, thaw_dlc_days, oil_polar_max, oil_polar_warn')
+      .select('retention_years, auto_lock_minutes, clock_suspect_minutes, email_alerts, daily_check_times, missed_slot_carry_over, thaw_dlc_days, oil_polar_max, oil_polar_warn, sensor_silent_minutes, alert_repeat_minutes')
       .eq('id', 1)
       .maybeSingle()
     if (error) throw new DbError('settings.select', error)
@@ -160,6 +160,11 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
       for (const r of data ?? []) out.push({ id: r.id, type: r.type, payload: r.payload })
     }
     return out
+  }
+  async alertExists(alertId: string): Promise<boolean> {
+    const { data, error } = await this.db.from('alerts').select('id').eq('id', alertId).maybeSingle()
+    if (error) throw new DbError('alerts.select', error)
+    return data !== null
   }
   async insertRecord(row: NewRecordRow): Promise<InsertResult> {
     // server_time : jamais envoyé, imposé par le trigger. clock_suspect : envoyé seulement à true (lot
@@ -257,6 +262,28 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
     return (data ?? []).map((c) => ({ ...c, items: (c.items ?? []) as ChecklistItem[], updated_at: isoReq(c.updated_at) }))
   }
 
+  // ---- lot 6 : capteurs et alertes (sync-pull) ----
+  async listSensors(since: string | null): Promise<Sensor[]> {
+    // Colonnes explicites : token_hash n'est jamais lu ici.
+    let q = this.db.from('sensors').select('id, name, equipment_id, vendor, active, last_seen_at, last_value_c, battery_percent, updated_at')
+    if (since) q = q.gte('updated_at', since)
+    const { data, error } = await q.order('name')
+    if (error) throw new DbError('sensors.list', error)
+    return (data ?? []).map(mapSensor)
+  }
+  async listAlerts(since: string | null): Promise<Alert[]> {
+    const open = await this.db.from('alerts').select(ALERT_COLUMNS).is('resolved_at', null).order('opened_at').limit(1000)
+    if (open.error) throw new DbError('alerts.list_open', open.error)
+    const byId = new Map<string, Alert>()
+    for (const a of open.data ?? []) byId.set(a.id, mapAlert(a))
+    if (since) {
+      const changed = await this.db.from('alerts').select(ALERT_COLUMNS).gte('updated_at', since).order('updated_at').limit(1000)
+      if (changed.error) throw new DbError('alerts.list_changed', changed.error)
+      for (const a of changed.data ?? []) byId.set(a.id, mapAlert(a))
+    }
+    return [...byId.values()]
+  }
+
   // ---- enrôlement ----
   async getUserIdFromJwt(jwt: string): Promise<string | null> {
     const { data, error } = await this.db.auth.getUser(jwt)
@@ -327,5 +354,38 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
   async ping(): Promise<void> {
     const { error } = await this.db.from('settings').select('id').limit(1)
     if (error) throw new DbError('ping', error)
+  }
+}
+
+export const ALERT_COLUMNS = 'id, kind, equipment_id, sensor_id, related_record_id, message, opened_at, resolved_at, acknowledged_at, last_notified_at'
+
+// deno-lint-ignore no-explicit-any
+export function mapAlert(a: any): Alert {
+  return {
+    id: a.id,
+    kind: a.kind,
+    equipment_id: a.equipment_id ?? null,
+    sensor_id: a.sensor_id ?? null,
+    related_record_id: a.related_record_id ?? null,
+    message: a.message,
+    opened_at: isoReq(a.opened_at),
+    resolved_at: iso(a.resolved_at ?? null),
+    acknowledged_at: iso(a.acknowledged_at ?? null),
+    last_notified_at: iso(a.last_notified_at ?? null),
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+export function mapSensor(s: any): Sensor {
+  return {
+    id: s.id,
+    name: s.name,
+    equipment_id: s.equipment_id,
+    vendor: s.vendor,
+    active: Boolean(s.active),
+    last_seen_at: iso(s.last_seen_at ?? null),
+    last_value_c: s.last_value_c === null || s.last_value_c === undefined ? null : Number(s.last_value_c),
+    battery_percent: s.battery_percent === null || s.battery_percent === undefined ? null : Number(s.battery_percent),
+    updated_at: isoReq(s.updated_at),
   }
 }

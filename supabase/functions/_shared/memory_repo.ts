@@ -1,12 +1,22 @@
 // Dépôt en mémoire pour les tests : reproduit le comportement utile de la base (trigger
 // d'insertion « filet de sécurité » avec messages `HACCP: …`, clé primaire records.id,
 // unique(device_id, device_seq), server_time / clock_suspect imposés, ancres de purge).
-import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Alert, Checklist, CleaningTask, Product, Recipe, Sensor, Supplier } from '../../../shared/payloads.ts'
 import type { Equipment, EquipmentKind, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import type { PhotoStore } from './photo_upload.ts'
 import type { PhotoRemover, PurgePhotosRepo } from './purge_photos.ts'
 import { classifyDbError, isClockSuspect } from './repo.ts'
 import type {
+  AlertsRepo,
+  EngineRecord,
+  NewAlertRow,
+  PushSubscribeRepo,
+  PushSubscriptionRow,
+  RecordReadingResult,
+  SensorAuthRow,
+  SensorForAlerts,
+  SensorIngestRepo,
+  SensorReadingRow,
   BootstrapManagerResult,
   BootstrapManagerRow,
   BootstrapRepo,
@@ -28,7 +38,15 @@ export interface MemoryDevice extends DeviceRow {
   enrolled_by?: string
 }
 
-export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, BootstrapRepo {
+export interface MemorySensor extends SensorForAlerts {
+  token_hash: string
+}
+export interface MemoryAlert extends Alert {
+  updated_at: string
+  acknowledged_by_record_id: string | null
+}
+
+export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, BootstrapRepo, SensorIngestRepo, AlertsRepo, PushSubscribeRepo {
   devices: MemoryDevice[] = []
   staff: StaffMember[] = []
   equipment: Equipment[] = []
@@ -69,6 +87,11 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   /** Appelé juste avant la transaction SQL : permet de simuler une inscription concurrente. */
   beforeBootstrap: ((row: BootstrapManagerRow) => void) | null = null
   calls: Record<string, number> = {}
+  // ---- lot 6 ----
+  sensors: MemorySensor[] = []
+  sensorReadings: { id: number; sensor_id: string; measured_at: string; value_c: number; battery_percent: number | null; received_at: string }[] = []
+  alerts: MemoryAlert[] = []
+  pushSubscriptions: (PushSubscriptionRow & { last_success_at: string | null })[] = []
 
   private count(name: string) {
     this.calls[name] = (this.calls[name] ?? 0) + 1
@@ -179,6 +202,11 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
       row.clock_suspect === true ||
       isClockSuspect(serverTime, new Date(row.device_now ?? row.device_time), this.settings?.clock_suspect_minutes)
     this.records.push({ ...structuredClone(row), server_time, clock_suspect })
+    // Comme le trigger records_alert_ack : prise en compte à l'insertion d'un alert_ack hors quarantaine.
+    if (row.type === 'alert_ack' && row.quarantine_reason === null) {
+      const a = this.alerts.find((x) => x.id === row.payload.alert_id && x.acknowledged_at === null)
+      if (a) Object.assign(a, { acknowledged_at: server_time, acknowledged_by_record_id: row.id, updated_at: server_time })
+    }
     return { ok: true, server_time, clock_suspect }
   }
 
@@ -279,6 +307,109 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
 
   async ping() {
     if (this.pingFails) throw new Error('connexion refusée')
+  }
+
+  // ---- lot 6 : capteurs ----
+  async alertExists(alertId: string) {
+    this.count('alertExists')
+    return this.alerts.some((a) => a.id === alertId)
+  }
+  async listSensors(since: string | null): Promise<Sensor[]> {
+    return this.since(this.sensors, since).map(({ token_hash: _t, created_at: _c, ...s }) => s)
+  }
+  async listAlerts(since: string | null): Promise<Alert[]> {
+    return this.alerts
+      .filter((a) => a.resolved_at === null || (since !== null && Date.parse(a.updated_at) >= Date.parse(since)))
+      .map(({ updated_at: _u, acknowledged_by_record_id: _r, ...a }) => ({ ...a }))
+  }
+  async findSensorByTokenHash(tokenHash: string): Promise<SensorAuthRow | null> {
+    const s = this.sensors.find((x) => x.token_hash === tokenHash)
+    return s ? { id: s.id, name: s.name, equipment_id: s.equipment_id, active: s.active, last_seen_at: s.last_seen_at } : null
+  }
+  /** Reproduit sensor_record_reading() (limite de débit, contraintes, télémétrie). */
+  async recordSensorReading(row: { sensor_id: string; measured_at: string | null; value_c: number; battery_percent: number | null; min_interval_seconds: number }): Promise<RecordReadingResult> {
+    this.count('recordSensorReading')
+    const s = this.sensors.find((x) => x.id === row.sensor_id)
+    if (!s) return 'unknown_sensor'
+    if (!s.active) return 'inactive'
+    const now = this.serverClock()
+    if (s.last_seen_at && now.getTime() - Date.parse(s.last_seen_at) < Math.max(row.min_interval_seconds, 30) * 1000) return 'rate_limited'
+    if (row.value_c < -60 || row.value_c > 100) throw new Error('23514 sensor_readings_value_check')
+    const at = now.toISOString()
+    this.sensorReadings.push({ id: this.sensorReadings.length + 1, sensor_id: s.id, measured_at: row.measured_at ?? at, value_c: row.value_c, battery_percent: row.battery_percent, received_at: at })
+    Object.assign(s, { last_seen_at: at, last_value_c: row.value_c, battery_percent: row.battery_percent ?? s.battery_percent, updated_at: at })
+    return 'stored'
+  }
+
+  // ---- lot 6 : alertes ----
+  async listSensorsForAlerts(): Promise<SensorForAlerts[]> {
+    return this.sensors.map(({ token_hash: _t, ...s }) => ({ ...s }))
+  }
+  async listSensorReadings(sensorIds: string[], since: string): Promise<SensorReadingRow[]> {
+    return this.sensorReadings
+      .filter((r) => sensorIds.includes(r.sensor_id) && Date.parse(r.measured_at) >= Date.parse(since))
+      .map((r) => ({ sensor_id: r.sensor_id, measured_at: r.measured_at, value_c: r.value_c }))
+  }
+  async listRecentRecords(sinceServerTime: string, types: readonly string[]): Promise<EngineRecord[]> {
+    return this.records
+      .filter((r) => r.quarantine_reason === null && types.includes(r.type) && Date.parse(r.server_time) >= Date.parse(sinceServerTime))
+      .map((r) => ({ id: r.id, type: r.type, payload: structuredClone(r.payload), device_time: r.device_time, supersedes_id: r.supersedes_id }))
+  }
+  async listOpenAlerts(): Promise<Alert[]> {
+    return this.listAlerts(null)
+  }
+  /** Reproduit l'index unique « une alerte ouverte par sujet » et le trigger (opened_at serveur). */
+  async openAlert(row: NewAlertRow): Promise<Alert | null> {
+    this.count('openAlert')
+    const dup = this.alerts.some(
+      (a) => a.resolved_at === null && a.kind === row.kind && a.equipment_id === row.equipment_id && a.sensor_id === row.sensor_id && a.related_record_id === row.related_record_id,
+    )
+    if (dup) return null
+    const at = this.serverClock().toISOString()
+    const a: MemoryAlert = { id: crypto.randomUUID(), ...row, opened_at: at, resolved_at: null, acknowledged_at: null, last_notified_at: null, updated_at: at, acknowledged_by_record_id: null }
+    this.alerts.push(a)
+    const { updated_at: _u, acknowledged_by_record_id: _r, ...out } = a
+    return { ...out }
+  }
+  async resolveAlerts(ids: string[]) {
+    const at = this.serverClock().toISOString()
+    for (const a of this.alerts) if (ids.includes(a.id) && a.resolved_at === null) Object.assign(a, { resolved_at: at, updated_at: at })
+  }
+  async markAlertsNotified(ids: string[]) {
+    const at = this.serverClock().toISOString()
+    for (const a of this.alerts) if (ids.includes(a.id)) Object.assign(a, { last_notified_at: at, updated_at: at })
+  }
+  async listPushSubscriptions(): Promise<PushSubscriptionRow[]> {
+    return this.pushSubscriptions.map(({ last_success_at: _l, ...s }) => ({ ...s }))
+  }
+  async recordPushSuccess(id: string, at: string) {
+    const s = this.pushSubscriptions.find((x) => x.id === id)
+    if (s) Object.assign(s, { last_success_at: at, failures: 0 })
+  }
+  async recordPushFailure(id: string) {
+    const s = this.pushSubscriptions.find((x) => x.id === id)
+    if (!s) return 0
+    s.failures++
+    return s.failures
+  }
+  async deletePushSubscriptionById(id: string) {
+    this.pushSubscriptions = this.pushSubscriptions.filter((x) => x.id !== id)
+  }
+
+  // ---- lot 6 : abonnements push ----
+  async upsertPushSubscription(row: { device_id: string; endpoint: string; p256dh: string; auth: string }): Promise<'created' | 'updated'> {
+    const s = this.pushSubscriptions.find((x) => x.endpoint === row.endpoint)
+    if (s) {
+      Object.assign(s, { ...row, failures: 0 })
+      return 'updated'
+    }
+    this.pushSubscriptions.push({ id: crypto.randomUUID(), ...row, failures: 0, last_success_at: null })
+    return 'created'
+  }
+  async removePushSubscription(deviceId: string, endpoint: string) {
+    const before = this.pushSubscriptions.length
+    this.pushSubscriptions = this.pushSubscriptions.filter((x) => !(x.device_id === deviceId && x.endpoint === endpoint))
+    return this.pushSubscriptions.length < before
   }
 }
 

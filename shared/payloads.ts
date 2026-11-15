@@ -319,3 +319,54 @@ export const DEFAULT_ALERT_SETTINGS = {
   sensor_silent_minutes: 60,
   alert_repeat_minutes: 15, // rappel tant que non prise en compte
 } as const
+
+// ───────────────────────────── Lot 7 : documents, PMS, mode Contrôle ─────────────────────────────
+
+export type DocumentCategory =
+  | 'pms' // plan de maîtrise sanitaire (versions successives)
+  | 'training' // attestation de formation hygiène
+  | 'health' // aptitude (date de validité seulement — jamais de détail médical)
+  | 'pest_control' // contrat / passages dératisation
+  | 'maintenance' // contrat froid, entretien
+  | 'supplier' // fiches fournisseurs, fiches techniques
+  | 'lab_analysis' // analyses de laboratoire
+  | 'inspection' // rapports de contrôle sanitaire
+  | 'registration' // déclaration DDPP, agrément
+  | 'other'
+
+/**
+ * Document (référence gérée par le gérant). Fichier dans le bucket privé `documents`
+ * (PDF, JPEG, PNG ou WebP, ≤ 10 Mo), chemin `<uuid>.<ext>`, déposé par le gérant connecté.
+ */
+export interface DocumentRef {
+  id: string
+  title: string // 1..120
+  category: DocumentCategory
+  file_path: string // ^[0-9a-f-]{36}\.(pdf|jpg|png|webp)$
+  mime_type: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp'
+  size_bytes: number
+  issued_on: string | null // AAAA-MM-JJ
+  valid_until: string | null // AAAA-MM-JJ — rappel avant échéance
+  notes: string | null // 0..500
+  active: boolean
+  updated_at: string
+}
+export const DOCUMENT_BUCKET = 'documents'
+export const DOCUMENT_MAX_BYTES = 10_000_000
+
+/** Rapport de vérification d'intégrité du registre (fonction `verify-integrity`, gérant connecté). */
+export interface IntegrityReport {
+  checked_at: string
+  total_records: number
+  devices: {
+    device_id: string
+    device_name: string
+    records: number
+    first_seq: number
+    last_seq: number
+    ok: boolean
+    problems: { device_seq: number; record_id: string; problem: 'hash_mismatch' | 'broken_chain' | 'seq_gap' }[]
+  }[]
+  anchors_used: number // maillons purgés (rétention) remplacés par une ancre
+  ok: boolean
+}

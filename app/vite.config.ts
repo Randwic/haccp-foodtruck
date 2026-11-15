@@ -26,9 +26,12 @@ export default defineConfig({
           { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff2}'] },
+      // .wasm : encodeur WebP de secours (Safari iOS), disponible hors-ligne.
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff2,wasm}'] },
     }),
   ],
+  // L'encodeur WebAssembly charge son .wasm via import.meta.url : pas de pré-bundling.
+  optimizeDeps: { exclude: ['@jsquash/webp'] },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

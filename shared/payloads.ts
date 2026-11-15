@@ -167,8 +167,11 @@ export interface Product {
   allergens: Allergen[]
   storage: StorageMode
   // Durées de vie secondaires en heures (null = non applicable) — à confirmer selon le PMS
-  shelf_life_opened_hours: number | null // après ouverture du conditionnement
+  shelf_life_opened_hours: number | null // après ouverture ; null = « selon l'étiquette du fabricant » (DLC saisie à la main)
   shelf_life_thawed_hours: number | null // après décongélation
+  // Lot 4 bis (données réelles Space Diner)
+  may_contain: Allergen[] // « peut en contenir » (traces, selon le fournisseur) — disjoint de `allergens`
+  cook_min_c: number | null // température à cœur minimale à la cuisson / remise en température (ex. porc 63, poulet 74)
   active: boolean
   updated_at: string
 }
@@ -177,13 +180,20 @@ export interface Product {
 export interface Recipe {
   id: string
   name: string // 1..80
+  // Lot 4 bis : 'preparation' = préparation maison (sauce, mélange…) ; 'menu_item' = plat vendu (tableau des allergènes)
+  kind: 'preparation' | 'menu_item'
+  category: string | null // rubrique du menu, ex. « Croq'Brioche », « Dessert », « Frites », « Menu enfant » (0..40)
   ingredient_product_ids: string[] // 0..50 Product.id
-  extra_allergens: Allergen[] // allergènes non portés par un produit référencé
+  ingredient_recipe_ids: string[] // 0..20 Recipe.id de kind 'preparation' (ex. Supernova → Sauce UFO), sans cycle
+  extra_allergens: Allergen[] // allergènes non portés par un produit / une préparation référencés
+  may_contain: Allergen[] // « peut en contenir » propres à la recette (en plus de ceux des ingrédients)
   storage: StorageMode
-  shelf_life_hours: number // durée de vie de la préparation (1..2160)
+  shelf_life_hours: number | null // préparation : 1..2160 ; plat du menu : null (servi immédiatement)
   active: boolean
   updated_at: string
 }
+// Allergènes d'une recette = union récursive (produits + préparations + extra) ; « peut en contenir » = union
+// récursive des may_contain, moins les allergènes présents.
 
 /** Étiquette imprimée — type 'label_printed' (traçabilité aval). */
 export interface LabelPrintedPayload {

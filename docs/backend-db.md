@@ -19,6 +19,7 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 | `…1300_lot5_nettoyage.sql` | Plan de nettoyage, checklists, données d'exemple (idempotente, rejouée par les tests) |
 | `…1400_lot6_alertes.sql` | Capteurs, mesures (insertion seule + purge), alertes (mises à jour contrôlées), prise en compte `alert_ack`, abonnements Web Push, réglages d'alerte (idempotente, rejouée par les tests) |
 | `…1500_lot7_documents.sql` | Documents (table + bucket privé `documents`), `documents_expiring()`, vue `staff_public`, `record_integrity_check()` (idempotente, rejouée par les tests) |
+| `20261115000100_lot4bis_menu.sql` | Traces (`may_contain`), cuisson à cœur (`cook_min_c`), plats du menu, sous-recettes sans cycle, `haccp_recipe_allergens()` (idempotente, rejouée par les tests) |
 
 ## Tables
 
@@ -33,6 +34,12 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 
 - `products` (lot 4) : `name` 1–80 (non blanc), `allergens text[]` ⊂ les 14 codes de `ALLERGENS` (sans null ni doublon, une dimension : `haccp_valid_allergens()`), `storage` `fridge|freezer|ambient`, `shelf_life_opened_hours` / `shelf_life_thawed_hours` 1–2160 ou null.
 - `recipes` (lot 4) : `name` 1–80, `ingredient_product_ids uuid[]` 0–50 sans null, `extra_allergens` (même contrôle), `storage`, `shelf_life_hours` 1–2160 (obligatoire). Chaque ingrédient doit exister dans `products` (trigger, `HACCP: unknown_product` ; produit désactivé accepté). Pas de clé étrangère sur un tableau, mais un produit n'est jamais supprimé, donc le contrôle à l'écriture suffit.
+- **Lot 4 bis** (`20261115000100`) :
+  - `products.may_contain text[]` (14 codes, sans doublon, **disjoint** de `allergens` : `products_may_contain_check`), `cook_min_c numeric(4,1)` null ou 40..100 (`products_cook_min_check`). `shelf_life_opened_hours` null = « selon l'étiquette du fabricant ».
+  - `recipes.kind` `preparation|menu_item` (défaut `preparation`), `category` ≤ 40 ou null, `ingredient_recipe_ids uuid[]` 0..20 sans null, `may_contain`. `recipes_shelf_life_check` : préparation → `shelf_life_hours` 1..2160 obligatoire ; plat du menu → null.
+  - Trigger `haccp_recipes_check_ingredients` (verrou consultatif sur le graphe) : sous-recette inconnue → `HACCP: unknown_recipe` ; plat du menu comme ingrédient → `HACCP: invalid_sub_recipe` ; recette qui se contient (directement ou par ses sous-recettes) → `HACCP: recipe_cycle` ; préparation utilisée qui devient un plat → `HACCP: recipe_in_use`.
+  - `haccp_recipe_allergens(id)` → `(allergens, may_contain)` triés : union récursive des produits, sous-recettes et `extra_allergens` ; traces = union récursive des `may_contain` moins les présents. Droits de l'appelant (RLS) ; `authenticated`, `service_role`.
+  - sync-pull transmet les nouveaux champs (`Product`, `Recipe` de `shared/payloads.ts`).
 - Produits et recettes : **même régime que `suppliers`** (RLS gérant en lecture/écriture, `service_role` en lecture seule, audit, `updated_at` forcé, DELETE et TRUNCATE bloqués pour tous par `haccp_reference_no_delete()` → désactiver). La migration pose 8 produits d'un food truck burger/frites et une recette d'exemple (uuid fixes `…0401`–`…0408`, `…0451`, `on conflict do nothing` : une fiche modifiée par le gérant n'est jamais écrasée). **Allergènes à vérifier sur les fiches fournisseurs, durées de vie à confirmer selon le PMS.**
 - Traçabilité aval (lot 4) :
   - `haccp_norm_lot(text)` : minuscules, sans espaces. `haccp_record_lots(payload)` : lots normalisés cités par `lot`, `items[].lot` et les mêmes sous `replacement` (corrections) ; mode jsonpath *lax*, jamais d'erreur sur un payload en quarantaine ; valeurs > 100 caractères ignorées (taille d'entrée d'index).
@@ -125,6 +132,10 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 
 Limite connue : le propriétaire de la base (rôle `postgres` de Supabase) peut toujours désactiver un trigger par une commande DDL. La protection vise l'API et les rôles applicatifs. Il faut protéger l'accès au tableau de bord Supabase (mot de passe fort et 2FA).
 
+## Données réelles Space Diner
+
+`supabase/data/space_diner_v43.sql` (**pas** une migration) : à exécuter **une fois** après les migrations et le seed (SQL Editor ou `psql -v ON_ERROR_STOP=1 -f …`), une transaction, idempotent, aucun enregistrement du registre. Il renomme les équipements du seed et ajoute bain-marie, plancha, machine à sceller (8 équipements, seuils : frigo 350 L ≤ 3 °C, desserte ≤ 4 °C, congélateur ≤ −18 °C, tolérance 20 min ; bain-marie ≥ 63 °C), règle les relevés à 16:30 / 21:00, les seuils génériques (cuisson 63, maintien 63 / 180 min, remise en température 63 / 60), charge 52 produits, 8 préparations et 14 plats du menu (sources : livre du menu v43, tableau des allergènes, classeur PMS), le plan de nettoyage du classeur et les checklists Ouverture / Fermeture adaptées ; il désactive les exemples du seed sans équivalent. Le test `96c_space_diner_v43.sql` l'applique deux fois et vérifie que les allergènes calculés des 14 plats sont **exactement** ceux du tableau. Les allergènes « peut en contenir » des produits industriels et les durées supposées sont commentés dans le script : **à valider par le gérant**.
+
 ## Mise en place sur Supabase
 
 1. Lier le projet et pousser les migrations : `supabase link` puis `supabase db push`. Appliquer ensuite `seed.sql` une seule fois.
@@ -146,7 +157,7 @@ Prérequis : PostgreSQL 16 (`/usr/lib/postgresql/16/bin`, modifiable avec `PGBIN
 Le script :
 - crée un cluster jetable sur un port libre ;
 - installe les stubs Supabase (`supabase/tests/supabase_stubs.sql` : rôles, `auth.users`, `auth.uid()`, privilèges par défaut, schéma `storage` minimal avec RLS et le blocage du `DELETE` direct) ;
-- applique les migrations (celles des lots 3 à 7 deux fois) et le seed (deux fois), pour vérifier l'idempotence, puis `helpers.sql` ;
+- applique les migrations (celles des lots 3 à 7 et 4 bis deux fois) et le seed (deux fois), pour vérifier l'idempotence, puis `helpers.sql` ;
 - exécute chaque `supabase/tests/sql/*.sql` dans une base clonée neuve ;
 - vérifie la concurrence de `bootstrap_manager()` avec deux sessions `psql` simultanées (une seule réussit) ;
 - détruit le cluster.

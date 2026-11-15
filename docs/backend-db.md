@@ -18,6 +18,7 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 | `…1200_reglages_huile.sql` | `settings.oil_polar_max` (25) / `oil_polar_warn` (22) |
 | `…1300_lot5_nettoyage.sql` | Plan de nettoyage, checklists, données d'exemple (idempotente, rejouée par les tests) |
 | `…1400_lot6_alertes.sql` | Capteurs, mesures (insertion seule + purge), alertes (mises à jour contrôlées), prise en compte `alert_ack`, abonnements Web Push, réglages d'alerte (idempotente, rejouée par les tests) |
+| `…1500_lot7_documents.sql` | Documents (table + bucket privé `documents`), `documents_expiring()`, vue `staff_public`, `record_integrity_check()` (idempotente, rejouée par les tests) |
 
 ## Tables
 
@@ -51,6 +52,31 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
   - `alerts` (`Alert` + `acknowledged_by_record_id`, `updated_at`) : `kind` ∈ `AlertKind`, sujet exigé selon la nature (`sensor_*` → `sensor_id`, `check_overdue` → `equipment_id`, sinon `related_record_id`, sans clé étrangère : le registre peut être purgé), `message` 1–300. **Une seule alerte ouverte par sujet** : index unique partiel `alerts_one_open_idx (kind, equipment_id, sensor_id, related_record_id) nulls not distinct where resolved_at is null`. Trigger `haccp_alerts_guard` (tous rôles) : création forcément ouverte / non prise en compte / non notifiée, `opened_at = now()` ; en mise à jour, **seules** `resolved_at` (une fois, jamais rouverte), `acknowledged_at` + `acknowledged_by_record_id` (une fois, définitif) et `last_notified_at` (jamais effacée) changent, et leurs valeurs sont **remplacées par `now()`** ; DELETE et TRUNCATE interdits. Privilèges : `service_role` lit, insère (`kind, equipment_id, sensor_id, related_record_id, message`) et met à jour `resolved_at, last_notified_at` seulement ; le gérant lit (RLS). Index `alerts_updated_idx` pour sync-pull.
   - **Prise en compte** : trigger `records_alert_ack` (AFTER INSERT sur `records`, SECURITY DEFINER) — un record `alert_ack` **hors quarantaine** pose `acknowledged_at = now()` et `acknowledged_by_record_id` sur l'alerte `payload.alert_id` si elle n'est pas déjà prise en compte. **Choix** : fait par la base, dans la transaction d'insertion du registre, plutôt que par une Edge Function : impossible de perdre la prise en compte (pas de seconde écriture qui pourrait échouer), et c'est la seule voie (`service_role` n'a pas le droit d'écrire `acknowledged_at`). Une correction d'`alert_ack` n'a pas d'effet ; un `alert_ack` en quarantaine non plus.
   - `push_subscriptions(id, device_id → devices, endpoint unique https ≤ 2048, p256dh base64url 87 car., auth base64url 22 car., created_at, updated_at, last_success_at, failures)` : pas une donnée HACCP — `service_role` lit, crée, met à jour et **supprime** (désabonnement, 404/410) ; le gérant ne voit que l'état (`id, device_id, created_at, updated_at, last_success_at, failures`), ni l'URL ni les clés.
+
+- **Lot 7 — documents et contrôle sanitaire** (`…1500`) :
+  - `documents` (`DocumentRef` + `created_at`) : `title` 1–120 (non blanc), `category` ∈ `DocumentCategory`, `file_path` `^[0-9a-f-]{36}\.(pdf|jpg|png|webp)$` (unique), `mime_type` **cohérent avec l'extension** (`pdf`↔`application/pdf`, `jpg`↔`image/jpeg`, `png`↔`image/png`, `webp`↔`image/webp`), `size_bytes` 1..10 000 000 (`DOCUMENT_MAX_BYTES`), `issued_on` / `valid_until` dates (`valid_until ≥ issued_on`), `notes` ≤ 500. **Régime « référence gérant »** : RLS gérant seul (lecture/insertion/modification), audit, `updated_at` forcé, DELETE/TRUNCATE bloqués pour tous → désactiver. **Aucun privilège pour `service_role`** et absente de sync-pull : l'app gérant la lit avec supabase-js. **Choix** : le fichier d'une fiche est figé (`file_path`, `mime_type`, `size_bytes` non modifiables, même par le propriétaire : `HACCP: document_file_immutable`) ; nouvelle version (PMS v2) = nouvelle fiche, l'ancienne passe `active = false`. L'existence de l'objet Storage n'est pas vérifiée : déposer le fichier **puis** insérer la fiche.
+  - Bucket `documents` : `public = false`, 10 Mo, `application/pdf`, `image/jpeg`, `image/png`, `image/webp`. Politiques `storage.objects` : le gérant **lit** et **dépose** (INSERT, nom `<uuid>.<ext>` à la racine) ; politiques **restrictives** : aucun UPDATE (donc ni `upsert: true`, ni `move`, ni changement de métadonnées) ni DELETE pour `anon`/`authenticated`, dans les deux sens (vers ou depuis le bucket) ; lecture et dépôt refusés à tout autre que le gérant, même si une politique large est ajoutée plus tard. Le gérant voit la ligne du bucket. Les politiques du bucket `photos` ne changent pas. `service_role` (qui contourne la RLS) n'est utilisé par aucune fonction sur ce bucket ; `photos_to_purge()` filtre `bucket_id = 'photos'` (test : un document de 20 ans n'est jamais désigné).
+  - `documents_expiring(p_days default 30)` (SECURITY DEFINER, **gérant seulement** : `HACCP: forbidden` ; `p_days` 0..3650 sinon `HACCP: invalid_days`) : documents **actifs** dont `valid_until ≤ aujourd'hui + p_days` (échus compris), « aujourd'hui » dans le fuseau de l'établissement ; colonnes de `DocumentRef` + `days_left` (négatif si échu), tri par `valid_until`. `supabase.rpc('documents_expiring', { p_days: 30 })`.
+  - `staff_public` (vue `security_invoker`, RLS de `staff`) : `id, display_name, role, active, created_at, updated_at`, **jamais** `pin_hash`/`pin_salt`. Lecture seule, gérant seulement.
+  - `record_integrity_check(p_user_id, p_summary jsonb)` (SECURITY DEFINER, **`service_role` seulement**) : écrit le résumé de `verify-integrity` dans `audit_log` (`action = 'VERIFY_INTEGRITY'`, `table_name = 'records'`, acteur = gérant).
+  - **Export « contrôle sanitaire » : ce que l'app gérant interroge** (supabase-js + JWT du gérant, RLS ; vérifié par `99_lot7_documents.sql`, rien à ouvrir de plus). Paginer par 1000 (`max_rows`) :
+
+    | Source | Colonnes | Remarque |
+    |---|---|---|
+    | `records` | `id, type, payload, author_id, device_id, device_seq, device_time, device_now, prev_hash, hash, supersedes_id, server_time, clock_suspect, quarantine_reason` | Tout le registre, quarantaine comprise (`quarantine_reason` non nul : à signaler, pas à masquer) ; trier par `device_id, device_seq` ou `server_time` |
+    | `staff_public` | `id, display_name, role, active` | Auteurs (`author_id`) ; **ne pas** lire `staff` pour l'export |
+    | `devices` | `id, name, enrolled_at, revoked_at` | Ne pas demander `token_hash` |
+    | `establishment`, `settings` | tout | Nom, fuseau, `retention_years` |
+    | `equipment`, `thresholds` | tout | Seuils en vigueur (le registre porte `in_range` jugé à la saisie) |
+    | `suppliers`, `products`, `recipes` | tout | Actifs **et** désactivés (le registre peut citer une fiche désactivée) |
+    | `cleaning_tasks`, `checklists` | tout | Idem |
+    | `alerts` | colonnes de `Alert` | Historique des alertes et prises en compte |
+    | `sensors` | `id, name, equipment_id, vendor, active, last_seen_at, last_value_c, battery_percent` | Colonnes explicites (`select *` refusé : `token_hash`) |
+    | `record_chain_anchors` | `device_id, device_seq, hash, purged_at` | Maillons purgés en fin de conservation |
+    | `audit_log` | `at, actor, table_name, row_id, action, old, new` | Modifications des références, purges, `VERIFY_INTEGRITY` |
+    | `documents` + bucket `documents` | `DocumentRef` ; `storage.from('documents').createSignedUrl(file_path, 300)` | Filtrer `active` selon le besoin |
+    | `rpc('trace_lot')`, `rpc('documents_expiring')` | — | Rappel produit, échéances |
+    | `functions.invoke('verify-integrity')` | `IntegrityReport` | Preuve d'intégrité (voir `backend-logic.md`) |
 
 ## Règles de sécurité
 
@@ -120,7 +146,7 @@ Prérequis : PostgreSQL 16 (`/usr/lib/postgresql/16/bin`, modifiable avec `PGBIN
 Le script :
 - crée un cluster jetable sur un port libre ;
 - installe les stubs Supabase (`supabase/tests/supabase_stubs.sql` : rôles, `auth.users`, `auth.uid()`, privilèges par défaut, schéma `storage` minimal avec RLS et le blocage du `DELETE` direct) ;
-- applique les migrations (celles des lots 3, 4, 5 et 6 deux fois) et le seed (deux fois), pour vérifier l'idempotence, puis `helpers.sql` ;
+- applique les migrations (celles des lots 3 à 7 deux fois) et le seed (deux fois), pour vérifier l'idempotence, puis `helpers.sql` ;
 - exécute chaque `supabase/tests/sql/*.sql` dans une base clonée neuve ;
 - vérifie la concurrence de `bootstrap_manager()` avec deux sessions `psql` simultanées (une seule réussit) ;
 - détruit le cluster.

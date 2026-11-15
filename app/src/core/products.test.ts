@@ -1,7 +1,7 @@
 // Lot 4 : produits et recettes reçus par sync-pull, migration de la base locale (version 3).
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEMO_PRODUCTS, DEMO_RECIPES } from './mockTransport.ts'
+import { DEMO_CHECKLISTS, DEMO_CLEANING_TASKS, DEMO_PRODUCTS, DEMO_RECIPES } from './mockTransport.ts'
 import { CoreDb } from './db.ts'
 import { createCore } from './core.ts'
 import { disposeAll, enrollAndUnlock, makeHarness, uniqueDbName } from './testUtils.ts'
@@ -31,6 +31,23 @@ describe('produits et recettes (sync-pull)', () => {
     expect((await core.listRecipes({ includeInactive: true }))[0].active).toBe(false)
   })
 
+  it('lot 5 : tâches de nettoyage et checklists exposées, triées par nom ; désactivées lisibles avec includeInactive', async () => {
+    const { core, server } = makeHarness()
+    await enrollAndUnlock(core)
+    const tasks = await core.listCleaningTasks()
+    expect(tasks).toHaveLength(DEMO_CLEANING_TASKS.length)
+    expect(tasks[0].name).toBe('Congélateur — dégivrage')
+    expect((await core.listChecklists()).map((c) => c.name)).toEqual(['Contrôle nuisibles', 'Fermeture', 'Ouverture'])
+    expect((await core.listChecklists()).find((c) => c.kind === 'opening')?.items).toHaveLength(6)
+
+    server.upsertChecklist({ ...DEMO_CHECKLISTS[0], items: [...DEMO_CHECKLISTS[0].items, { id: 'gants', label: 'Gants disponibles', required: false }] })
+    server.deactivate('cleaning_tasks', DEMO_CLEANING_TASKS[10].id)
+    await core.syncNow()
+    expect((await core.listChecklists()).find((c) => c.kind === 'opening')?.items.at(-1)).toEqual({ id: 'gants', label: 'Gants disponibles', required: false })
+    expect((await core.listCleaningTasks()).map((t) => t.id)).not.toContain(DEMO_CLEANING_TASKS[10].id)
+    expect((await core.listCleaningTasks({ includeInactive: true })).find((t) => t.id === DEMO_CLEANING_TASKS[10].id)?.active).toBe(false)
+  })
+
   it('serveur plus ancien (sans products/recipes dans la réponse) : rien ne casse', async () => {
     const { core } = makeHarness({
       transport: (server) => ({
@@ -49,6 +66,8 @@ describe('produits et recettes (sync-pull)', () => {
     })
     await enrollAndUnlock(core)
     expect(await core.listProducts()).toEqual([])
+    expect(await core.listCleaningTasks()).toEqual([])
+    expect(await core.listChecklists()).toEqual([])
     expect((await core.listStaff()).length).toBeGreaterThan(0)
   })
 

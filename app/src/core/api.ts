@@ -1,7 +1,7 @@
 // Interface publique du « core » (hors-ligne, registre, synchro, PIN) utilisée par l'interface.
 // FIGÉE : l'équipe UI code contre ces signatures, l'équipe core les implémente dans ./index.ts.
 import type { HaccpRecord, RecordType, StaffMember, Equipment, Threshold, Settings, Establishment } from '../../../shared/types.ts'
-import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 
 export interface DeviceInfo {
   device_id: string
@@ -81,6 +81,13 @@ export interface CoreApi {
   listProducts(opts?: { includeInactive?: boolean }): Promise<Product[]>
   /** Recettes / préparations maison reçues par sync-pull (lot 4), triées par nom ; même règle. */
   listRecipes(opts?: { includeInactive?: boolean }): Promise<Recipe[]>
+  /**
+   * Lot 5 (ajout rétro-compatible) : tâches du plan de nettoyage reçues par sync-pull (stockées depuis
+   * le lot 4), triées par nom ; actives seulement sauf `includeInactive` (historique).
+   */
+  listCleaningTasks(opts?: { includeInactive?: boolean }): Promise<CleaningTask[]>
+  /** Lot 5 : checklists (ouverture, fermeture, nuisibles…) reçues par sync-pull, triées par nom ; même règle. */
+  listChecklists(opts?: { includeInactive?: boolean }): Promise<Checklist[]>
 
   // Photos (lot 3) — stockées sur l'appareil puis envoyées par la synchro.
   /**

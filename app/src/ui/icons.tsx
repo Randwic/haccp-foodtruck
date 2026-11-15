@@ -3,7 +3,13 @@
 // Aucun emoji ni pictogramme Unicode dans les écrans : on passe toujours par ce fichier.
 import type { ComponentType } from 'react'
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
+  Gauge,
+  ListChecks,
+  RefreshCcw,
+  TestTube,
   ArrowRightLeft,
   Ban,
   Box,
@@ -173,3 +179,11 @@ export const IconAllergen = make(Wheat, 'IconAllergen')
 export const IconTable = make(TableProperties, 'IconTable')
 export const IconDlc = make(CalendarClock, 'IconDlc')
 export const IconCopies = make(Copy, 'IconCopies')
+
+// Nettoyage, checklists, huiles (lot 5)
+export const IconChecklist = make(ListChecks, 'IconChecklist')
+export const IconGauge = make(Gauge, 'IconGauge')
+export const IconOilChange = make(RefreshCcw, 'IconOilChange')
+export const IconStrip = make(TestTube, 'IconStrip')
+export const IconMoveUp = make(ArrowUp, 'IconMoveUp')
+export const IconMoveDown = make(ArrowDown, 'IconMoveDown')

@@ -10,14 +10,16 @@ import {
   DEMO_SUPPLIERS,
   DEMO_PRODUCTS,
   DEMO_RECIPES,
+  DEMO_CLEANING_TASKS,
+  DEMO_CHECKLISTS,
   DEMO_THRESHOLDS,
   type MockTransport,
   type Transport,
 } from '../core/index.ts'
 import type { DeviceEnrollResponse, Equipment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
-import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 import { ManagerError, MESSAGES, type ManagedStaff, type ManagerApi, type ManagerErrorCode, type ManagerSettings } from './api.ts'
-import { normalizeProductInput, normalizeRecipeInput, normalizeSupplierInput } from './helpers.ts'
+import { normalizeChecklistInput, normalizeCleaningTaskInput, normalizeProductInput, normalizeRecipeInput, normalizeSupplierInput, oilSettingsError } from './helpers.ts'
 
 /** Compte de démonstration (mode `seeded`). */
 export const MOCK_MANAGER_ACCOUNT = { email: 'gerant@demo.fr', password: 'demo-demo-demo' } as const
@@ -47,12 +49,16 @@ interface MockState {
   daily_check_times: string[]
   missed_slot_carry_over: boolean
   thaw_dlc_days: number
+  oil_polar_max: number
+  oil_polar_warn: number
   staff: StaffMember[]
   equipment: Equipment[]
   thresholds: Threshold[]
   suppliers: Supplier[]
   products: Product[]
   recipes: Recipe[]
+  cleaning_tasks: CleaningTask[]
+  checklists: Checklist[]
 }
 
 export interface MockManagerApi extends ManagerApi {
@@ -73,7 +79,7 @@ const uuid = () => crypto.randomUUID()
 
 function initialState(seeded: boolean): MockState {
   if (!seeded) {
-    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, daily_check_times: [...DEMO_SETTINGS.daily_check_times], missed_slot_carry_over: DEMO_SETTINGS.missed_slot_carry_over, thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days, staff: [], equipment: [], thresholds: [], suppliers: [], products: clone(DEMO_PRODUCTS), recipes: clone(DEMO_RECIPES) }
+    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, daily_check_times: [...DEMO_SETTINGS.daily_check_times], missed_slot_carry_over: DEMO_SETTINGS.missed_slot_carry_over, thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days, oil_polar_max: DEMO_SETTINGS.oil_polar_max, oil_polar_warn: DEMO_SETTINGS.oil_polar_warn, staff: [], equipment: [], thresholds: [], suppliers: [], products: clone(DEMO_PRODUCTS), recipes: clone(DEMO_RECIPES), cleaning_tasks: clone(DEMO_CLEANING_TASKS), checklists: clone(DEMO_CHECKLISTS) }
   }
   return {
     bootstrapped: true,
@@ -84,12 +90,16 @@ function initialState(seeded: boolean): MockState {
     daily_check_times: [...DEMO_SETTINGS.daily_check_times],
     missed_slot_carry_over: DEMO_SETTINGS.missed_slot_carry_over,
     thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days,
+    oil_polar_max: DEMO_SETTINGS.oil_polar_max,
+    oil_polar_warn: DEMO_SETTINGS.oil_polar_warn,
     staff: clone(DEMO_STAFF),
     equipment: clone(DEMO_EQUIPMENT),
     thresholds: clone(DEMO_THRESHOLDS),
     suppliers: clone(DEMO_SUPPLIERS),
     products: clone(DEMO_PRODUCTS),
     recipes: clone(DEMO_RECIPES),
+    cleaning_tasks: clone(DEMO_CLEANING_TASKS),
+    checklists: clone(DEMO_CHECKLISTS),
   }
 }
 
@@ -130,6 +140,8 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       state.suppliers ??= [] // état enregistré avant le lot 3
       state.products ??= clone(DEMO_PRODUCTS) // état enregistré avant le lot 4
       state.recipes ??= clone(DEMO_RECIPES)
+      state.cleaning_tasks ??= clone(DEMO_CLEANING_TASKS) // état enregistré avant le lot 5
+      state.checklists ??= clone(DEMO_CHECKLISTS)
     } catch {
       /* état illisible : on repart de zéro */
     }
@@ -151,6 +163,8 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       daily_check_times: [...state.daily_check_times],
       missed_slot_carry_over: state.missed_slot_carry_over ?? DEMO_SETTINGS.missed_slot_carry_over,
       thaw_dlc_days: state.thaw_dlc_days ?? DEMO_SETTINGS.thaw_dlc_days,
+      oil_polar_max: state.oil_polar_max ?? DEMO_SETTINGS.oil_polar_max,
+      oil_polar_warn: state.oil_polar_warn ?? DEMO_SETTINGS.oil_polar_warn,
     } satisfies Settings)
   const pushStaff = (s: StaffMember) => {
     if (!t) return
@@ -193,7 +207,23 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     t.upsertRecipe({ ...rest, active: true })
     if (!r.active) t.deactivate('recipes', r.id)
   }
+  const pushCleaningTask = (x: CleaningTask) => {
+    if (!t) return
+    const { updated_at: _u, ...rest } = x
+    void _u
+    t.upsertCleaningTask({ ...rest, active: true })
+    if (!x.active) t.deactivate('cleaning_tasks', x.id)
+  }
+  const pushChecklist = (x: Checklist) => {
+    if (!t) return
+    const { updated_at: _u, ...rest } = x
+    void _u
+    t.upsertChecklist({ ...rest, active: true })
+    if (!x.active) t.deactivate('checklists', x.id)
+  }
   if (t) {
+    state.cleaning_tasks.forEach(pushCleaningTask)
+    state.checklists.forEach(pushChecklist)
     state.products.forEach(pushProduct)
     state.recipes.forEach(pushRecipe)
     state.suppliers.forEach(pushSupplier)
@@ -230,6 +260,8 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     // États enregistrés avant l'ajout de ces réglages : valeurs par défaut.
     missed_slot_carry_over: state.missed_slot_carry_over ?? DEMO_SETTINGS.missed_slot_carry_over,
     thaw_dlc_days: state.thaw_dlc_days ?? DEMO_SETTINGS.thaw_dlc_days,
+    oil_polar_max: state.oil_polar_max ?? DEMO_SETTINGS.oil_polar_max,
+    oil_polar_warn: state.oil_polar_warn ?? DEMO_SETTINGS.oil_polar_warn,
   })
 
   const api: MockManagerApi = {
@@ -377,6 +409,14 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
         if (!Number.isInteger(d) || d < 0 || d > 30) throw new ManagerError('validation', 'La DLC après décongélation doit être comprise entre 0 et 30 jours.', 400)
         state.thaw_dlc_days = d
       }
+      if (patch.oil_polar_max !== undefined || patch.oil_polar_warn !== undefined) {
+        const max = patch.oil_polar_max ?? state.oil_polar_max ?? DEMO_SETTINGS.oil_polar_max
+        const warn = patch.oil_polar_warn ?? state.oil_polar_warn ?? DEMO_SETTINGS.oil_polar_warn
+        const e = oilSettingsError(max, warn)
+        if (e) throw new ManagerError('validation', e, 400)
+        state.oil_polar_max = max
+        state.oil_polar_warn = warn
+      }
       pushSettings() // le nom d'établissement passe par withEstablishmentName()
       save()
       return settingsView()
@@ -485,6 +525,72 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       pushRecipe(r)
       save()
       return clone(r)
+    },
+
+    async listCleaningTasks() {
+      await gate(true)
+      return clone(state.cleaning_tasks).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+    async addCleaningTask(input) {
+      await gate(true)
+      const n = normalizeCleaningTaskInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const x: CleaningTask = {
+        id: uuid(),
+        name: n.value.name!,
+        frequency: n.value.frequency ?? 'daily',
+        product: n.value.product ?? null,
+        method: n.value.method ?? null,
+        active: true,
+        updated_at: nowIso(),
+      }
+      state.cleaning_tasks.push(x)
+      pushCleaningTask(x)
+      save()
+      return clone(x)
+    },
+    async updateCleaningTask(id, patch) {
+      await gate(true)
+      const x = state.cleaning_tasks.find((c) => c.id === id)
+      if (!x) throw new ManagerError('validation', 'Tâche introuvable.', 404)
+      const { active, ...fields } = patch
+      const n = normalizeCleaningTaskInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      Object.assign(x, n.value)
+      if (active !== undefined) x.active = active
+      x.updated_at = nowIso()
+      pushCleaningTask(x)
+      save()
+      return clone(x)
+    },
+    async listChecklists() {
+      await gate(true)
+      return clone(state.checklists).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+    async addChecklist(input) {
+      await gate(true)
+      const n = normalizeChecklistInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      if (!n.value.items) throw new ManagerError('validation', 'Ajoutez au moins un point à contrôler.', 400)
+      const x: Checklist = { id: uuid(), name: n.value.name!, kind: n.value.kind ?? 'other', items: n.value.items, active: true, updated_at: nowIso() }
+      state.checklists.push(x)
+      pushChecklist(x)
+      save()
+      return clone(x)
+    },
+    async updateChecklist(id, patch) {
+      await gate(true)
+      const x = state.checklists.find((c) => c.id === id)
+      if (!x) throw new ManagerError('validation', 'Checklist introuvable.', 404)
+      const { active, ...fields } = patch
+      const n = normalizeChecklistInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      Object.assign(x, n.value)
+      if (active !== undefined) x.active = active
+      x.updated_at = nowIso()
+      pushChecklist(x)
+      save()
+      return clone(x)
     },
 
     async downloadPhoto(path) {

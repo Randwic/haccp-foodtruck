@@ -1,8 +1,8 @@
 // Aides pures de l'espace gérant (testables sans DOM).
 import type { EquipmentKind, RecordType } from '../../../shared/types.ts'
-import { ALLERGENS, type Allergen } from '../../../shared/payloads.ts'
+import { ALLERGENS, type Allergen, type Checklist, type ChecklistItem, type CleaningFrequency } from '../../../shared/payloads.ts'
 import { STORAGE_KINDS } from '../../../shared/validation.ts'
-import type { ProductInput, RecipeInput } from './api.ts'
+import type { ChecklistInput, CleaningTaskInput, ProductInput, RecipeInput } from './api.ts'
 
 /** Nom proposé pour l'appareil : « iPad », « iPhone »… (modifiable par l'utilisateur). */
 export function guessDeviceName(
@@ -204,4 +204,100 @@ export function normalizeRecipeInput(input: Partial<RecipeInput>): Normalized<Pa
   if (e) return { ok: false, field: 'shelf_life_hours', message: e }
   if (input.shelf_life_hours !== undefined) out.shelf_life_hours = input.shelf_life_hours
   return { ok: true, value: out }
+}
+
+// ───────────── Lot 5 : plan de nettoyage, checklists, réglages huile ─────────────
+
+export const CLEANING_FREQUENCIES: readonly CleaningFrequency[] = ['after_service', 'daily', 'weekly', 'monthly']
+export const CHECKLIST_KINDS: readonly Checklist['kind'][] = ['opening', 'closing', 'pest_control', 'other']
+export const CHECKLIST_ITEMS_MAX = 40
+const ITEM_ID_RE = /^[a-z0-9_-]{1,40}$/
+
+/** Texte facultatif : vide → null, sinon espaces normalisés, longueur bornée. */
+function optionalText(v: string | null | undefined, max: number, field: string, what: string): Normalized<string | null | undefined> {
+  if (v === undefined) return { ok: true, value: undefined }
+  const t = (v ?? '').trim()
+  if (t.length > max) return { ok: false, field, message: `${what} trop long (${max} caractères au plus).` }
+  return { ok: true, value: t || null }
+}
+
+/** Mêmes règles que la table `cleaning_tasks` (nom 1–80, fréquence connue, produit ≤ 80, méthode ≤ 500). */
+export function normalizeCleaningTaskInput(input: Partial<CleaningTaskInput>): Normalized<Partial<CleaningTaskInput>> {
+  const out: Partial<CleaningTaskInput> = {}
+  const n = normName(input.name, 'de la tâche')
+  if (!n.ok) return n
+  if (n.value !== undefined) out.name = n.value
+  if (input.frequency !== undefined) {
+    if (!CLEANING_FREQUENCIES.includes(input.frequency)) return { ok: false, field: 'frequency', message: 'Fréquence inconnue.' }
+    out.frequency = input.frequency
+  }
+  const p = optionalText(input.product, 80, 'product', 'Produit')
+  if (!p.ok) return p
+  if (p.value !== undefined) out.product = p.value
+  const m = optionalText(input.method, 500, 'method', 'Mode opératoire')
+  if (!m.ok) return m
+  if (m.value !== undefined) out.method = m.value
+  return { ok: true, value: out }
+}
+
+/**
+ * Identifiant stable d'un point de checklist tiré de son libellé : minuscules sans accents,
+ * [a-z0-9_], 1..40, unique parmi `taken` (suffixe _2, _3… si besoin).
+ */
+export function checklistItemId(label: string, taken: Iterable<string>): string {
+  const used = new Set(taken)
+  const base =
+    label
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/œ/g, 'oe')
+      .replace(/æ/g, 'ae')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 36)
+      .replace(/_+$/, '') || 'point'
+  if (!used.has(base)) return base
+  for (let k = 2; ; k++) {
+    const id = `${base}_${k}`
+    if (!used.has(id)) return id
+  }
+}
+
+/** Mêmes règles que la table `checklists` : nom 1–80, nature connue, 1..40 points { id unique, libellé 1..120, required }. */
+export function normalizeChecklistInput(input: Partial<ChecklistInput>): Normalized<Partial<ChecklistInput>> {
+  const out: Partial<ChecklistInput> = {}
+  const n = normName(input.name, 'de la checklist')
+  if (!n.ok) return n
+  if (n.value !== undefined) out.name = n.value
+  if (input.kind !== undefined) {
+    if (!CHECKLIST_KINDS.includes(input.kind)) return { ok: false, field: 'kind', message: 'Nature de checklist inconnue.' }
+    out.kind = input.kind
+  }
+  if (input.items !== undefined) {
+    if (input.items.length < 1) return { ok: false, field: 'items', message: 'Ajoutez au moins un point à contrôler.' }
+    if (input.items.length > CHECKLIST_ITEMS_MAX) return { ok: false, field: 'items', message: `${CHECKLIST_ITEMS_MAX} points au plus.` }
+    const ids = new Set<string>()
+    const items: ChecklistItem[] = []
+    for (const [k, it] of input.items.entries()) {
+      const label = it.label.trim().replace(/\s+/g, ' ')
+      if (!label) return { ok: false, field: 'items', message: `Point ${k + 1} : libellé obligatoire.` }
+      if (label.length > 120) return { ok: false, field: 'items', message: `Point ${k + 1} : libellé trop long (120 caractères au plus).` }
+      if (!ITEM_ID_RE.test(it.id)) return { ok: false, field: 'items', message: `Point ${k + 1} : identifiant invalide.` }
+      if (ids.has(it.id)) return { ok: false, field: 'items', message: `Point ${k + 1} : identifiant en double.` }
+      ids.add(it.id)
+      items.push({ id: it.id, label, required: it.required === true })
+    }
+    out.items = items
+  }
+  return { ok: true, value: out }
+}
+
+/** Réglages huile : même règle que la base (max 10..30, 0 < alerte < max, une décimale). null si valide. */
+export function oilSettingsError(max: number, warn: number): string | null {
+  const oneDecimal = (v: number) => Number.isFinite(v) && Math.round(v * 10) / 10 === v
+  if (!oneDecimal(max) || max < 10 || max > 30) return 'La limite des composés polaires doit être comprise entre 10 et 30 % (une décimale au plus).'
+  if (!oneDecimal(warn) || warn <= 0) return 'Le seuil d’alerte doit être un pourcentage positif (une décimale au plus).'
+  if (warn >= max) return 'Le seuil d’alerte doit être inférieur à la limite.'
+  return null
 }

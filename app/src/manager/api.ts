@@ -2,7 +2,7 @@
 // (équipements, seuils, équipe, réglages). L'interface ne dépend que de cette interface ;
 // implémentations : Supabase (./supabaseManager.ts) et mémoire (./mockManager.ts).
 import type { DeviceEnrollResponse, Equipment, EquipmentKind, RecordType, StaffMember, StaffRole, Threshold } from '../../../shared/types.ts'
-import type { Allergen, Product, Recipe, StorageMode, Supplier } from '../../../shared/payloads.ts'
+import type { Allergen, Checklist, ChecklistItem, CleaningFrequency, CleaningTask, Product, Recipe, StorageMode, Supplier } from '../../../shared/payloads.ts'
 
 export interface BootstrapStatus {
   needs_bootstrap: boolean
@@ -38,6 +38,10 @@ export interface ManagerSettings {
   missed_slot_carry_over: boolean
   /** DLC proposée après décongélation : jours à partir de la fin (0..30). */
   thaw_dlc_days: number
+  /** Lot 5 : limite des composés polaires en % (légale 25), 10..30, une décimale. */
+  oil_polar_max: number
+  /** Lot 5 : seuil d'alerte préventive en % (défaut 22), > 0 et < oil_polar_max. */
+  oil_polar_warn: number
 }
 
 /** Fournisseur saisi par le gérant (téléphone et email facultatifs : null pour effacer). */
@@ -63,6 +67,21 @@ export interface RecipeInput {
   extra_allergens: Allergen[]
   storage: StorageMode
   shelf_life_hours: number
+}
+
+/** Tâche du plan de nettoyage saisie par le gérant (produit / méthode : null pour effacer). */
+export interface CleaningTaskInput {
+  name: string
+  frequency: CleaningFrequency
+  product: string | null
+  method: string | null
+}
+
+/** Checklist saisie par le gérant : points ordonnés, `id` stable (slug unique [a-z0-9_-], 1..40). */
+export interface ChecklistInput {
+  name: string
+  kind: Checklist['kind']
+  items: ChecklistItem[]
 }
 
 export type ManagerErrorCode =
@@ -156,6 +175,14 @@ export interface ManagerApi {
   listRecipes(): Promise<Recipe[]> // actives ET désactivées, triées par nom
   addRecipe(input: RecipeInput): Promise<Recipe>
   updateRecipe(id: string, patch: Partial<RecipeInput> & { active?: boolean }): Promise<Recipe>
+
+  // Plan de nettoyage et checklists (lot 5, tables `cleaning_tasks` / `checklists`, RLS gérant ; jamais supprimés : active=false)
+  listCleaningTasks(): Promise<CleaningTask[]> // actives ET désactivées, triées par nom
+  addCleaningTask(input: CleaningTaskInput): Promise<CleaningTask>
+  updateCleaningTask(id: string, patch: Partial<CleaningTaskInput> & { active?: boolean }): Promise<CleaningTask>
+  listChecklists(): Promise<Checklist[]> // actives ET désactivées, triées par nom
+  addChecklist(input: ChecklistInput): Promise<Checklist>
+  updateChecklist(id: string, patch: Partial<ChecklistInput> & { active?: boolean }): Promise<Checklist>
 
   /**
    * Photo du bucket privé `photos` (lecture réservée au gérant connecté), pour afficher une photo

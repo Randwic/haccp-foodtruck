@@ -53,6 +53,8 @@ export {
   DEMO_SUPPLIERS,
   DEMO_PRODUCTS,
   DEMO_RECIPES,
+  DEMO_CLEANING_TASKS,
+  DEMO_CHECKLISTS,
   type MockTransport,
   type MockTransportOptions,
 } from './mockTransport.ts'

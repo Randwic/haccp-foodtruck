@@ -2,9 +2,9 @@
 // Seule la clé publique « anon » est utilisée ; les droits viennent de la session du gérant (RLS is_manager()).
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { DeviceEnrollResponse, Equipment, Threshold } from '../../../shared/types.ts'
-import { PHOTO_BUCKET, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
+import { PHOTO_BUCKET, type Checklist, type CleaningTask, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
 import { ManagerError, MESSAGES, type ManagedStaff, type ManagerApi, type ManagerSettings } from './api.ts'
-import { normalizeProductInput, normalizeRecipeInput, normalizeSupplierInput } from './helpers.ts'
+import { normalizeChecklistInput, normalizeCleaningTaskInput, normalizeProductInput, normalizeRecipeInput, normalizeSupplierInput, oilSettingsError } from './helpers.ts'
 
 export interface SupabaseManagerOptions {
   url: string
@@ -22,6 +22,8 @@ const STAFF_COLS = 'id,display_name,role,active,updated_at'
 const SUPPLIER_COLS = 'id,name,phone,email,active,updated_at'
 const PRODUCT_COLS = 'id,name,allergens,storage,shelf_life_opened_hours,shelf_life_thawed_hours,active,updated_at'
 const RECIPE_COLS = 'id,name,ingredient_product_ids,extra_allergens,storage,shelf_life_hours,active,updated_at'
+const CLEANING_COLS = 'id,name,frequency,product,method,active,updated_at'
+const CHECKLIST_COLS = 'id,name,kind,items,active,updated_at'
 
 interface PgError {
   message: string
@@ -216,8 +218,15 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
     async getSettings(): Promise<ManagerSettings> {
       const [e, s] = await Promise.all([
         run<{ name: string }>(sb.from('establishment').select('name').limit(1).single()),
-        run<{ auto_lock_minutes: number; daily_check_times: string[] | null; missed_slot_carry_over: boolean | null; thaw_dlc_days: number | null }>(
-          sb.from('settings').select('auto_lock_minutes, daily_check_times, missed_slot_carry_over, thaw_dlc_days').eq('id', 1).single(),
+        run<{
+          auto_lock_minutes: number
+          daily_check_times: string[] | null
+          missed_slot_carry_over: boolean | null
+          thaw_dlc_days: number | null
+          oil_polar_max: number | string | null
+          oil_polar_warn: number | string | null
+        }>(
+          sb.from('settings').select('auto_lock_minutes, daily_check_times, missed_slot_carry_over, thaw_dlc_days, oil_polar_max, oil_polar_warn').eq('id', 1).single(),
         ),
       ])
       // Colonne time[] ou text[] : Postgres peut renvoyer « 08:00:00 », on garde HH:MM.
@@ -228,6 +237,9 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
         daily_check_times: times,
         missed_slot_carry_over: s.missed_slot_carry_over ?? true,
         thaw_dlc_days: s.thaw_dlc_days ?? 3,
+        // numeric(4,1) : PostgREST peut renvoyer une chaîne.
+        oil_polar_max: s.oil_polar_max === null || s.oil_polar_max === undefined ? 25 : Number(s.oil_polar_max),
+        oil_polar_warn: s.oil_polar_warn === null || s.oil_polar_warn === undefined ? 22 : Number(s.oil_polar_warn),
       }
     },
     async saveSettings(patch) {
@@ -240,6 +252,15 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
       if (patch.daily_check_times !== undefined) settingsPatch.daily_check_times = [...patch.daily_check_times].sort()
       if (patch.missed_slot_carry_over !== undefined) settingsPatch.missed_slot_carry_over = patch.missed_slot_carry_over
       if (patch.thaw_dlc_days !== undefined) settingsPatch.thaw_dlc_days = patch.thaw_dlc_days
+      if (patch.oil_polar_max !== undefined || patch.oil_polar_warn !== undefined) {
+        const current = patch.oil_polar_max === undefined || patch.oil_polar_warn === undefined ? await this.getSettings() : null
+        const max = patch.oil_polar_max ?? current!.oil_polar_max
+        const warn = patch.oil_polar_warn ?? current!.oil_polar_warn
+        const e = oilSettingsError(max, warn)
+        if (e) throw new ManagerError('validation', e, 400)
+        settingsPatch.oil_polar_max = max
+        settingsPatch.oil_polar_warn = warn
+      }
       if (Object.keys(settingsPatch).length > 0) {
         await run(sb.from('settings').update(settingsPatch).eq('id', 1).select('id').single())
       }
@@ -295,6 +316,40 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
       const p: Record<string, unknown> = { ...n.value }
       if (active !== undefined) p.active = active
       return run<Recipe>(sb.from('recipes').update(p).eq('id', id).select(RECIPE_COLS).single())
+    },
+
+    // Plan de nettoyage / checklists (lot 5) : RLS gérant ; la base refuse la suppression et des points invalides.
+    async listCleaningTasks() {
+      return run<CleaningTask[]>(sb.from('cleaning_tasks').select(CLEANING_COLS).order('name'))
+    },
+    async addCleaningTask(input) {
+      const n = normalizeCleaningTaskInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      return run<CleaningTask>(sb.from('cleaning_tasks').insert(n.value).select(CLEANING_COLS).single())
+    },
+    async updateCleaningTask(id, patch) {
+      const { active, ...fields } = patch
+      const n = normalizeCleaningTaskInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const p: Record<string, unknown> = { ...n.value }
+      if (active !== undefined) p.active = active
+      return run<CleaningTask>(sb.from('cleaning_tasks').update(p).eq('id', id).select(CLEANING_COLS).single())
+    },
+    async listChecklists() {
+      return run<Checklist[]>(sb.from('checklists').select(CHECKLIST_COLS).order('name'))
+    },
+    async addChecklist(input) {
+      const n = normalizeChecklistInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      return run<Checklist>(sb.from('checklists').insert(n.value).select(CHECKLIST_COLS).single())
+    },
+    async updateChecklist(id, patch) {
+      const { active, ...fields } = patch
+      const n = normalizeChecklistInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const p: Record<string, unknown> = { ...n.value }
+      if (active !== undefined) p.active = active
+      return run<Checklist>(sb.from('checklists').update(p).eq('id', id).select(CHECKLIST_COLS).single())
     },
 
     async downloadPhoto(path) {

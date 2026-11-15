@@ -1,7 +1,7 @@
 // Implémentation EN MÉMOIRE de CoreApi, pour les tests et la démo de l'interface.
 // Aucune persistance, aucun réseau, aucune cryptographie réelle : ne jamais l'utiliser en production.
 import type { CoreApi, DeviceInfo, PhotoStatus, SyncStatus, UnlockResult } from '../core/api.ts'
-import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 import { referencedPhotoPaths } from '../../../shared/validation.ts'
 import { createBrowserPhotoEncoder, isWebp, type PhotoEncoder } from '../core/photoEncoder.ts'
 import {
@@ -14,7 +14,7 @@ import {
   type StaffMember,
   type Threshold,
 } from '../../../shared/types.ts'
-import { DEMO_EQUIPMENT, DEMO_PRODUCTS, DEMO_RECIPES, DEMO_SUPPLIERS, DEMO_THRESHOLDS } from '../core/mockTransport.ts'
+import { DEMO_CHECKLISTS, DEMO_CLEANING_TASKS, DEMO_EQUIPMENT, DEMO_PRODUCTS, DEMO_RECIPES, DEMO_SUPPLIERS, DEMO_THRESHOLDS } from '../core/mockTransport.ts'
 
 export const FAKE_STAFF_PINS: Record<string, string> = {
   'staff-gerant': '123456',
@@ -46,6 +46,12 @@ export interface FakeCoreOptions {
   products?: Product[]
   /** Recettes (défaut : la recette de démonstration du serveur ; désactivées comprises). */
   recipes?: Recipe[]
+  /** Plan de nettoyage (défaut : les tâches de démonstration du serveur ; désactivées comprises). */
+  cleaningTasks?: CleaningTask[]
+  /** Checklists (défaut : ouverture, fermeture, nuisibles du serveur ; désactivées comprises). */
+  checklists?: Checklist[]
+  /** Équipements (défaut : ceux du serveur simulé, dont 2 bacs de friteuse). */
+  equipment?: Equipment[]
   /** Compression des photos (défaut : encodeur du navigateur ; les tests injectent un encodeur simulé). */
   photoEncoder?: PhotoEncoder
   /** Photos déjà présentes (démo) : chemin → image (ou fabrique, appelée à la première lecture) et état. */
@@ -83,6 +89,9 @@ export interface FakeCore extends CoreApi {
     /** Ajoute / modifie un produit ou une recette (comme un sync-pull). */
     upsertProduct(p: Product): void
     upsertRecipe(r: Recipe): void
+    /** Ajoute / modifie une tâche de nettoyage ou une checklist (comme un sync-pull). */
+    upsertCleaningTask(t: CleaningTask): void
+    upsertChecklist(c: Checklist): void
     /** Refus définitif d'une photo par le serveur (ex. 409 photo_conflict). */
     failPhoto(path: string, error?: string): void
   }
@@ -104,7 +113,7 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
     { id: 'staff-equipier', display_name: 'Équipier', role: 'staff', active: true, pin_salt: 'fake', pin_hash: 'fake', updated_at: t0 },
   ]
   // Mêmes équipements et seuils que le serveur simulé (identifiants uuid, comme en production).
-  const equipment: Equipment[] = DEMO_EQUIPMENT.map((e) => ({ ...e }))
+  const equipment: Equipment[] = (options.equipment ?? DEMO_EQUIPMENT).map((e) => ({ ...e }))
   const establishment: Establishment = { id: 'etab-demo', name: 'Food Truck (démo)', timezone: 'Europe/Paris' }
   const settings: Settings = {
     daily_check_times: ['08:00', '18:00'],
@@ -124,6 +133,8 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
   const suppliers: Supplier[] = (options.suppliers ?? DEMO_SUPPLIERS).map((x) => ({ ...x }))
   const products: Product[] = structuredClone(options.products ?? DEMO_PRODUCTS)
   const recipes: Recipe[] = structuredClone(options.recipes ?? DEMO_RECIPES)
+  const cleaningTasks: CleaningTask[] = structuredClone(options.cleaningTasks ?? DEMO_CLEANING_TASKS)
+  const checklists: Checklist[] = structuredClone(options.checklists ?? DEMO_CHECKLISTS)
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'fr')
   const upsert = <T extends { id: string }>(list: T[], item: T) => {
     const i = list.findIndex((x) => x.id === item.id)
@@ -293,7 +304,7 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
       const paths =
         type === 'correction'
           ? typeof replacement === 'object' && replacement !== null && !Array.isArray(replacement)
-            ? referencedPhotoPaths('reception', replacement as Record<string, unknown>)
+            ? referencedPhotoPaths('reception', replacement as Record<string, unknown>) // photo_paths + items[].photo_paths : couvre aussi waste / cleaning_done
             : []
           : referencedPhotoPaths(type, rec.payload)
       for (const path of paths) {
@@ -347,6 +358,14 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
     async listRecipes(opts) {
       await wait()
       return structuredClone(recipes.filter((x) => opts?.includeInactive || x.active).sort(byName))
+    },
+    async listCleaningTasks(opts) {
+      await wait()
+      return structuredClone(cleaningTasks.filter((x) => opts?.includeInactive || x.active).sort(byName))
+    },
+    async listChecklists(opts) {
+      await wait()
+      return structuredClone(checklists.filter((x) => opts?.includeInactive || x.active).sort(byName))
     },
 
     async addPhoto(image) {
@@ -421,6 +440,14 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
       },
       upsertRecipe(r) {
         upsert(recipes, r)
+        emitSync()
+      },
+      upsertCleaningTask(t) {
+        upsert(cleaningTasks, t)
+        emitSync()
+      },
+      upsertChecklist(c) {
+        upsert(checklists, c)
         emitSync()
       },
       failPhoto(path, error = 'photo_conflict') {

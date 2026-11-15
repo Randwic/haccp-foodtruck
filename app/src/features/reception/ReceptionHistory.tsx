@@ -137,7 +137,7 @@ export function ReceptionHistory({ data, now, filter, onFilter, onCorrect, onCor
 }
 
 /** État d'envoi des photos d'un enregistrement. */
-export function PhotoSyncLine({ paths, data }: { paths: readonly string[]; data: ReceptionData }) {
+export function PhotoSyncLine({ paths, data }: { paths: readonly string[]; data: Pick<ReceptionData, 'photoStatus'> }) {
   if (paths.length === 0) return null
   const { pending, failed } = photoCounts(paths, data.photoStatus)
   if (failed > 0)

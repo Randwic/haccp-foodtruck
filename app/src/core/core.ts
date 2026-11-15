@@ -13,7 +13,7 @@ import {
   type SyncPullResponse,
   type Threshold,
 } from '../../../shared/types.ts'
-import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
+import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Checklist, type CleaningTask, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
 import { referencedPhotoPaths } from '../../../shared/validation.ts'
 import type { CoreApi, DeviceInfo, PhotoStatus, SyncStatus, UnlockResult } from './api.ts'
 import { CoreDb, type DeviceRow, type PhotoRow, type RecordSyncRow, type StoredRecord } from './db.ts'
@@ -677,6 +677,14 @@ export function createCore(options: CoreOptions): Core {
     async listRecipes(opts?: { includeInactive?: boolean }): Promise<Recipe[]> {
       const all = await db.recipes.toArray()
       return all.filter((r) => opts?.includeInactive || r.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+    async listCleaningTasks(opts?: { includeInactive?: boolean }): Promise<CleaningTask[]> {
+      const all = await db.cleaning_tasks.toArray()
+      return all.filter((t) => opts?.includeInactive || t.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+    async listChecklists(opts?: { includeInactive?: boolean }): Promise<Checklist[]> {
+      const all = await db.checklists.toArray()
+      return all.filter((c) => opts?.includeInactive || c.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
     },
 
     async addPhoto(image: Blob) {

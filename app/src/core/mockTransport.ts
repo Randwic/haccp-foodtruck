@@ -15,7 +15,7 @@
 // dossier de l'appareil, signature RIFF/WEBP, ≤ PHOTO_MAX_BYTES ; absent → 201 created ; présent de même
 // taille → 200 already_present ; taille différente → 409 photo_conflict (jamais d'écrasement).
 import { computeRecordHash } from '../../../shared/canonical.ts'
-import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
+import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Checklist, type CleaningTask, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
 import {
   GENESIS_HASH,
   type DeviceEnrollResponse,
@@ -129,6 +129,82 @@ export const DEMO_RECIPES: Recipe[] = [
   { id: '00000000-0000-4000-8000-000000000451', name: 'Sauce cheddar maison', ingredient_product_ids: ['00000000-0000-4000-8000-000000000402'], extra_allergens: ['gluten'], storage: 'fridge', shelf_life_hours: 72, active: true, updated_at: T0 },
 ]
 
+/**
+ * Plan de nettoyage et checklists de démonstration (lot 5) : mêmes identifiants, fréquences, produits et
+ * points que les données initiales du serveur (supabase/migrations/20261114001300_lot5_nettoyage.sql).
+ * Produits et modes opératoires génériques, à adapter selon le PMS.
+ */
+const PMS = ' À adapter selon votre PMS.'
+const task = (n: number, name: string, frequency: CleaningTask['frequency'], product: string, method: string): CleaningTask => ({
+  id: `00000000-0000-4000-8000-000000000${n}`,
+  name,
+  frequency,
+  product,
+  method: method + PMS,
+  active: true,
+  updated_at: T0,
+})
+export const DEMO_CLEANING_TASKS: CleaningTask[] = [
+  task(501, 'Plans de travail', 'after_service', 'Détergent-désinfectant contact alimentaire', 'Débarrasser, nettoyer, appliquer le désinfectant (temps de contact du fabricant), rincer à l’eau potable si exigé, laisser sécher.'),
+  task(502, 'Plancha / grill', 'after_service', 'Dégraissant plaque de cuisson', 'Racler à chaud, dégraisser, rincer, essuyer avec un papier à usage unique, huiler légèrement.'),
+  task(503, 'Friteuse — extérieur', 'daily', 'Dégraissant', 'Friteuse froide et débranchée : dégraisser carrosserie, commandes et abords, rincer, sécher.'),
+  task(504, 'Friteuse — vidange et nettoyage du bac', 'weekly', 'Produit de nettoyage pour friteuse', 'À chaque changement d’huile : vidanger l’huile froide, nettoyer bac, résistances et panier, rincer abondamment, sécher complètement avant remplissage.'),
+  task(505, 'Réfrigérateurs — intérieur', 'weekly', 'Détergent-désinfectant contact alimentaire', 'Vider (produits mis au froid ailleurs), retirer clayettes, nettoyer, désinfecter, rincer, sécher, contrôler les joints.'),
+  task(506, 'Congélateur — dégivrage', 'monthly', 'Détergent-désinfectant contact alimentaire', 'Transférer les produits dans une enceinte froide, débrancher, dégivrer, nettoyer, désinfecter, sécher, remettre en froid avant rechargement.'),
+  task(507, 'Sols', 'daily', 'Détergent sols', 'Balayer, laver, rincer si nécessaire, laisser sécher (sol glissant).'),
+  task(508, 'Poubelles', 'daily', 'Détergent-désinfectant', 'Vider, nettoyer et désinfecter les bacs et couvercles, poser un sac neuf.'),
+  task(509, 'Hotte et filtres', 'weekly', 'Dégraissant', 'Démonter les filtres, tremper et dégraisser, rincer, sécher ; nettoyer l’intérieur de la hotte.'),
+  task(510, 'Lave-mains', 'daily', 'Détergent-désinfectant', 'Nettoyer et désinfecter vasque et commande, réapprovisionner savon et essuie-mains à usage unique.'),
+  task(511, 'Réservoirs d’eau du camion', 'monthly', 'Désinfectant pour réservoirs d’eau potable', 'Vidanger, désinfecter selon la notice, rincer abondamment à l’eau potable, remplir.'),
+]
+
+const items = (list: [string, string][]) => list.map(([id, label]) => ({ id, label, required: true }))
+export const DEMO_CHECKLISTS: Checklist[] = [
+  {
+    id: '00000000-0000-4000-8000-000000000551',
+    name: 'Ouverture',
+    kind: 'opening',
+    items: items([
+      ['lave_mains', 'Lave-mains approvisionné (savon, papier)'],
+      ['eau_potable', 'Eau potable disponible'],
+      ['temperatures', 'Températures des enceintes relevées'],
+      ['tenue', 'Tenue propre et cheveux attachés'],
+      ['plans_travail', 'Plans de travail désinfectés'],
+      ['nuisibles', 'Pas de nuisibles constatés'],
+    ]),
+    active: true,
+    updated_at: T0,
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000552',
+    name: 'Fermeture',
+    kind: 'closing',
+    items: items([
+      ['produits_entames', 'Produits entamés filmés et étiquetés'],
+      ['restes', 'Restes jetés ou refroidis'],
+      ['enceintes', 'Enceintes froides fermées'],
+      ['nettoyage', 'Nettoyage effectué'],
+      ['poubelles', 'Poubelles vidées'],
+      ['gaz', 'Gaz coupé'],
+      ['friteuses', 'Friteuses couvertes'],
+    ]),
+    active: true,
+    updated_at: T0,
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000553',
+    name: 'Contrôle nuisibles',
+    kind: 'pest_control',
+    items: items([
+      ['pieges', 'Pièges vérifiés'],
+      ['traces', 'Aucune trace (déjections, emballages rongés…)'],
+      ['ouvertures', 'Ouvertures protégées (moustiquaires, joints)'],
+    ]),
+    active: true,
+    updated_at: T0,
+  },
+]
+
 /** Appareil pré-enrôlé, pratique pour l'interface en développement. */
 export const DEMO_DEVICE: DeviceEnrollResponse = {
   device_id: '6f1c2a4e-0000-4000-8000-000000000401',
@@ -136,7 +212,7 @@ export const DEMO_DEVICE: DeviceEnrollResponse = {
 }
 
 // ---------- Serveur simulé ----------
-type RefTable = 'staff' | 'equipment' | 'thresholds' | 'suppliers' | 'products' | 'recipes'
+type RefTable = 'staff' | 'equipment' | 'thresholds' | 'suppliers' | 'products' | 'recipes' | 'cleaning_tasks' | 'checklists'
 
 interface ServerDevice {
   device_id: string
@@ -178,6 +254,8 @@ export interface MockTransport extends Transport {
   upsertSupplier(s: Omit<Supplier, 'updated_at'>): void
   upsertProduct(p: Omit<Product, 'updated_at'>): void
   upsertRecipe(r: Omit<Recipe, 'updated_at'>): void
+  upsertCleaningTask(t: Omit<CleaningTask, 'updated_at'>): void
+  upsertChecklist(c: Omit<Checklist, 'updated_at'>): void
   enrollDevice(name: string): DeviceEnrollResponse
   revokeDevice(device_id: string): void
   /** Enregistrements acceptés par le serveur (copie). */
@@ -210,6 +288,8 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
     suppliers: Map<string, Supplier>
     products: Map<string, Product>
     recipes: Map<string, Recipe>
+    cleaning_tasks: Map<string, CleaningTask>
+    checklists: Map<string, Checklist>
   } = {
     staff: new Map(seed ? DEMO_STAFF.map((s) => [s.id, clone(s)]) : []),
     equipment: new Map(seed ? DEMO_EQUIPMENT.map((e) => [e.id, clone(e)]) : []),
@@ -218,6 +298,9 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
     // Comme le serveur : les données initiales des produits sont posées par la migration (même sans compte).
     products: new Map(DEMO_PRODUCTS.map((p) => [p.id, clone(p)])),
     recipes: new Map(DEMO_RECIPES.map((r) => [r.id, clone(r)])),
+    // Lot 5 : plan de nettoyage et checklists posés par la migration, eux aussi.
+    cleaning_tasks: new Map(DEMO_CLEANING_TASKS.map((t) => [t.id, clone(t)])),
+    checklists: new Map(DEMO_CHECKLISTS.map((c) => [c.id, clone(c)])),
   }
   const photos = new Map<string, Uint8Array>()
   let photoFailures = 0
@@ -343,8 +426,9 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       // Lot 4 : produits et recettes ACTIFS modifiés depuis `since` (désactivés dans `deleted`).
       products: changed(refs.products).filter((p) => p.active),
       recipes: changed(refs.recipes).filter((r) => r.active),
-      cleaning_tasks: [],
-      checklists: [],
+      // Lot 5 : tâches de nettoyage et checklists ACTIVES modifiées depuis `since`.
+      cleaning_tasks: changed(refs.cleaning_tasks).filter((t) => t.active),
+      checklists: changed(refs.checklists).filter((c) => c.active),
       sensors: [],
       alerts: [],
       settings,
@@ -383,6 +467,8 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
     upsertSupplier: (sup) => void refs.suppliers.set(sup.id, { ...clone(sup), updated_at: stamp() }),
     upsertProduct: (p) => void refs.products.set(p.id, { ...clone(p), updated_at: stamp() }),
     upsertRecipe: (r) => void refs.recipes.set(r.id, { ...clone(r), updated_at: stamp() }),
+    upsertCleaningTask: (t) => void refs.cleaning_tasks.set(t.id, { ...clone(t), updated_at: stamp() }),
+    upsertChecklist: (c) => void refs.checklists.set(c.id, { ...clone(c), updated_at: stamp() }),
     setOffline: (v) => {
       offline = v
     },

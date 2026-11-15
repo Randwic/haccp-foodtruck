@@ -71,6 +71,8 @@ echo "    (lot 6 rejoué : la migration doit être idempotente)"
 "${PSQL[@]}" -d haccp_template -f "$SUPA/migrations/20261114001400_lot6_alertes.sql"
 echo "    (lot 7 rejoué : la migration doit être idempotente)"
 "${PSQL[@]}" -d haccp_template -f "$SUPA/migrations/20261114001500_lot7_documents.sql"
+echo "    (lot 4 bis rejoué : la migration doit être idempotente)"
+"${PSQL[@]}" -d haccp_template -f "$SUPA/migrations/20261115000100_lot4bis_menu.sql"
 
 echo "==> Seed"
 "${PSQL[@]}" -d haccp_template -f "$SUPA/seed.sql"

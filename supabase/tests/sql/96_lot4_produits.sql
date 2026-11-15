@@ -77,7 +77,7 @@ values (repeat('é', 80), 'ambient',
 select tests.assert(true, 'produit : 14 allergènes, nom de 80 caractères, durées 1 et 2160 h acceptés');
 
 select tests.throws('recette : durée 0 h refusée', 'postgres', null, 'insert into public.recipes (name, storage, shelf_life_hours) values (''R'', ''fridge'', 0)', '%recipes_shelf_life_check%');
-select tests.throws('recette : durée absente refusée', 'postgres', null, 'insert into public.recipes (name, storage) values (''R'', ''fridge'')', '%null value%');
+select tests.throws('recette : durée absente refusée', 'postgres', null, 'insert into public.recipes (name, storage) values (''R'', ''fridge'')', '%recipes_shelf_life_check%');
 select tests.throws('recette : 2161 h refusée', 'postgres', null, 'insert into public.recipes (name, storage, shelf_life_hours) values (''R'', ''fridge'', 2161)', '%recipes_shelf_life_check%');
 select tests.throws('recette : allergène supplémentaire inconnu refusé', 'postgres', null, 'insert into public.recipes (name, storage, shelf_life_hours, extra_allergens) values (''R'', ''fridge'', 24, ''{ail}'')', '%recipes_allergens_check%');
 select tests.throws('recette : conservation inconnue refusée', 'postgres', null, 'insert into public.recipes (name, storage, shelf_life_hours) values (''R'', ''tiède'', 24)', '%recipes_storage_check%');

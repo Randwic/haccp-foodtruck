@@ -12,6 +12,8 @@ import { DeadlineWatcher } from '../features/processes/DeadlineWatcher.tsx'
 import { ThawingScreen } from '../features/processes/ThawingScreen.tsx'
 import { TimedProcessScreen } from '../features/processes/TimedProcessScreen.tsx'
 import { TodayScreen, type ProcessView } from '../features/today/TodayScreen.tsx'
+import { AllergenTableScreen } from '../features/labels/AllergenTableScreen.tsx'
+import { LabelsScreen } from '../features/labels/LabelsScreen.tsx'
 import { AppHeader } from './AppHeader.tsx'
 import { useCore } from './CoreContext.tsx'
 import { useAutoLock } from './hooks/useAutoLock.ts'
@@ -21,7 +23,7 @@ import { OfflineBanner } from './pwa/OfflineBanner.tsx'
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
 
 type Boot = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; device: DeviceInfo | null }
-type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | ProcessView
+type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | ProcessView
 
 /** Enchaînement des écrans : première configuration → verrouillage (PIN) → accueil / Gestion. */
 export function AppShell() {
@@ -32,6 +34,12 @@ export function AppShell() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [persistent, setPersistent] = useState<boolean | null>(null)
   const [view, setView] = useState<View>('today')
+  // Tableau des allergènes : ouvert depuis l'accueil, les étiquettes ou la gestion (retour au même endroit).
+  const [allergensFrom, setAllergensFrom] = useState<'today' | 'labels' | 'management'>('today')
+  const openAllergens = (from: 'today' | 'labels' | 'management') => {
+    setAllergensFrom(from)
+    setView('allergens')
+  }
 
   const loadDevice = useCallback(async () => {
     try {
@@ -123,13 +131,22 @@ export function AppShell() {
           <ReceptionScreen onBack={() => setView('today')} canAddSupplier={staff.role === 'manager'} />
         ) : view === 'thawing' ? (
           <ThawingScreen onBack={() => setView('today')} />
+        ) : view === 'labels' ? (
+          <LabelsScreen onBack={() => setView('today')} onOpenAllergens={() => openAllergens('labels')} />
+        ) : view === 'allergens' ? (
+          <AllergenTableScreen
+            onBack={() => setView(allergensFrom === 'management' && staff.role !== 'manager' ? 'today' : allergensFrom)}
+            backLabel={allergensFrom === 'labels' ? 'Étiquettes' : allergensFrom === 'management' ? 'Gestion' : 'Accueil'}
+          />
         ) : view === 'management' && staff.role === 'manager' ? (
-          <ManagementScreen onBack={() => setView('today')} meId={staff.id} />
+          <ManagementScreen onBack={() => setView('today')} meId={staff.id} onOpenAllergens={() => openAllergens('management')} />
         ) : (
           <TodayScreen
             onOpenSystemTest={() => setView('system_test')}
             onOpenTemperatures={() => setView('temperatures')}
             onOpenReception={() => setView('reception')}
+            onOpenLabels={() => setView('labels')}
+            onOpenAllergens={() => openAllergens('today')}
             onOpenProcess={setView}
             onOpenManagement={staff.role === 'manager' ? () => setView('management') : undefined}
           />

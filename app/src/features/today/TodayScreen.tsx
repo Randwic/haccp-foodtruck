@@ -28,12 +28,13 @@ import { plural, type TemperatureSummary } from '../temperatures/schedule.ts'
 import { useTemperatureStatus } from '../temperatures/useTemperatureData.ts'
 import { useReceptionStatus, type ReceptionStatus } from '../reception/useReceptionData.ts'
 import { whenLabel } from '../temperatures/format.ts'
-import { IconBan, IconSyncPending } from '../../ui/icons.tsx'
+import { IconAllergen, IconBan, IconSyncPending } from '../../ui/icons.tsx'
+import { useLabelStatus } from '../labels/useLabelData.ts'
+import type { DueSummary } from '../labels/model.ts'
 
 const ICON = 22
 
 const UPCOMING = [
-  { title: 'Étiquettes DLC', Icon: IconLabel, description: 'Impression et allergènes' },
   { title: 'Nettoyage', Icon: IconCleaning, description: 'Plan et checklists' },
   { title: 'Huiles de friture', Icon: IconOil, description: 'Composés polaires, vidanges' },
   { title: 'Documents & PMS', Icon: IconDocuments, description: 'Plan de maîtrise, export contrôle' },
@@ -178,6 +179,17 @@ function receptionLines(s: ReceptionStatus | null, now: Date, tz: string): Statu
   return lines
 }
 
+/** Tuile Étiquettes : DLC dépassées (rouge), DLC aujourd'hui (ambre), demain. */
+function labelLines(s: DueSummary | null): StatusLine[] | null {
+  if (!s) return null
+  const lines: StatusLine[] = []
+  if (s.expired > 0) lines.push({ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: plural(s.expired, 'DLC dépassée', 'DLC dépassées') })
+  if (s.today > 0) lines.push({ tone: 'warn', icon: <IconDue size={17} className="shrink-0" />, text: `${plural(s.today, 'produit', 'produits')} à DLC aujourd’hui` })
+  if (s.tomorrow > 0) lines.push({ tone: 'muted', icon: <IconDue size={17} className="shrink-0" />, text: `${plural(s.tomorrow, 'produit', 'produits')} à DLC demain` })
+  if (!lines.length) lines.push({ tone: 'ok', icon: <IconOk size={17} className="shrink-0" />, text: 'Aucune DLC proche' })
+  return lines
+}
+
 export type ProcessView = 'cooling' | 'reheating' | 'cooking' | 'thawing'
 
 export interface TodayScreenProps {
@@ -186,10 +198,14 @@ export interface TodayScreenProps {
   onOpenTemperatures: () => void
   onOpenReception?: () => void
   onOpenProcess: (view: ProcessView) => void
+  onOpenLabels?: () => void
+  onOpenAllergens?: () => void
 }
 
 /** Accueil « Aujourd'hui » : alertes, modules HACCP puis outils. */
-export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess }: TodayScreenProps) {
+export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess, onOpenLabels, onOpenAllergens }: TodayScreenProps) {
+  const { summary: labelSummary } = useLabelStatus(60_000)
+  const labels = labelLines(labelSummary)
   const { summary } = useTemperatureStatus()
   const { summary: processes, data: processData } = useProcessStatus(15_000)
   const temp = temperatureLines(summary)
@@ -288,6 +304,17 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
               onClick={onOpenReception}
             />
           )}
+          {onOpenLabels && (
+            <Tile
+              title="Étiquettes DLC"
+              icon={<IconLabel size={ICON} />}
+              description="Ouverture, préparations, décongélation"
+              status={<StatusLines lines={labels} />}
+              tone={tileTone(labels)}
+              ariaLabel={ariaOf('Étiquettes DLC', labels)}
+              onClick={onOpenLabels}
+            />
+          )}
           {UPCOMING.map((m) => (
             <Tile key={m.title} title={m.title} icon={<m.Icon size={ICON} />} description={m.description} disabled />
           ))}
@@ -298,7 +325,10 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
         <SectionLabel id="tools-title">Outils</SectionLabel>
         <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
           {onOpenManagement && (
-            <Tile layout="row" title="Gestion" icon={<IconSliders size={ICON} />} description="Équipements, équipe, réglages" onClick={onOpenManagement} />
+            <Tile layout="row" title="Gestion" icon={<IconSliders size={ICON} />} description="Équipements, équipe, produits, recettes, réglages" onClick={onOpenManagement} />
+          )}
+          {onOpenAllergens && (
+            <Tile layout="row" title="Tableau des allergènes" icon={<IconAllergen size={ICON} />} description="Information clientèle, impression A4" onClick={onOpenAllergens} />
           )}
           <Tile layout="row" title="Test d’enregistrement" icon={<IconSystemTest size={ICON} />} description="Vérifier saisie et synchro" onClick={onOpenSystemTest} />
         </div>

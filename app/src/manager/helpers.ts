@@ -1,5 +1,8 @@
 // Aides pures de l'espace gérant (testables sans DOM).
 import type { EquipmentKind, RecordType } from '../../../shared/types.ts'
+import { ALLERGENS, type Allergen } from '../../../shared/payloads.ts'
+import { STORAGE_KINDS } from '../../../shared/validation.ts'
+import type { ProductInput, RecipeInput } from './api.ts'
 
 /** Nom proposé pour l'appareil : « iPad », « iPhone »… (modifiable par l'utilisateur). */
 export function guessDeviceName(
@@ -123,4 +126,82 @@ export function thresholdSummary(t: { min_c: number | null; max_c: number | null
   else if (t.min_c !== null) parts.push(`min ${formatTemperature(t.min_c)}`)
   if (t.tolerance_minutes > 0) parts.push(`tolérance ${t.tolerance_minutes} min`)
   return parts.join(' · ')
+}
+
+/** Durée de vie maximale (heures) acceptée par la base : 90 jours. */
+export const SHELF_LIFE_MAX_HOURS = 2160
+export const RECIPE_INGREDIENTS_MAX = 50
+
+type Normalized<T> = { ok: true; value: T } | { ok: false; field: string; message: string }
+
+function normName(name: string | undefined, what: string): Normalized<string | undefined> {
+  if (name === undefined) return { ok: true, value: undefined }
+  const n = name.trim().replace(/\s+/g, ' ')
+  if (!n) return { ok: false, field: 'name', message: `Le nom ${what} est obligatoire.` }
+  if (n.length > 80) return { ok: false, field: 'name', message: 'Nom trop long (80 caractères au plus).' }
+  return { ok: true, value: n }
+}
+
+/** Allergènes valides, sans doublon, dans l'ordre de l'annexe II. */
+export function sortAllergens(list: readonly string[]): Allergen[] {
+  const set = new Set(list)
+  return ALLERGENS.filter((a) => set.has(a))
+}
+
+function checkHours(v: number | null | undefined, what: string, nullable: boolean): string | null {
+  if (v === undefined) return null
+  if (v === null) return nullable ? null : 'Indiquez une durée de vie.'
+  if (!Number.isInteger(v) || v < 1 || v > SHELF_LIFE_MAX_HOURS) return `Durée de vie ${what} invalide : de 1 heure à 90 jours.`
+  return null
+}
+
+const knownAllergens = (list: readonly string[]) => list.every((a) => (ALLERGENS as readonly string[]).includes(a))
+const knownStorage = (s: string) => (STORAGE_KINDS as readonly string[]).includes(s)
+
+/** Mêmes règles que la table `products` (nom 1–80, allergènes de l'annexe II, durées 1..2160 h ou null). */
+export function normalizeProductInput(input: Partial<ProductInput>): Normalized<Partial<ProductInput>> {
+  const out: Partial<ProductInput> = {}
+  const n = normName(input.name, 'du produit')
+  if (!n.ok) return n
+  if (n.value !== undefined) out.name = n.value
+  if (input.allergens !== undefined) {
+    if (!knownAllergens(input.allergens)) return { ok: false, field: 'allergens', message: 'Allergène inconnu.' }
+    out.allergens = sortAllergens(input.allergens)
+  }
+  if (input.storage !== undefined) {
+    if (!knownStorage(input.storage)) return { ok: false, field: 'storage', message: 'Mode de conservation inconnu.' }
+    out.storage = input.storage
+  }
+  const e1 = checkHours(input.shelf_life_opened_hours, 'après ouverture', true)
+  if (e1) return { ok: false, field: 'shelf_life_opened_hours', message: e1 }
+  const e2 = checkHours(input.shelf_life_thawed_hours, 'après décongélation', true)
+  if (e2) return { ok: false, field: 'shelf_life_thawed_hours', message: e2 }
+  if (input.shelf_life_opened_hours !== undefined) out.shelf_life_opened_hours = input.shelf_life_opened_hours
+  if (input.shelf_life_thawed_hours !== undefined) out.shelf_life_thawed_hours = input.shelf_life_thawed_hours
+  return { ok: true, value: out }
+}
+
+/** Mêmes règles que la table `recipes` (nom 1–80, 0..50 ingrédients distincts, durée 1..2160 h). */
+export function normalizeRecipeInput(input: Partial<RecipeInput>): Normalized<Partial<RecipeInput>> {
+  const out: Partial<RecipeInput> = {}
+  const n = normName(input.name, 'de la recette')
+  if (!n.ok) return n
+  if (n.value !== undefined) out.name = n.value
+  if (input.ingredient_product_ids !== undefined) {
+    const ids = [...new Set(input.ingredient_product_ids)]
+    if (ids.length > RECIPE_INGREDIENTS_MAX) return { ok: false, field: 'ingredient_product_ids', message: `${RECIPE_INGREDIENTS_MAX} ingrédients au plus.` }
+    out.ingredient_product_ids = ids
+  }
+  if (input.extra_allergens !== undefined) {
+    if (!knownAllergens(input.extra_allergens)) return { ok: false, field: 'extra_allergens', message: 'Allergène inconnu.' }
+    out.extra_allergens = sortAllergens(input.extra_allergens)
+  }
+  if (input.storage !== undefined) {
+    if (!knownStorage(input.storage)) return { ok: false, field: 'storage', message: 'Mode de conservation inconnu.' }
+    out.storage = input.storage
+  }
+  const e = checkHours(input.shelf_life_hours, 'de la préparation', false)
+  if (e) return { ok: false, field: 'shelf_life_hours', message: e }
+  if (input.shelf_life_hours !== undefined) out.shelf_life_hours = input.shelf_life_hours
+  return { ok: true, value: out }
 }

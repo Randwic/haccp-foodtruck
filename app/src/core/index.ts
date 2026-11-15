@@ -51,6 +51,8 @@ export {
   DEMO_SETTINGS,
   DEMO_ESTABLISHMENT,
   DEMO_SUPPLIERS,
+  DEMO_PRODUCTS,
+  DEMO_RECIPES,
   type MockTransport,
   type MockTransportOptions,
 } from './mockTransport.ts'

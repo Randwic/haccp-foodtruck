@@ -14,6 +14,7 @@ L'interface ne dépend que de `CoreApi` (`app/src/core/api.ts`, via `useCore()`)
 Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|error|stale|rejected|offline`, `?staff=empty`,
 `&releves=demo` (7 jours de relevés, une correction, une action corrective) ou `&releves=alerte` (+ relevé hors seuil sans action ce matin),
 `&procedes=demo` (lots en cours, cuissons, décongélations, historique avec correction et action) ou `&procedes=alerte` (+ refroidissement en retard, cuisson hors seuil sans action),
+`&etiquettes=demo` (étiquettes : DLC dépassée / aujourd'hui / demain, correction, perte liée, décongélation terminée à reprendre, lots reçus, plats de la carte pour le tableau des allergènes),
 `&receptions=demo` (réceptions sur 3 jours avec refus, photos d'étiquettes dessinées, photos en attente, correction, action corrective, une perte) ou `&receptions=alerte` (+ produit accepté hors température sans action).
 Équipiers factices : Gérant `123456`, Équipier `654321` (blocage 5 min après 5 erreurs).
 
@@ -28,6 +29,8 @@ Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|erro
 | Procédés | `processes/` | voir « Module Procédés » ci-dessous |
 | Températures | `temperatures/TemperaturesScreen.tsx` | voir « Module Températures » ci-dessous |
 | Réception | `reception/ReceptionScreen.tsx` | voir « Module Réception » ci-dessous |
+| Étiquettes DLC | `labels/LabelsScreen.tsx` | voir « Module Étiquettes » ci-dessous |
+| Tableau des allergènes | `labels/AllergenTableScreen.tsx` | depuis l'accueil (Outils), les Étiquettes et Gestion › Recettes |
 | Test d'enregistrement | `system-test/SystemTestPanel.tsx` | `addRecord('system_test')`, 20 derniers enregistrements (heure, auteur, statut) |
 
 Enchaînement, en-tête et verrouillage auto : `app/src/ui/AppShell.tsx`, `AppHeader.tsx`, `hooks/useAutoLock.ts`
@@ -97,6 +100,54 @@ Enchaînement, en-tête et verrouillage auto : `app/src/ui/AppShell.tsx`, `AppHe
   d'une photo d'étiquette (pré-remplit les champs vides, « Lu sur l'étiquette : vérifiez »), scan GTIN (bouton affiché
   seulement si branché) ; `findByLot` (model.ts) pour la recherche de lot / rappel.
 
+## Module Étiquettes (`app/src/features/labels/`, lot 4)
+- **Calcul pur** (`model.ts`, testé dans `labels.test.ts`) : DLC = début + durée de vie en heures réelles
+  (`computeDlc`, changements d'heure compris), saisie date/heure locale ↔ UTC (`fromLocalInputs`/`toLocalInputs`,
+  fuseau de l'établissement), DLC d'une décongélation du module Procédés = 23:59 du jour indiqué (`dlcFromDate`),
+  contrôles du contrat (`dlcProblem` : après la fabrication, ≤ 90 jours), allergènes d'une recette = union ingrédients +
+  supplémentaires dans l'ordre de l'annexe II (`recipeAllergens`, `allergenSources`), étiquettes reconstruites
+  (`buildLabels` : corrections en chaîne, perte liée par `related_record_id`), échéances (`dueState`/`dueItems` :
+  dépassée, aujourd'hui, demain en jours locaux), lots reçus pour un produit (`recentLots`, libellés rapprochés par mots :
+  « Pain burger » ~ « Pain burger brioché »), lot interne `P1511-1430`, durées conviviales (`formatShelfLife`).
+- **Mise en page** (`layout.ts`) : liste d'éléments positionnés en points (texte, cadre, filet, cercle), utilisée À LA
+  FOIS par l'aperçu SVG et par le PDF → aperçu fidèle (largeurs imposées via `textLength`). Marges 3 mm (zone
+  imprimable du 62 mm), nom en très gras (2 lignes), « Ouvert le / Préparé le / Décongelé le », cadre « À CONSOMMER
+  JUSQU'AU <jour> » + date-heure en très gros, conservation, allergènes en gras (jamais tronqués) ou « Aucun allergène
+  déclaré », lot, initiales de l'opérateur, petit logo Space Diner monochrome. Contenu réduit jusqu'à 60 % si besoin, au-delà
+  `overflow` (message : augmenter la hauteur).
+- **Polices** (`fonts.ts`, `fonts/`) : Inter Regular / Bold / Black, sous-ensemble latin-français converti en TrueType
+  (OFL, `fonts/OFL.txt` ; les CFF sous-ensemblés par pdf-lib sont illisibles), précachées (`ttf` dans `globPatterns`).
+- **PDF** (`pdf.ts`, pdf-lib + @pdf-lib/fontkit, MIT, chargés à la demande) : étiquette 62 mm × hauteur (175,7 pt de
+  large), une page par copie ; tableau des allergènes A4 paysage (coches noires, pagination, mention légale).
+- **Impression** (`printing.ts`, méthode documentée en tête du fichier) : **principale** = PDF au format exact partagé par
+  la feuille de partage iOS (`navigator.share({ files })` → « Imprimer » → Brother QL-820NWB AirPrint) ; fonctionne aussi
+  dans l'app installée. Le PDF est généré dès l'aperçu (Safari n'autorise le partage que pendant le toucher). Repli :
+  ouverture du PDF dans un onglet, sinon téléchargement. **Secours** = « Impression directe » (`window.print()` sur une vue
+  dédiée `#label-print-root`, `@page { size: 62mm <h>mm; margin: 0 }`, une page par copie) — Safari iOS peut y ajouter
+  des marges / mettre à l'échelle selon la version. Après l'impression : « Étiquette imprimée ? » → seul « Oui »
+  enregistre `label_printed` (validé par `validatePayload`).
+- **Écrans** : accueil du module (3 parcours, bandeau rouge si DLC dépassée, « Produits arrivant à échéance » avec
+  « Jeté » → `waste` motif `expired` + `related_record_id`, et « Épuisé » — retiré de la liste sur cet appareil seulement,
+  rien au registre —, étiquettes du jour) ; parcours en 2 touches : produit / recette / décongélation terminée → aperçu
+  (`LabelEditor` : DLC date + heure modifiables, « Rétablir », lots reçus en pastilles → `source_record_ids`, lot interne
+  pour une préparation, copies 1..20) → « Imprimer / Partager » ; historique 7 jours (original barré, perte, synchro) et
+  correction (DLC, lot, copies, motif) puis réimpression de l'étiquette corrigée (sans nouvel enregistrement).
+  Tuile de l'accueil : « 1 DLC dépassée » (rouge), « 2 produits à DLC aujourd'hui » (ambre), « … demain ».
+- **Hauteur d'étiquette** : Gestion › Réglages › « Étiquettes DLC — cet appareil » (`labelSettings.ts`, localStorage,
+  29–100 mm, défaut 50).
+- **Tableau des allergènes** : recettes actives × 14 allergènes (`ALLERGEN_LABELS`), option « Afficher aussi les
+  produits », date de mise à jour = dernière modification d'une recette ou d'un produit affiché, mention légale,
+  impression A4 (PDF partagé ou `window.print` sur `#a4-print-root`, `@page A4 landscape`).
+
+## Gestion › Produits et Recettes (lot 4)
+`management/ProductSection.tsx`, `RecipeSection.tsx`, `catalogFields.tsx` : ajout / modification / désactivation (jamais de
+suppression) ; 14 allergènes en grandes cases à cocher ; conservation Frigo / Congélateur / Ambiant ; durées de vie saisies
+en jours ou heures avec raccourcis (24 h, 2, 3, 7 jours) et « Non applicable » (produits) ; recette = ingrédients choisis
+parmi les produits + allergènes supplémentaires (ceux déjà apportés par un ingrédient sont cochés et verrouillés),
+encadré « Allergènes de la recette (calculés) » collant, mis à jour en direct avec leur origine ; mention « à vérifier sur
+vos fiches fournisseurs / votre PMS ». `ManagerApi` : `listProducts`, `addProduct`, `updateProduct`, `listRecipes`,
+`addRecipe`, `updateRecipe` (Supabase : tables `products` / `recipes`, RLS gérant ; mock : répercuté au serveur simulé).
+
 ## Photos (`app/src/ui/photos/`)
 `PhotoPicker` (`<input type=file accept=image/* capture=environment>`, compression par `core.addPhoto`, miniatures
 retirables — un brouillon retiré est effacé —, plafond par champ et global), `PhotoThumb` / `PhotoGallery` (pastille
@@ -125,7 +176,7 @@ action corrective obligatoire, action manquante signalée après rechargement, c
 hors seuil → action, compteur de l'accueil), créneaux (Europe/Paris, changements d'heure, report du créneau oublié
 désactivable), heures de relevé, report et DLC après décongélation (Réglages), procédés (refroidissement conforme, hors délai →
 action corrective, lot en cours après rechargement, remise en température, cuisson hors seuil, décongélation avec DLC,
-correction d'une étape, compteurs de l'accueil).
+correction d'une étape, compteurs de l'accueil), étiquettes (DLC Europe/Paris et changement d'heure, allergènes d'une recette, parcours ouverture / préparation / décongélation jusqu'au `label_printed`, partage d'un PDF 62 mm, échéances et « Jeté », correction), PDF (175,7 × 141,7 pt, une page par copie, A4), Gestion › Produits / Recettes / hauteur d'étiquette, tableau des allergènes, migration Dexie v3.
 
 ## Identité visuelle (Space Diner)
 - **Jetons** : `app/src/ui/theme.css` — variables CSS (`--canvas`, `--surface`, `--elevated`, `--pressed`, `--sunken`,

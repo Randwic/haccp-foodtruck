@@ -2,7 +2,7 @@
 // (équipements, seuils, équipe, réglages). L'interface ne dépend que de cette interface ;
 // implémentations : Supabase (./supabaseManager.ts) et mémoire (./mockManager.ts).
 import type { DeviceEnrollResponse, Equipment, EquipmentKind, RecordType, StaffMember, StaffRole, Threshold } from '../../../shared/types.ts'
-import type { Supplier } from '../../../shared/payloads.ts'
+import type { Allergen, Product, Recipe, StorageMode, Supplier } from '../../../shared/payloads.ts'
 
 export interface BootstrapStatus {
   needs_bootstrap: boolean
@@ -45,6 +45,24 @@ export interface SupplierInput {
   name: string
   phone?: string | null
   email?: string | null
+}
+
+/** Produit saisi par le gérant (durées de vie en heures, null = non applicable). */
+export interface ProductInput {
+  name: string
+  allergens: Allergen[]
+  storage: StorageMode
+  shelf_life_opened_hours: number | null
+  shelf_life_thawed_hours: number | null
+}
+
+/** Recette saisie par le gérant. */
+export interface RecipeInput {
+  name: string
+  ingredient_product_ids: string[]
+  extra_allergens: Allergen[]
+  storage: StorageMode
+  shelf_life_hours: number
 }
 
 export type ManagerErrorCode =
@@ -130,6 +148,14 @@ export interface ManagerApi {
   listSuppliers(): Promise<Supplier[]> // actifs ET désactivés, triés par nom
   addSupplier(input: SupplierInput): Promise<Supplier>
   updateSupplier(id: string, patch: Partial<SupplierInput> & { active?: boolean }): Promise<Supplier>
+
+  // Produits et recettes (lot 4, tables `products` / `recipes`, RLS gérant ; jamais supprimés : active=false)
+  listProducts(): Promise<Product[]> // actifs ET désactivés, triés par nom
+  addProduct(input: ProductInput): Promise<Product>
+  updateProduct(id: string, patch: Partial<ProductInput> & { active?: boolean }): Promise<Product>
+  listRecipes(): Promise<Recipe[]> // actives ET désactivées, triées par nom
+  addRecipe(input: RecipeInput): Promise<Recipe>
+  updateRecipe(id: string, patch: Partial<RecipeInput> & { active?: boolean }): Promise<Recipe>
 
   /**
    * Photo du bucket privé `photos` (lecture réservée au gérant connecté), pour afficher une photo

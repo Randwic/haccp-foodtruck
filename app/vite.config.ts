@@ -26,8 +26,8 @@ export default defineConfig({
           { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      // .wasm : encodeur WebP de secours (Safari iOS), disponible hors-ligne.
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff2,wasm}'] },
+      // .wasm : encodeur WebP de secours (Safari iOS) ; .ttf : polices des étiquettes (impression hors-ligne).
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff2,wasm,ttf}'] },
     }),
   ],
   // L'encodeur WebAssembly charge son .wasm via import.meta.url : pas de pré-bundling.

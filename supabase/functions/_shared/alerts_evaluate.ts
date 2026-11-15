@@ -58,6 +58,7 @@ export async function runAlertsEvaluation(deps: AlertsRunDeps): Promise<AlertsRu
   const readingsSince = new Date(now.getTime() - (ALERT_RULES.readingsLookbackHours * 60 + maxTolerance) * 60_000).toISOString()
   const recordsSince = new Date(now.getTime() - ALERT_RULES.recordsLookbackDays * 86_400_000).toISOString()
   const activeSensorIds = sensors.filter((s) => s.active).map((s) => s.id)
+  const firstEnrolled = await repo.firstDeviceEnrolledAt()
   const [readings, records] = await Promise.all([
     activeSensorIds.length > 0 ? repo.listSensorReadings(activeSensorIds, readingsSince) : Promise.resolve([]),
     repo.listRecentRecords(recordsSince, ENGINE_RECORD_TYPES),
@@ -77,6 +78,7 @@ export async function runAlertsEvaluation(deps: AlertsRunDeps): Promise<AlertsRu
     readings,
     records,
     openAlerts: openBefore,
+    monitoringStart: firstEnrolled ? new Date(firstEnrolled) : null,
   })
 
   // Résoudre d'abord (libère l'index « une alerte ouverte par sujet »), puis ouvrir.

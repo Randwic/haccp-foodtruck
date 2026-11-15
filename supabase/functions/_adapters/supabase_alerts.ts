@@ -88,6 +88,11 @@ export class SupabaseLot6Repo extends SupabaseRepo implements SensorIngestRepo, 
     }
     return out
   }
+  async firstDeviceEnrolledAt(): Promise<string | null> {
+    const { data, error } = await this.db.from('devices').select('enrolled_at').order('enrolled_at', { ascending: true }).limit(1)
+    if (error) throw new DbError('devices.first_enrolled', error)
+    return data && data.length > 0 && data[0].enrolled_at ? new Date(data[0].enrolled_at).toISOString() : null
+  }
   async listOpenAlerts(): Promise<Alert[]> {
     return this.listAlerts(null)
   }

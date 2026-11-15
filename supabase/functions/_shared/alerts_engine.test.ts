@@ -79,6 +79,16 @@ const kinds = (rows: NewAlertRow[], kind: AlertKind) => rows.filter((r) => r.kin
 const yesterdayDone = () => [check(FRIGO, '2026-11-13T17:10:00.000Z'), check(CONGEL, '2026-11-13T17:11:00.000Z', -20)]
 
 describe('check_overdue — créneaux en heure de Paris, 1 h de grâce', () => {
+  it('aucun appareil enrôlé (monitoringStart null) : aucune alerte de relevé', () => {
+    const res = evaluateAlerts(input('2026-11-14T08:00:00.000Z', { records: yesterdayDone(), monitoringStart: null }))
+    expect(kinds(res.open, 'check_overdue')).toEqual([])
+  })
+  it('créneau antérieur au premier enrôlement : ignoré ; créneau suivant : surveillé', () => {
+    const start = new Date('2026-11-14T07:30:00.000Z') // enrôlé après le créneau de 08:00 Paris (07:00Z)
+    expect(kinds(evaluateAlerts(input('2026-11-14T08:00:00.000Z', { records: [], monitoringStart: start })).open, 'check_overdue')).toEqual([])
+    const later = evaluateAlerts(input('2026-11-14T18:00:00.000Z', { records: [], monitoringStart: start }))
+    expect(kinds(later.open, 'check_overdue').length).toBe(2)
+  })
   it('créneau de 08:00 : rien à 08:59, alerte à 09:00 pour chaque enceinte froide active', () => {
     const records = yesterdayDone()
     expect(kinds(evaluateAlerts(input('2026-11-14T07:59:00.000Z', { records })).open, 'check_overdue')).toEqual([])

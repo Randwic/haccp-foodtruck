@@ -355,6 +355,12 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
       .filter((r) => r.quarantine_reason === null && types.includes(r.type) && Date.parse(r.server_time) >= Date.parse(sinceServerTime))
       .map((r) => ({ id: r.id, type: r.type, payload: structuredClone(r.payload), device_time: r.device_time, supersedes_id: r.supersedes_id }))
   }
+  /** Mémoire : premier enrôlement connu ; sans date, l'appareil compte comme enrôlé depuis toujours. */
+  async firstDeviceEnrolledAt(): Promise<string | null> {
+    if (this.devices.length === 0) return null
+    const dates = this.devices.map((d) => (d as { enrolled_at?: string }).enrolled_at ?? '1970-01-01T00:00:00.000Z')
+    return dates.sort()[0]
+  }
   async listOpenAlerts(): Promise<Alert[]> {
     return this.listAlerts(null)
   }

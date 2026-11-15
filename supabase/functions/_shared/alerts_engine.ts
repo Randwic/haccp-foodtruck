@@ -44,6 +44,11 @@ export interface EngineInput {
   readings: SensorReadingRow[]
   records: EngineRecord[]
   openAlerts: Alert[]
+  /**
+   * Début de la surveillance des relevés : premier enrôlement d'un appareil. `null` = aucun appareil
+   * (aucune alerte « relevé non fait ») ; absent = pas de restriction. Les créneaux antérieurs sont ignorés.
+   */
+  monitoringStart?: Date | null
 }
 
 export interface EngineResult {
@@ -229,7 +234,9 @@ export function evaluateAlerts(input: EngineInput): EngineResult {
   const checks = all.filter((e) => e.type === 'temperature_check' && typeof e.payload.equipment_id === 'string')
   for (const eq of input.equipment) {
     const base = { kind: 'check_overdue' as const, equipment_id: eq.id, sensor_id: null, related_record_id: null }
-    if (!eq.active || (eq.kind !== 'fridge' && eq.kind !== 'freezer') || slot === null) {
+    const beforeMonitoring =
+      input.monitoringStart === null || (input.monitoringStart !== undefined && slot !== null && slot.getTime() < input.monitoringStart.getTime())
+    if (!eq.active || (eq.kind !== 'fridge' && eq.kind !== 'freezer') || slot === null || beforeMonitoring) {
       clear(base)
       continue
     }

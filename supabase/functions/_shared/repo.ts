@@ -228,6 +228,8 @@ export interface AlertsRepo {
   /** Enregistrements HORS QUARANTAINE des types donnés, reçus (server_time) depuis `sinceServerTime`. */
   listRecentRecords(sinceServerTime: string, types: readonly string[]): Promise<EngineRecord[]>
   listOpenAlerts(): Promise<Alert[]>
+  /** Date du premier enrôlement d'appareil (ISO), ou null s'il n'y en a aucun. */
+  firstDeviceEnrolledAt(): Promise<string | null>
   /** Ouvre une alerte ; null si une alerte ouverte existe déjà pour ce sujet (index unique). */
   openAlert(row: NewAlertRow): Promise<Alert | null>
   resolveAlerts(ids: string[]): Promise<void>

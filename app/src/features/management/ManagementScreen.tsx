@@ -5,7 +5,7 @@ import { ManagerProvider, useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button, Notice, TextField, useToast } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { useOnline } from '../../ui/hooks/useOnline.ts'
-import { IconChevronLeft, IconFridge, IconOffline, IconProduct, IconRecipe, IconSettings, IconSupplier, IconUsers, type IconProps } from '../../ui/icons.tsx'
+import { IconChecklist, IconChevronLeft, IconCleaning, IconFridge, IconOffline, IconProduct, IconRecipe, IconSettings, IconSupplier, IconUsers, type IconProps } from '../../ui/icons.tsx'
 import { PasswordField } from '../setup/PasswordField.tsx'
 import { ManagementContext, type ManagementTools, type RunWrite } from './common.tsx'
 import { EquipmentSection } from './EquipmentSection.tsx'
@@ -15,14 +15,18 @@ import { SupplierSection } from './SupplierSection.tsx'
 import { ProductSection } from './ProductSection.tsx'
 import { RecipeSection } from './RecipeSection.tsx'
 import { LabelSettingsCard } from './LabelSettingsCard.tsx'
+import { CleaningSection } from './CleaningSection.tsx'
+import { ChecklistSection } from './ChecklistSection.tsx'
 
-type Tab = 'equipment' | 'staff' | 'suppliers' | 'products' | 'recipes' | 'settings'
+type Tab = 'equipment' | 'staff' | 'suppliers' | 'products' | 'recipes' | 'cleaning' | 'checklists' | 'settings'
 const TABS: { id: Tab; label: string; Icon: (p: IconProps) => ReactNode }[] = [
   { id: 'equipment', label: 'Équipements', Icon: IconFridge },
   { id: 'staff', label: 'Équipe', Icon: IconUsers },
   { id: 'suppliers', label: 'Fournisseurs', Icon: IconSupplier },
   { id: 'products', label: 'Produits', Icon: IconProduct },
   { id: 'recipes', label: 'Recettes', Icon: IconRecipe },
+  { id: 'cleaning', label: 'Nettoyage', Icon: IconCleaning },
+  { id: 'checklists', label: 'Checklists', Icon: IconChecklist },
   { id: 'settings', label: 'Réglages', Icon: IconSettings },
 ]
 
@@ -100,7 +104,7 @@ export function ManagementScreen({ onBack, meId, onOpenAllergens }: { onBack: ()
   } else {
     body = (
       <>
-        <div role="tablist" aria-label="Rubriques de gestion" className="mb-8 grid grid-cols-3 gap-1 rounded-xl bg-sunken p-1 lg:max-w-4xl lg:grid-cols-6">
+        <div role="tablist" aria-label="Rubriques de gestion" className="mb-8 grid grid-cols-4 gap-1 rounded-xl bg-sunken p-1 lg:grid-cols-8">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -110,7 +114,7 @@ export function ManagementScreen({ onBack, meId, onOpenAllergens }: { onBack: ()
               aria-selected={tab === t.id}
               aria-controls={`panel-${t.id}`}
               onClick={() => setTab(t.id)}
-              className={`flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg px-1 text-[15px] font-semibold transition-colors sm:px-2 ${
+              className={`flex min-h-12 min-w-0 items-center justify-center gap-1.5 rounded-lg px-0.5 text-[13px] font-semibold sm:text-[15px] transition-colors sm:px-2 ${
                 tab === t.id ? 'bg-elevated text-fg shadow-card' : 'text-fg-muted active:bg-pressed'
               }`}
             >
@@ -125,6 +129,8 @@ export function ManagementScreen({ onBack, meId, onOpenAllergens }: { onBack: ()
           {tab === 'suppliers' && <SupplierSection />}
           {tab === 'products' && <ProductSection />}
           {tab === 'recipes' && <RecipeSection onOpenAllergens={onOpenAllergens} />}
+          {tab === 'cleaning' && <CleaningSection />}
+          {tab === 'checklists' && <ChecklistSection />}
           {tab === 'settings' && (
             <>
               <SettingsSection onSignedOut={() => setAuth({ kind: 'needed' })} />

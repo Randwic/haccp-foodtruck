@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText } from '../../manager/api.ts'
+import { oilSettingsError } from '../../manager/helpers.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
+import { formatNumber } from '../../ui/numberPad.ts'
 import { Button, Notice, TextField } from '../../ui/components/index.ts'
 import { IconClose, IconLogOut, IconMinus, IconPlus } from '../../ui/icons.tsx'
 import { isValidCheckTime, MAX_CHECK_TIMES, MIN_CHECK_TIMES } from '../temperatures/schedule.ts'
@@ -10,6 +12,10 @@ const MIN_LOCK = 1
 const MAX_LOCK = 30
 const MIN_DLC_DAYS = 0
 const MAX_DLC_DAYS = 30
+const OIL_MAX_MIN = 10
+const OIL_MAX_MAX = 30
+const OIL_STEP = 0.5
+const round1 = (v: number) => Math.round(v * 10) / 10
 
 /** Première heure ronde libre, pour « Ajouter une heure ». */
 function nextFreeTime(times: string[]): string {
@@ -29,6 +35,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
   const [times, setTimes] = useState<string[]>([])
   const [carryOver, setCarryOver] = useState(true)
   const [dlcDays, setDlcDays] = useState(3)
+  const [oilMax, setOilMax] = useState(25)
+  const [oilWarn, setOilWarn] = useState(22)
   const [timesError, setTimesError] = useState<string>()
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -47,6 +55,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
         setTimes(s.daily_check_times)
         setCarryOver(s.missed_slot_carry_over)
         setDlcDays(s.thaw_dlc_days)
+        setOilMax(s.oil_polar_max)
+        setOilWarn(s.oil_polar_warn)
         setLoaded(true)
       },
       (e) => alive && setLoadError(errorText(e)),
@@ -63,6 +73,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
       return setTimesError(`Indiquez de ${MIN_CHECK_TIMES} à ${MAX_CHECK_TIMES} heures complètes (heures et minutes).`)
     }
     if (new Set(times).size !== times.length) return setTimesError('Chaque heure ne doit apparaître qu’une fois.')
+    const oilError = oilSettingsError(oilMax, oilWarn)
+    if (oilError) return setError(oilError)
     setBusy(true)
     setError(null)
     try {
@@ -73,6 +85,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
             daily_check_times: [...times].sort(),
             missed_slot_carry_over: carryOver,
             thaw_dlc_days: dlcDays,
+            oil_polar_max: oilMax,
+            oil_polar_warn: oilWarn,
           }),
         'Réglages enregistrés',
       )
@@ -81,6 +95,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
       setTimes(s.daily_check_times)
       setCarryOver(s.missed_slot_carry_over)
       setDlcDays(s.thaw_dlc_days)
+      setOilMax(s.oil_polar_max)
+      setOilWarn(s.oil_polar_warn)
     } catch (err) {
       setError(errorText(err))
     } finally {
@@ -93,6 +109,12 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
 
   const step = (d: number) => setMinutes((m) => Math.min(MAX_LOCK, Math.max(MIN_LOCK, m + d)))
   const stepDlc = (d: number) => setDlcDays((m) => Math.min(MAX_DLC_DAYS, Math.max(MIN_DLC_DAYS, m + d)))
+  const stepOilMax = (d: number) => {
+    const next = round1(Math.min(OIL_MAX_MAX, Math.max(OIL_MAX_MIN, oilMax + d)))
+    setOilMax(next)
+    if (oilWarn >= next) setOilWarn(round1(next - OIL_STEP))
+  }
+  const stepOilWarn = (d: number) => setOilWarn((w) => round1(Math.min(oilMax - OIL_STEP, Math.max(OIL_STEP, w + d))))
   const stepBtn = 'flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-line-strong bg-elevated text-fg shadow-card transition-transform active:scale-[0.96] active:bg-pressed disabled:opacity-40'
 
   return (
@@ -204,6 +226,57 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
           <p className="mt-2 text-[15px] text-fg-subtle">
             Entre {MIN_DLC_DAYS} et {MAX_DLC_DAYS} jours.
           </p>
+        </div>
+        <div>
+          <p id="oil-label" className="mb-1.5 text-[15px] font-semibold text-fg">
+            Huiles de friture : composés polaires
+          </p>
+          <p className="mb-3 text-[15px] text-fg-muted">
+            Limite réglementaire : 25 % (décret n° 2008-184). Au-delà de la limite, le contrôle est hors limite et une action corrective est exigée ; à partir du seuil d’alerte, il est signalé « à surveiller ».
+          </p>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div role="group" aria-labelledby="oil-max-label">
+              <p id="oil-max-label" className="mb-2 text-[15px] text-fg">
+                Limite
+              </p>
+              <div className="flex items-center gap-3">
+                <button type="button" className={stepBtn} onClick={() => stepOilMax(-OIL_STEP)} disabled={oilMax <= OIL_MAX_MIN} aria-label="Diminuer la limite">
+                  <IconMinus size={22} />
+                </button>
+                <output aria-live="polite" aria-label={`Limite : ${formatNumber(oilMax)} %`} className="min-w-24 text-center text-[28px] font-semibold tracking-[-0.02em] text-fg tabular-nums">
+                  {formatNumber(oilMax)} %
+                </output>
+                <button type="button" className={stepBtn} onClick={() => stepOilMax(OIL_STEP)} disabled={oilMax >= OIL_MAX_MAX} aria-label="Augmenter la limite">
+                  <IconPlus size={22} />
+                </button>
+              </div>
+              <p className="mt-2 text-[14px] text-fg-subtle">
+                Entre {OIL_MAX_MIN} et {OIL_MAX_MAX} %.
+              </p>
+            </div>
+            <div role="group" aria-labelledby="oil-warn-label">
+              <p id="oil-warn-label" className="mb-2 text-[15px] text-fg">
+                Seuil d’alerte
+              </p>
+              <div className="flex items-center gap-3">
+                <button type="button" className={stepBtn} onClick={() => stepOilWarn(-OIL_STEP)} disabled={oilWarn <= OIL_STEP} aria-label="Diminuer le seuil d’alerte">
+                  <IconMinus size={22} />
+                </button>
+                <output aria-live="polite" aria-label={`Seuil d’alerte : ${formatNumber(oilWarn)} %`} className="min-w-24 text-center text-[28px] font-semibold tracking-[-0.02em] text-fg tabular-nums">
+                  {formatNumber(oilWarn)} %
+                </output>
+                <button type="button" className={stepBtn} onClick={() => stepOilWarn(OIL_STEP)} disabled={oilWarn >= oilMax - OIL_STEP} aria-label="Augmenter le seuil d’alerte">
+                  <IconPlus size={22} />
+                </button>
+              </div>
+              <p className="mt-2 text-[14px] text-fg-subtle">Inférieur à la limite.</p>
+            </div>
+          </div>
+          {oilMax > 25 && (
+            <div className="mt-3">
+              <Notice tone="warn">Une limite au-delà de 25 % dépasse la limite réglementaire.</Notice>
+            </div>
+          )}
         </div>
         <div>
           <p id="lock-label" className="mb-1.5 text-[15px] font-semibold text-fg">

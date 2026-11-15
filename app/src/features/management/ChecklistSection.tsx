@@ -134,7 +134,7 @@ function ChecklistCard({ c, inactive, children }: { c: Checklist; inactive?: boo
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className={`text-lg leading-snug font-semibold tracking-[-0.01em] break-words ${inactive ? 'text-fg-muted' : 'text-fg'}`}>{c.name}</h3>
-            <Badge tone="neutral">{CHECKLIST_KIND_LABELS[c.kind]}</Badge>
+            {CHECKLIST_KIND_LABELS[c.kind] !== c.name && <Badge tone="neutral">{CHECKLIST_KIND_LABELS[c.kind]}</Badge>}
             {inactive && <Badge tone="neutral">Désactivée</Badge>}
           </div>
           <p className="mt-1 text-[15px] text-fg-muted">
@@ -240,11 +240,10 @@ function ChecklistModal({ checklist, onClose, onDone }: { checklist: Checklist |
           <ol className="space-y-3">
             {items.map((it, k) => (
               <li key={it.key} className="rounded-2xl border border-line bg-surface p-3 sm:p-4">
-                <div className="flex items-start gap-2">
-                  <span className="mt-4 w-6 shrink-0 text-[15px] font-semibold text-fg-subtle tabular-nums">{k + 1}.</span>
-                  <TextField className="min-w-0 flex-1" label={`Point ${k + 1}`} value={it.label} onChange={(label) => update(k, { label })} maxLength={120} autoCapitalize="sentences" placeholder="Ex. : Lave-mains approvisionné" />
+                <div>
+                  <TextField label={`Point ${k + 1}`} value={it.label} onChange={(label) => update(k, { label })} maxLength={120} autoCapitalize="sentences" placeholder="Ex. : Lave-mains approvisionné" />
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2 pl-8">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     role="switch"
@@ -256,7 +255,7 @@ function ChecklistModal({ checklist, onClose, onDone }: { checklist: Checklist |
                     <IconWarn size={18} />
                     {it.required ? 'Point critique' : 'Point normal'}
                   </button>
-                  <span className="flex-1" />
+                  <span className="ml-auto flex gap-2">
                   <button type="button" className={iconBtn} onClick={() => move(k, -1)} disabled={k === 0} aria-label={`Monter le point ${k + 1}`}>
                     <IconMoveUp size={20} />
                   </button>
@@ -266,6 +265,7 @@ function ChecklistModal({ checklist, onClose, onDone }: { checklist: Checklist |
                   <button type="button" className={iconBtn} onClick={() => setItems((list) => list.filter((_, i) => i !== k))} disabled={items.length <= 1} aria-label={`Retirer le point ${k + 1}`}>
                     <IconClose size={20} />
                   </button>
+                  </span>
                 </div>
               </li>
             ))}

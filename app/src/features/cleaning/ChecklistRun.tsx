@@ -77,7 +77,7 @@ export function ChecklistRun(props: {
           <div className="min-w-0">
             <h1 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">{c ? `Corriger : ${cl.name}` : cl.name}</h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <Badge tone="neutral">Checklist · {CHECKLIST_KIND_LABELS[cl.kind]}</Badge>
+              <Badge tone="neutral">{CHECKLIST_KIND_LABELS[cl.kind] === cl.name ? 'Checklist' : `Checklist · ${CHECKLIST_KIND_LABELS[cl.kind]}`}</Badge>
               <span className="text-[15px] text-fg-muted">{plural(items.length, 'point', 'points')}</span>
               {!c && props.status && props.status.state !== 'none' && <DueBadge state={props.status.state} label={props.status.label} />}
             </div>

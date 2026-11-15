@@ -150,6 +150,18 @@ export function OilCheckForm(props: {
             max={POLAR_RULES.max}
             decimals={POLAR_RULES.decimals}
             tone={level === 'out' ? 'danger' : level === 'warn' ? 'warn' : level === 'ok' ? 'ok' : undefined}
+            status={
+              level === null ? (
+                <p className="px-1 py-2.5 text-[15px] text-fg-muted">
+                  Limite : {formatPercent(props.limits.max)} · alerte : {formatPercent(props.limits.warn)}
+                </p>
+              ) : (
+                <p className={`flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[16px] ${level === 'out' ? 'bg-danger-soft' : level === 'warn' ? 'bg-warn-soft' : 'bg-ok-soft'}`}>
+                  <LevelLabel level={level} />
+                  <span className="text-fg-muted">· limite {formatPercent(props.limits.max)}</span>
+                </p>
+              )
+            }
             autoFocus
           />
           <ErrorNotice error={error} />

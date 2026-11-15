@@ -253,9 +253,9 @@ describe('Accueil', () => {
       ],
       initialPhotos: { [PHOTO]: { image: new Blob([syntheticWebp(100).slice().buffer]), state: 'pending' } },
     })
-    expect(await screen.findByRole('button', { name: 'Achats & réception : Dernière réception : aujourd’hui à 09:12, 1 photo en attente d’envoi, 1 refus cette semaine' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Achats & réception : Dernier achat : aujourd’hui à 09:12, 1 photo en attente d’envoi, 1 refus cette semaine' })).toBeInTheDocument()
     core.simulate.flush()
-    expect(await screen.findByRole('button', { name: 'Achats & réception : Dernière réception : aujourd’hui à 09:12, 1 refus cette semaine' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Achats & réception : Dernier achat : aujourd’hui à 09:12, 1 refus cette semaine' })).toBeInTheDocument()
   })
 
   it('produit accepté hors seuil sans action : tuile en alerte', async () => {

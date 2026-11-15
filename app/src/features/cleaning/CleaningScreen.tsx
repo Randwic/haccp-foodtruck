@@ -237,7 +237,7 @@ function ChecklistRow({ status: s, onOpen }: { status: ChecklistStatus; onOpen: 
         <span className="min-w-0 flex-1">
           <span className="block text-[18px] leading-snug font-semibold text-fg">{s.checklist.name}</span>
           <span className="mt-1 flex flex-wrap items-center gap-2">
-            <Badge tone="neutral">{CHECKLIST_KIND_LABELS[s.checklist.kind]}</Badge>
+            {CHECKLIST_KIND_LABELS[s.checklist.kind] !== s.checklist.name && <Badge tone="neutral">{CHECKLIST_KIND_LABELS[s.checklist.kind]}</Badge>}
             <DueBadge state={s.state} label={s.label} />
           </span>
         </span>

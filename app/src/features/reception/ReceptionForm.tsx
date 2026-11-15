@@ -384,12 +384,12 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
           Annuler
         </Button>
       </div>
-      <ol aria-label="Étapes" className="mb-7 grid grid-cols-3 gap-2">
+      <ol aria-label="Étapes" className="mb-7 flex gap-2">
         {STEPS.map((s, k) => {
           const current = s.id === step
           const can = reached(s.id)
           return (
-            <li key={s.id}>
+            <li key={s.id} className={`min-w-0 ${current ? 'flex-[2.4] sm:flex-1' : 'flex-1'}`}>
               <button
                 type="button"
                 disabled={!can || current}
@@ -405,7 +405,7 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
                 >
                   {k + 1}
                 </span>
-                <span className="min-w-0 truncate">{s.label}</span>
+                <span className={`min-w-0 truncate ${current ? '' : 'max-sm:sr-only'}`}>{s.label}</span>
               </button>
             </li>
           )

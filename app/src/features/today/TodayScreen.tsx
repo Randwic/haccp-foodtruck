@@ -173,8 +173,8 @@ function receptionLines(s: ReceptionStatus | null, now: Date, tz: string): Statu
   const lines = missingLine(s.missingActions)
   lines.push(
     s.last
-      ? { tone: 'muted', icon: <IconOk size={17} className="shrink-0" />, text: `Dernière réception : ${whenLabel(s.last, now, tz)}` }
-      : { tone: 'muted', icon: <IconDue size={17} className="shrink-0" />, text: 'Aucune réception récente' },
+      ? { tone: 'muted', icon: <IconOk size={17} className="shrink-0" />, text: `Dernier achat : ${whenLabel(s.last, now, tz)}` }
+      : { tone: 'muted', icon: <IconDue size={17} className="shrink-0" />, text: 'Aucun achat récent' },
   )
   if (s.photos.failed > 0) lines.push({ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: plural(s.photos.failed, 'photo refusée', 'photos refusées') })
   else if (s.photos.pending > 0)

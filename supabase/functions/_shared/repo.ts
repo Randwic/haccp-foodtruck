@@ -1,8 +1,8 @@
 // Accès aux données, injecté dans la logique pure. Implémentations :
 //  - _adapters/supabase_repo.ts (Deno, supabase-js, service_role) en production ;
 //  - _shared/memory_repo.ts (en mémoire) pour les tests Vitest.
-import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
-import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
+import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Equipment, EquipmentKind, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 
 export interface DeviceRow {
   id: string
@@ -116,12 +116,16 @@ export interface PushRepo extends DeviceAuthRepo {
   getChainHead(deviceId: string): Promise<ChainHead | null>
   getRecordsByIds(ids: string[]): Promise<StoredRecord[]>
   getStaffStatus(staffId: string): Promise<{ id: string; active: boolean } | null>
-  equipmentExists(equipmentId: string): Promise<boolean>
+  /** Nature d'un équipement existant (actif ou non), null s'il est inconnu. */
+  getEquipmentKind(equipmentId: string): Promise<EquipmentKind | null>
   /** Fournisseur existant (actif ou non) : `reception.supplier_id`. */
   supplierExists(supplierId: string): Promise<boolean>
   /** Produit / recette existants (actifs ou non) : `label_printed.product_id` / `recipe_id`. */
   productExists(productId: string): Promise<boolean>
   recipeExists(recipeId: string): Promise<boolean>
+  /** Tâche de nettoyage / checklist existantes (actives ou non) : `cleaning_done.task_id` / `checklist_done.checklist_id`. */
+  cleaningTaskExists(taskId: string): Promise<boolean>
+  checklistExists(checklistId: string): Promise<boolean>
   /**
    * Type et payload d'enregistrements (corrections : photos reprises de l'enregistrement corrigé).
    * Ordre quelconque, id inconnus ignorés.
@@ -140,6 +144,8 @@ export interface PullRepo extends DeviceAuthRepo {
   listSuppliers(since: string | null): Promise<Supplier[]>
   listProducts(since: string | null): Promise<Product[]>
   listRecipes(since: string | null): Promise<Recipe[]>
+  listCleaningTasks(since: string | null): Promise<CleaningTask[]>
+  listChecklists(since: string | null): Promise<Checklist[]>
 }
 
 export interface EnrollRepo {

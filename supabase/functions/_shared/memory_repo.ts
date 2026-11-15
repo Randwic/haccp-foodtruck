@@ -1,8 +1,8 @@
 // Dépôt en mémoire pour les tests : reproduit le comportement utile de la base (trigger
 // d'insertion « filet de sécurité » avec messages `HACCP: …`, clé primaire records.id,
 // unique(device_id, device_seq), server_time / clock_suspect imposés, ancres de purge).
-import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
-import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
+import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Equipment, EquipmentKind, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import type { PhotoStore } from './photo_upload.ts'
 import type { PhotoRemover, PurgePhotosRepo } from './purge_photos.ts'
 import { classifyDbError, isClockSuspect } from './repo.ts'
@@ -36,6 +36,8 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   suppliers: Supplier[] = []
   products: Product[] = []
   recipes: Recipe[] = []
+  cleaningTasks: CleaningTask[] = []
+  checklists: Checklist[] = []
   establishment: Establishment | null = null
   settings: Settings | null = null
   records: (Omit<NewRecordRow, 'clock_suspect'> & { server_time: string; clock_suspect: boolean })[] = []
@@ -116,8 +118,9 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
     const s = this.staff.find((x) => x.id === staffId)
     return s ? { id: s.id, active: s.active } : null
   }
-  async equipmentExists(equipmentId: string): Promise<boolean> {
-    return this.equipment.some((e) => e.id === equipmentId)
+  async getEquipmentKind(equipmentId: string): Promise<EquipmentKind | null> {
+    this.count('getEquipmentKind')
+    return this.equipment.find((e) => e.id === equipmentId)?.kind ?? null
   }
   async supplierExists(supplierId: string): Promise<boolean> {
     this.count('supplierExists')
@@ -130,6 +133,14 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   async recipeExists(recipeId: string): Promise<boolean> {
     this.count('recipeExists')
     return this.recipes.some((r) => r.id === recipeId)
+  }
+  async cleaningTaskExists(taskId: string): Promise<boolean> {
+    this.count('cleaningTaskExists')
+    return this.cleaningTasks.some((t) => t.id === taskId)
+  }
+  async checklistExists(checklistId: string): Promise<boolean> {
+    this.count('checklistExists')
+    return this.checklists.some((c) => c.id === checklistId)
   }
   async getPayloadsByIds(ids: string[]) {
     this.count('getPayloadsByIds')
@@ -194,6 +205,12 @@ export class MemoryRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo, B
   }
   async listRecipes(since: string | null) {
     return this.since(this.recipes, since)
+  }
+  async listCleaningTasks(since: string | null) {
+    return this.since(this.cleaningTasks, since)
+  }
+  async listChecklists(since: string | null) {
+    return this.since(this.checklists, since)
   }
 
   async getUserIdFromJwt(jwt: string) {

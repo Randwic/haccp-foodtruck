@@ -1,6 +1,6 @@
 // Contrat partagé app <-> backend. NE PAS MODIFIER sans accord du chef de projet.
 // Fichier sans dépendance : importé par l'app (Vite) et les Edge Functions (Deno).
-import type { Product, Recipe, Supplier } from './payloads.ts'
+import type { Checklist, CleaningTask, Product, Recipe, Supplier } from './payloads.ts'
 
 export type RecordType =
   | 'system_test'
@@ -83,6 +83,8 @@ export interface SyncPullResponse {
   suppliers: Supplier[] // fournisseurs actifs (lot 3)
   products: Product[] // produits actifs (lot 4)
   recipes: Recipe[] // recettes actives (lot 4)
+  cleaning_tasks: CleaningTask[] // tâches du plan de nettoyage actives (lot 5)
+  checklists: Checklist[] // checklists actives (lot 5)
   deleted: { table: string; id: string }[] // références désactivées depuis `since`
 }
 

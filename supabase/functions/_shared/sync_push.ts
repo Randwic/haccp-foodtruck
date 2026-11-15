@@ -1,15 +1,18 @@
 // sync-push : réception des enregistrements d'un appareil et vérification de sa chaîne de hachage.
 import { computeRecordHash } from '../../../shared/canonical.ts'
-import { GENESIS_HASH, type HaccpRecord, type RecordType, type RejectReason, type SyncPushResponse } from '../../../shared/types.ts'
+import { GENESIS_HASH, type EquipmentKind, type HaccpRecord, type RecordType, type RejectReason, type SyncPushResponse } from '../../../shared/types.ts'
 import {
   isCanonicalIsoTime,
   isPlainObject,
   isUuid,
+  referencedChecklistId,
+  referencedCleaningTaskId,
   referencedEquipmentId,
   referencedPhotoPaths,
   referencedProductId,
   referencedRecipeId,
   referencedSupplierId,
+  requiredEquipmentKind,
   validatePayload,
   validateRecordSemantics,
   validateRecordStructure,
@@ -132,7 +135,15 @@ export async function processPush(
   const known = new Map<string, StoredRecord>()
   if (candidateIds.length > 0) for (const s of await repo.getRecordsByIds(candidateIds)) known.set(s.id, s)
 
-  const caches: ContentCaches = { staff: new Map(), equipment: new Map(), suppliers: new Map(), products: new Map(), recipes: new Map() }
+  const caches: ContentCaches = {
+    staff: new Map(),
+    equipment: new Map(),
+    suppliers: new Map(),
+    products: new Map(),
+    recipes: new Map(),
+    cleaningTasks: new Map(),
+    checklists: new Map(),
+  }
   const state: { blockedBy: { id: string; reason: RejectReason } | null } = { blockedBy: null }
 
   const batchSuspect = await batchClockSuspect(deviceNow, ctx.now(), repo)
@@ -286,10 +297,12 @@ export async function processPush(
 
 interface ContentCaches {
   staff: Map<string, boolean | null> // null = inconnu, false = désactivé
-  equipment: Map<string, boolean>
+  equipment: Map<string, EquipmentKind | null> // null = inconnu
   suppliers: Map<string, boolean>
   products: Map<string, boolean>
   recipes: Map<string, boolean>
+  cleaningTasks: Map<string, boolean>
+  checklists: Map<string, boolean>
 }
 
 /** Contrôles de contenu d'un enregistrement à la chaîne intègre. */
@@ -325,13 +338,32 @@ async function checkContent(r: HaccpRecord, deviceId: string, repo: PushRepo, ca
   // Références du payload effectif
   const effectiveType = supersededType ?? r.type
   const effectivePayload = (r.type === 'correction' ? r.payload.replacement : r.payload) as Record<string, unknown>
-  // Équipement référencé (temperature_check, thawing, hot_holding s'il est déclaré) : doit exister.
+  // Équipement référencé (temperature_check, thawing, oil_check, oil_change, hot_holding s'il est
+  // déclaré) : doit exister (même désactivé). Huiles : bac de friteuse (kind 'fryer_vat') exigé.
   // Pas de contrôle in_range / seuils ici (choix) : in_range est calculé par l'app avec le seuil en
   // vigueur au moment de la saisie, éventuellement hors réseau, alors que le seuil a pu changer depuis.
   const eq = referencedEquipmentId(effectiveType, effectivePayload)
   if (eq !== null) {
-    if (!caches.equipment.has(eq)) caches.equipment.set(eq, await repo.equipmentExists(eq))
-    if (!caches.equipment.get(eq)) return q('invalid_payload', 'equipment_id : équipement inconnu')
+    if (!caches.equipment.has(eq)) caches.equipment.set(eq, await repo.getEquipmentKind(eq))
+    const kind = caches.equipment.get(eq)
+    if (!kind) return q('invalid_payload', 'equipment_id : équipement inconnu')
+    const required = requiredEquipmentKind(effectiveType)
+    if (required !== null && kind !== required) {
+      return q('invalid_payload', `equipment_id : équipement de type ${required} attendu (reçu : ${kind})`)
+    }
+  }
+  // Nettoyage / checklist : tâche et checklist existantes (même désactivées depuis : saisie hors réseau).
+  // Choix : les `answers[].item_id` ne sont PAS comparés aux points actuels de la checklist — elle a
+  // pu changer pendant une tournée hors réseau ; l'enregistrement atteste les réponses données.
+  const task = referencedCleaningTaskId(effectiveType, effectivePayload)
+  if (task !== null) {
+    if (!caches.cleaningTasks.has(task)) caches.cleaningTasks.set(task, await repo.cleaningTaskExists(task))
+    if (!caches.cleaningTasks.get(task)) return q('invalid_payload', 'task_id : tâche de nettoyage inconnue')
+  }
+  const cl = referencedChecklistId(effectiveType, effectivePayload)
+  if (cl !== null) {
+    if (!caches.checklists.has(cl)) caches.checklists.set(cl, await repo.checklistExists(cl))
+    if (!caches.checklists.get(cl)) return q('invalid_payload', 'checklist_id : checklist inconnue')
   }
   // Fournisseur référencé (réception) : doit exister (même désactivé depuis : saisie hors réseau).
   const sup = referencedSupplierId(effectiveType, effectivePayload)

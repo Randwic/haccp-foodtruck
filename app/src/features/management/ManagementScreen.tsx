@@ -5,26 +5,31 @@ import { ManagerProvider, useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button, Notice, TextField, useToast } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { useOnline } from '../../ui/hooks/useOnline.ts'
-import { IconChevronLeft, IconFridge, IconOffline, IconSettings, IconSupplier, IconUsers, type IconProps } from '../../ui/icons.tsx'
+import { IconChevronLeft, IconFridge, IconOffline, IconProduct, IconRecipe, IconSettings, IconSupplier, IconUsers, type IconProps } from '../../ui/icons.tsx'
 import { PasswordField } from '../setup/PasswordField.tsx'
 import { ManagementContext, type ManagementTools, type RunWrite } from './common.tsx'
 import { EquipmentSection } from './EquipmentSection.tsx'
 import { SettingsSection } from './SettingsSection.tsx'
 import { StaffSection } from './StaffSection.tsx'
 import { SupplierSection } from './SupplierSection.tsx'
+import { ProductSection } from './ProductSection.tsx'
+import { RecipeSection } from './RecipeSection.tsx'
+import { LabelSettingsCard } from './LabelSettingsCard.tsx'
 
-type Tab = 'equipment' | 'staff' | 'suppliers' | 'settings'
+type Tab = 'equipment' | 'staff' | 'suppliers' | 'products' | 'recipes' | 'settings'
 const TABS: { id: Tab; label: string; Icon: (p: IconProps) => ReactNode }[] = [
   { id: 'equipment', label: 'Équipements', Icon: IconFridge },
   { id: 'staff', label: 'Équipe', Icon: IconUsers },
   { id: 'suppliers', label: 'Fournisseurs', Icon: IconSupplier },
+  { id: 'products', label: 'Produits', Icon: IconProduct },
+  { id: 'recipes', label: 'Recettes', Icon: IconRecipe },
   { id: 'settings', label: 'Réglages', Icon: IconSettings },
 ]
 
 type Auth = { kind: 'checking' } | { kind: 'needed'; notice?: string } | { kind: 'ok' }
 
 /** Espace Gestion (gérant uniquement) : exige Internet et une session gérant valide. */
-export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: string | null }) {
+export function ManagementScreen({ onBack, meId, onOpenAllergens }: { onBack: () => void; meId: string | null; onOpenAllergens?: () => void }) {
   const manager = useManager()
   const core = useCore()
   const toast = useToast()
@@ -95,7 +100,7 @@ export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: s
   } else {
     body = (
       <>
-        <div role="tablist" aria-label="Rubriques de gestion" className="mb-8 grid grid-cols-2 gap-1 rounded-xl bg-sunken p-1 sm:max-w-2xl sm:grid-cols-4">
+        <div role="tablist" aria-label="Rubriques de gestion" className="mb-8 grid grid-cols-3 gap-1 rounded-xl bg-sunken p-1 lg:max-w-4xl lg:grid-cols-6">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -118,7 +123,14 @@ export function ManagementScreen({ onBack, meId }: { onBack: () => void; meId: s
           {tab === 'equipment' && <EquipmentSection />}
           {tab === 'staff' && <StaffSection />}
           {tab === 'suppliers' && <SupplierSection />}
-          {tab === 'settings' && <SettingsSection onSignedOut={() => setAuth({ kind: 'needed' })} />}
+          {tab === 'products' && <ProductSection />}
+          {tab === 'recipes' && <RecipeSection onOpenAllergens={onOpenAllergens} />}
+          {tab === 'settings' && (
+            <>
+              <SettingsSection onSignedOut={() => setAuth({ kind: 'needed' })} />
+              <LabelSettingsCard />
+            </>
+          )}
         </div>
       </>
     )

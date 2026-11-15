@@ -8,14 +8,16 @@ import {
   DEMO_SETTINGS,
   DEMO_STAFF,
   DEMO_SUPPLIERS,
+  DEMO_PRODUCTS,
+  DEMO_RECIPES,
   DEMO_THRESHOLDS,
   type MockTransport,
   type Transport,
 } from '../core/index.ts'
 import type { DeviceEnrollResponse, Equipment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
-import type { Supplier } from '../../../shared/payloads.ts'
+import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 import { ManagerError, MESSAGES, type ManagedStaff, type ManagerApi, type ManagerErrorCode, type ManagerSettings } from './api.ts'
-import { normalizeSupplierInput } from './helpers.ts'
+import { normalizeProductInput, normalizeRecipeInput, normalizeSupplierInput } from './helpers.ts'
 
 /** Compte de démonstration (mode `seeded`). */
 export const MOCK_MANAGER_ACCOUNT = { email: 'gerant@demo.fr', password: 'demo-demo-demo' } as const
@@ -49,6 +51,8 @@ interface MockState {
   equipment: Equipment[]
   thresholds: Threshold[]
   suppliers: Supplier[]
+  products: Product[]
+  recipes: Recipe[]
 }
 
 export interface MockManagerApi extends ManagerApi {
@@ -69,7 +73,7 @@ const uuid = () => crypto.randomUUID()
 
 function initialState(seeded: boolean): MockState {
   if (!seeded) {
-    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, daily_check_times: [...DEMO_SETTINGS.daily_check_times], missed_slot_carry_over: DEMO_SETTINGS.missed_slot_carry_over, thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days, staff: [], equipment: [], thresholds: [], suppliers: [] }
+    return { bootstrapped: false, account: null, session: null, establishment_name: '', auto_lock_minutes: 5, daily_check_times: [...DEMO_SETTINGS.daily_check_times], missed_slot_carry_over: DEMO_SETTINGS.missed_slot_carry_over, thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days, staff: [], equipment: [], thresholds: [], suppliers: [], products: clone(DEMO_PRODUCTS), recipes: clone(DEMO_RECIPES) }
   }
   return {
     bootstrapped: true,
@@ -84,6 +88,8 @@ function initialState(seeded: boolean): MockState {
     equipment: clone(DEMO_EQUIPMENT),
     thresholds: clone(DEMO_THRESHOLDS),
     suppliers: clone(DEMO_SUPPLIERS),
+    products: clone(DEMO_PRODUCTS),
+    recipes: clone(DEMO_RECIPES),
   }
 }
 
@@ -122,6 +128,8 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       const raw = localStorage.getItem(opts.storageKey)
       if (raw) state = { ...state, ...(JSON.parse(raw) as Partial<MockState>) }
       state.suppliers ??= [] // état enregistré avant le lot 3
+      state.products ??= clone(DEMO_PRODUCTS) // état enregistré avant le lot 4
+      state.recipes ??= clone(DEMO_RECIPES)
     } catch {
       /* état illisible : on repart de zéro */
     }
@@ -171,7 +179,23 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     t.upsertSupplier({ ...rest, active: true })
     if (!s.active) t.deactivate('suppliers', s.id)
   }
+  const pushProduct = (p: Product) => {
+    if (!t) return
+    const { updated_at: _u, ...rest } = p
+    void _u
+    t.upsertProduct({ ...rest, active: true })
+    if (!p.active) t.deactivate('products', p.id)
+  }
+  const pushRecipe = (r: Recipe) => {
+    if (!t) return
+    const { updated_at: _u, ...rest } = r
+    void _u
+    t.upsertRecipe({ ...rest, active: true })
+    if (!r.active) t.deactivate('recipes', r.id)
+  }
   if (t) {
+    state.products.forEach(pushProduct)
+    state.recipes.forEach(pushRecipe)
     state.suppliers.forEach(pushSupplier)
     state.staff.forEach(pushStaff)
     state.equipment.forEach(pushEquipment)
@@ -385,6 +409,84 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       save()
       return clone(s)
     },
+    async listProducts() {
+      await gate(true)
+      return clone(state.products).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+    async addProduct(input) {
+      await gate(true)
+      const n = normalizeProductInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const p: Product = {
+        id: uuid(),
+        name: n.value.name!,
+        allergens: n.value.allergens ?? [],
+        storage: n.value.storage ?? 'fridge',
+        shelf_life_opened_hours: n.value.shelf_life_opened_hours ?? null,
+        shelf_life_thawed_hours: n.value.shelf_life_thawed_hours ?? null,
+        active: true,
+        updated_at: nowIso(),
+      }
+      state.products.push(p)
+      pushProduct(p)
+      save()
+      return clone(p)
+    },
+    async updateProduct(id, patch) {
+      await gate(true)
+      const p = state.products.find((x) => x.id === id)
+      if (!p) throw new ManagerError('validation', 'Produit introuvable.', 404)
+      const { active, ...fields } = patch
+      const n = normalizeProductInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      Object.assign(p, n.value)
+      if (active !== undefined) p.active = active
+      p.updated_at = nowIso()
+      pushProduct(p)
+      save()
+      return clone(p)
+    },
+    async listRecipes() {
+      await gate(true)
+      return clone(state.recipes).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+    async addRecipe(input) {
+      await gate(true)
+      const n = normalizeRecipeInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const ids = n.value.ingredient_product_ids ?? []
+      if (ids.some((x) => !state.products.some((p) => p.id === x))) throw new ManagerError('validation', 'Ingrédient inconnu.', 400)
+      const r: Recipe = {
+        id: uuid(),
+        name: n.value.name!,
+        ingredient_product_ids: ids,
+        extra_allergens: n.value.extra_allergens ?? [],
+        storage: n.value.storage ?? 'fridge',
+        shelf_life_hours: n.value.shelf_life_hours!,
+        active: true,
+        updated_at: nowIso(),
+      }
+      state.recipes.push(r)
+      pushRecipe(r)
+      save()
+      return clone(r)
+    },
+    async updateRecipe(id, patch) {
+      await gate(true)
+      const r = state.recipes.find((x) => x.id === id)
+      if (!r) throw new ManagerError('validation', 'Recette introuvable.', 404)
+      const { active, ...fields } = patch
+      const n = normalizeRecipeInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      if ((n.value.ingredient_product_ids ?? []).some((x) => !state.products.some((p) => p.id === x))) throw new ManagerError('validation', 'Ingrédient inconnu.', 400)
+      Object.assign(r, n.value)
+      if (active !== undefined) r.active = active
+      r.updated_at = nowIso()
+      pushRecipe(r)
+      save()
+      return clone(r)
+    },
+
     async downloadPhoto(path) {
       await gate(true)
       const bytes = t?.storedPhotos().get(path)

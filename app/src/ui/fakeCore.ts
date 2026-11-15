@@ -1,7 +1,7 @@
 // Implémentation EN MÉMOIRE de CoreApi, pour les tests et la démo de l'interface.
 // Aucune persistance, aucun réseau, aucune cryptographie réelle : ne jamais l'utiliser en production.
 import type { CoreApi, DeviceInfo, PhotoStatus, SyncStatus, UnlockResult } from '../core/api.ts'
-import type { Supplier } from '../../../shared/payloads.ts'
+import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 import { referencedPhotoPaths } from '../../../shared/validation.ts'
 import { createBrowserPhotoEncoder, isWebp, type PhotoEncoder } from '../core/photoEncoder.ts'
 import {
@@ -14,7 +14,7 @@ import {
   type StaffMember,
   type Threshold,
 } from '../../../shared/types.ts'
-import { DEMO_EQUIPMENT, DEMO_SUPPLIERS, DEMO_THRESHOLDS } from '../core/mockTransport.ts'
+import { DEMO_EQUIPMENT, DEMO_PRODUCTS, DEMO_RECIPES, DEMO_SUPPLIERS, DEMO_THRESHOLDS } from '../core/mockTransport.ts'
 
 export const FAKE_STAFF_PINS: Record<string, string> = {
   'staff-gerant': '123456',
@@ -42,6 +42,10 @@ export interface FakeCoreOptions {
   initialRecords?: FakeRecordSeed[]
   /** Fournisseurs (défaut : les 3 fournisseurs de démonstration ; désactivés compris). */
   suppliers?: Supplier[]
+  /** Produits (défaut : les produits de démonstration du serveur ; désactivés compris). */
+  products?: Product[]
+  /** Recettes (défaut : la recette de démonstration du serveur ; désactivées comprises). */
+  recipes?: Recipe[]
   /** Compression des photos (défaut : encodeur du navigateur ; les tests injectent un encodeur simulé). */
   photoEncoder?: PhotoEncoder
   /** Photos déjà présentes (démo) : chemin → image (ou fabrique, appelée à la première lecture) et état. */
@@ -76,6 +80,9 @@ export interface FakeCore extends CoreApi {
     flush(): void
     /** Ajoute / modifie un fournisseur (comme un sync-pull après une action du gérant). */
     upsertSupplier(s: Supplier): void
+    /** Ajoute / modifie un produit ou une recette (comme un sync-pull). */
+    upsertProduct(p: Product): void
+    upsertRecipe(r: Recipe): void
     /** Refus définitif d'une photo par le serveur (ex. 409 photo_conflict). */
     failPhoto(path: string, error?: string): void
   }
@@ -113,6 +120,14 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
   }
   const thresholds: Threshold[] = DEMO_THRESHOLDS.map((t) => ({ ...t }))
   const suppliers: Supplier[] = (options.suppliers ?? DEMO_SUPPLIERS).map((x) => ({ ...x }))
+  const products: Product[] = structuredClone(options.products ?? DEMO_PRODUCTS)
+  const recipes: Recipe[] = structuredClone(options.recipes ?? DEMO_RECIPES)
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'fr')
+  const upsert = <T extends { id: string }>(list: T[], item: T) => {
+    const i = list.findIndex((x) => x.id === item.id)
+    if (i >= 0) list[i] = structuredClone(item)
+    else list.push(structuredClone(item))
+  }
   const photos = new Map<string, FakePhoto>(
     Object.entries(options.initialPhotos ?? {}).map(([path, p]) => [path, { image: p.image, state: p.state ?? 'uploaded', error: null }]),
   )
@@ -323,6 +338,14 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
         .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
         .map((x) => ({ ...x }))
     },
+    async listProducts(opts) {
+      await wait()
+      return structuredClone(products.filter((x) => opts?.includeInactive || x.active).sort(byName))
+    },
+    async listRecipes(opts) {
+      await wait()
+      return structuredClone(recipes.filter((x) => opts?.includeInactive || x.active).sort(byName))
+    },
 
     async addPhoto(image) {
       await wait()
@@ -388,6 +411,14 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
         const i = suppliers.findIndex((x) => x.id === sup.id)
         if (i >= 0) suppliers[i] = { ...sup }
         else suppliers.push({ ...sup })
+        emitSync()
+      },
+      upsertProduct(p) {
+        upsert(products, p)
+        emitSync()
+      },
+      upsertRecipe(r) {
+        upsert(recipes, r)
         emitSync()
       },
       failPhoto(path, error = 'photo_conflict') {

@@ -13,7 +13,7 @@ import type {
   StaffMember,
   Threshold,
 } from '../../../shared/types.ts'
-import type { Supplier } from '../../../shared/payloads.ts'
+import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 
 /** Appareil enrôlé (une seule ligne, clé 'self'). Le jeton ne sort jamais du core. */
 export interface DeviceRow {
@@ -110,6 +110,11 @@ export class CoreDb extends Dexie {
   // Version 2 (lot 3) : photos et fournisseurs.
   photos!: Table<PhotoRow, string>
   suppliers!: Table<Supplier, string>
+  // Version 3 (lot 4) : produits et recettes ; tâches de nettoyage et checklists (stockées pour le lot 5).
+  products!: Table<Product, string>
+  recipes!: Table<Recipe, string>
+  cleaning_tasks!: Table<CleaningTask, string>
+  checklists!: Table<Checklist, string>
 
   constructor(name: string) {
     super(name)
@@ -130,6 +135,19 @@ export class CoreDb extends Dexie {
       photos: '&path, state, created_at',
       suppliers: '&id',
     })
+    // Lot 4 : ajout de tables. Les références déjà présentes côté serveur (données initiales des
+    // produits) peuvent être plus anciennes que le dernier `since` de l'appareil : on remet `since` à
+    // zéro pour que le prochain sync-pull soit complet (idempotent : bulkPut). Aucun enregistrement touché.
+    this.version(3)
+      .stores({
+        products: '&id',
+        recipes: '&id',
+        cleaning_tasks: '&id',
+        checklists: '&id',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('meta').put({ key: 'since', value: null })
+      })
     // Garde-fou : toute tentative de réécriture ou de suppression d'un enregistrement échoue,
     // même si un futur code l'essayait par erreur (put sur un id existant, update, delete).
     this.records.hook('updating', () => {

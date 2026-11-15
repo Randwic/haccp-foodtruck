@@ -63,6 +63,18 @@ const core = createCore({ transport: createHttpTransport({ baseUrl, anonKey }) }
   `getPhotoStatuses(paths)` ; `listSuppliers({ includeInactive? })` (table Dexie `suppliers`, `deleted` de la table
   `suppliers` → inactif, gardé pour le nom des anciennes réceptions).
 
+## Produits et recettes (lot 4)
+
+- **Base locale version 3** : tables `products`, `recipes` (et `cleaning_tasks`, `checklists`, stockées pour le lot 5).
+  Ajout de tables uniquement ; la migration remet `since` à `null` pour que le premier sync-pull après mise à jour
+  soit complet (les produits initiaux du serveur sont plus anciens que le dernier `since` d'un appareil existant).
+  Aucun enregistrement n'est touché.
+- **Sync-pull** : `products`, `recipes`, `cleaning_tasks`, `checklists` absents d'un serveur plus ancien = ignorés ;
+  `deleted` de ces tables → ligne gardée mais inactive (nom et allergènes des anciennes étiquettes).
+- **API** (ajouts rétro-compatibles à `CoreApi`) : `listProducts({ includeInactive? })`, `listRecipes({ includeInactive? })`,
+  triés par nom. Serveur simulé : `DEMO_PRODUCTS` / `DEMO_RECIPES` = données initiales de la migration lot 4
+  (mêmes identifiants), `upsertProduct`, `upsertRecipe`, `deactivate('products' | 'recipes', id)`.
+
 ## Garanties
 
 - Aucune fonction de modification ni de suppression d'un enregistrement. Une correction est

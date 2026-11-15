@@ -1,0 +1,326 @@
+// Module Étiquettes (lot 4) : parcours jusqu'au label_printed, impression, échéances et « Jeté »,
+// correction, Gestion › Produits / Recettes, tableau des allergènes.
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { PDFDocument } from 'pdf-lib'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { LabelPrintedPayload, WastePayload } from '../../../../shared/payloads.ts'
+import { validatePayload } from '../../../../shared/validation.ts'
+import { DEMO_PRODUCTS, DEMO_RECIPES } from '../../core/mockTransport.ts'
+import { createMockManagerApi } from '../../manager/mockManager.ts'
+import { createFakeCore, type FakeCoreOptions, type FakeRecordSeed } from '../../ui/fakeCore.ts'
+import { renderWithCore } from '../../ui/testUtils.tsx'
+import { useInlineFonts } from './testFonts.ts'
+
+// Dimanche 15/11/2026 10:30 à Paris.
+const NOW = '2026-11-15T09:30:00.000Z'
+const [PAIN, CHEDDAR, STEAK, SAUCE] = DEMO_PRODUCTS
+
+beforeAll(() => useInlineFonts())
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(NOW))
+  window.print = vi.fn()
+  URL.createObjectURL = vi.fn(() => 'blob:etiquette')
+  URL.revokeObjectURL = vi.fn()
+})
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+  Reflect.deleteProperty(navigator, 'share')
+  Reflect.deleteProperty(navigator, 'canShare')
+})
+
+function setup(opts: FakeCoreOptions = {}) {
+  const core = createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null, ...opts })
+  renderWithCore(core)
+  return core
+}
+const press = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }))
+const lastLabel = async (core: ReturnType<typeof createFakeCore>) => (await core.listRecords({ type: 'label_printed' }))[0]
+
+async function openLabels() {
+  fireEvent.click(await screen.findByRole('button', { name: /^Étiquettes DLC/ }))
+  await screen.findByRole('heading', { name: 'Étiquettes DLC', level: 1 })
+}
+/** Attend l'aperçu et le PDF, imprime (impression directe), confirme « Imprimé ? ». */
+async function printAndConfirm(direct = true) {
+  await screen.findByRole('img', { name: /Aperçu de l’étiquette/ })
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Imprimer/ })).toBeEnabled(), { timeout: 4000 })
+  if (direct) press('Impression directe')
+  else press(/^Imprimer/)
+  const dialog = await screen.findByRole('dialog', { name: 'Étiquette imprimée ?' })
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Oui, enregistrer' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+}
+
+describe('parcours', () => {
+  it('ouverture : produit → DLC = maintenant + durée après ouverture, lot reçu → source_record_ids', async () => {
+    const rec: FakeRecordSeed = {
+      id: '11111111-0000-4000-8000-000000000001',
+      type: 'reception',
+      author_id: 'staff-equipier',
+      device_time: '2026-11-13T08:00:00.000Z',
+      payload: { supplier_id: '6f1c2a4e-0000-4000-8000-000000000503', vehicle_ok: true, packaging_ok: true, items: [{ product: 'Sauce burger 1 L', lot: 'SB2611', storage: 'fridge', temperature_c: 3, accepted: true }] },
+    }
+    const core = setup({ initialRecords: [rec] })
+    await openLabels()
+    press(/^Ouverture d’un produit/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Sauce burger — DLC ouverture \+ 3 jours/ }))
+    expect(await screen.findByText('Ouvert le 15/11/2026 à 10:30')).toBeInTheDocument()
+    expect(screen.getByLabelText('Date limite de consommation')).toHaveValue('2026-11-18')
+    expect(screen.getByLabelText('Heure limite de consommation')).toHaveValue('10:30')
+    press(/^Lot SB2611/)
+    press('Une étiquette de plus')
+    await printAndConfirm()
+    expect(window.print).toHaveBeenCalled()
+    const r = await lastLabel(core)
+    const p = r.payload as unknown as LabelPrintedPayload
+    expect(p).toEqual({
+      kind: 'opened',
+      product_id: SAUCE.id,
+      name: 'Sauce burger',
+      made_at: '2026-11-15T09:30:00.000Z',
+      dlc_at: '2026-11-18T09:30:00.000Z',
+      allergens: ['oeufs', 'moutarde'],
+      storage: 'fridge',
+      lot: 'SB2611',
+      source_record_ids: [rec.id],
+      copies: 2,
+    })
+    expect(validatePayload('label_printed', p).ok).toBe(true)
+    expect(await screen.findByText(/2 étiquettes enregistrées : Sauce burger/)).toBeInTheDocument()
+  })
+
+  it('préparation maison : recette → allergènes calculés, DLC modifiée avant impression, lot interne', async () => {
+    const core = setup()
+    await openLabels()
+    press(/^Préparation maison/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Sauce cheddar maison/ }))
+    await screen.findByRole('img', { name: /Aperçu de l’étiquette/ })
+    fireEvent.change(screen.getByLabelText('Date limite de consommation'), { target: { value: '2026-11-17' } })
+    fireEvent.change(screen.getByLabelText('Heure limite de consommation'), { target: { value: '18:00' } })
+    press(/^Lot interne P1511-1030/)
+    await printAndConfirm()
+    const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
+    expect(p.kind).toBe('prepared')
+    expect(p.recipe_id).toBe(DEMO_RECIPES[0].id)
+    expect(p.product_id).toBeUndefined()
+    expect(p.allergens).toEqual(['gluten', 'lait'])
+    expect(p.dlc_at).toBe('2026-11-17T17:00:00.000Z')
+    expect(p.lot).toBe('P1511-1030')
+  })
+
+  it('DLC antérieure à la fabrication : impression bloquée', async () => {
+    setup()
+    await openLabels()
+    press(/^Préparation maison/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Sauce cheddar maison/ }))
+    await screen.findByRole('img', { name: /Aperçu de l’étiquette/ })
+    fireEvent.change(screen.getByLabelText('Date limite de consommation'), { target: { value: '2026-11-14' } })
+    expect(await screen.findByText(/postérieure/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Impression directe' })).toBeDisabled()
+  })
+
+  it('décongélation : reprise d’une décongélation terminée (DLC du procédé, source = fin)', async () => {
+    const batch = '22222222-0000-4000-8000-000000000001'
+    const end = '22222222-0000-4000-8000-000000000003'
+    const core = setup({
+      initialRecords: [
+        { id: '22222222-0000-4000-8000-000000000002', type: 'thawing', author_id: 'staff-equipier', device_time: '2026-11-14T18:00:00.000Z', payload: { batch_id: batch, step: 'start', product: 'Steaks hachés', equipment_id: '6f1c2a4e-0000-4000-8000-000000000201' } },
+        { id: end, type: 'thawing', author_id: 'staff-equipier', device_time: '2026-11-15T07:00:00.000Z', payload: { batch_id: batch, step: 'end', product: 'Steaks hachés', equipment_id: '6f1c2a4e-0000-4000-8000-000000000201', dlc: '2026-11-16' } },
+      ],
+    })
+    await openLabels()
+    press(/^Décongélation/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Reprendre la décongélation Steaks hachés/ }))
+    expect(await screen.findByRole('heading', { name: 'Steak haché surgelé' })).toBeInTheDocument()
+    await printAndConfirm()
+    const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
+    expect(p).toMatchObject({ kind: 'thawed', product_id: STEAK.id, made_at: '2026-11-15T07:00:00.000Z', dlc_at: '2026-11-16T22:59:00.000Z', storage: 'fridge', source_record_ids: [end] })
+  })
+
+  it('décongélation d’un produit : DLC = maintenant + durée après décongélation ; partage iOS d’un PDF 62 mm', async () => {
+    const shared: File[] = []
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true })
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async (d: { files: File[] }) => void shared.push(...d.files) })
+    const core = setup()
+    await openLabels()
+    press(/^Décongélation/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Pain burger — DLC décongélation \+ 2 jours/ }))
+    await printAndConfirm(false)
+    expect(shared).toHaveLength(1)
+    expect(shared[0].type).toBe('application/pdf')
+    const doc = await PDFDocument.load(new Uint8Array(await shared[0].arrayBuffer()))
+    expect(doc.getPage(0).getWidth()).toBeCloseTo(175.75, 1)
+    const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
+    expect(p).toMatchObject({ kind: 'thawed', product_id: PAIN.id, dlc_at: '2026-11-17T09:30:00.000Z', allergens: ['gluten', 'sesame'] })
+  })
+
+  it('« Non, pas encore » : rien n’est enregistré', async () => {
+    const core = setup()
+    await openLabels()
+    press(/^Ouverture d’un produit/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Cheddar en tranches/ }))
+    await screen.findByRole('img', { name: /Aperçu de l’étiquette/ })
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Imprimer/ })).toBeEnabled(), { timeout: 4000 })
+    press('Impression directe')
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Non, pas encore' }))
+    expect(await core.listRecords({ type: 'label_printed' })).toHaveLength(0)
+  })
+})
+
+const label = (o: Partial<LabelPrintedPayload>): LabelPrintedPayload => ({
+  kind: 'opened',
+  product_id: CHEDDAR.id,
+  name: 'Cheddar en tranches',
+  made_at: '2026-11-12T09:00:00.000Z',
+  dlc_at: '2026-11-15T09:00:00.000Z',
+  allergens: ['lait'],
+  storage: 'fridge',
+  copies: 1,
+  ...o,
+})
+const seed = (id: string, p: LabelPrintedPayload, time = p.made_at): FakeRecordSeed => ({ id, type: 'label_printed', author_id: 'staff-equipier', device_time: time, payload: { ...p } })
+
+describe('échéances', () => {
+  const expiredId = '33333333-0000-4000-8000-000000000001'
+  const records = [
+    seed(expiredId, label({})),
+    seed('33333333-0000-4000-8000-000000000002', label({ name: 'Sauce burger', product_id: SAUCE.id, dlc_at: '2026-11-15T20:00:00.000Z', made_at: '2026-11-13T10:00:00.000Z' })),
+    seed('33333333-0000-4000-8000-000000000003', label({ name: 'Pain burger', product_id: PAIN.id, dlc_at: '2026-11-16T08:00:00.000Z', made_at: '2026-11-14T08:00:00.000Z' })),
+  ]
+
+  it('compteur de l’accueil, liste, « Jeté » → perte liée (motif date dépassée)', async () => {
+    const core = setup({ initialRecords: records })
+    const tile = await screen.findByRole('button', { name: /^Étiquettes DLC : 1 DLC dépassée, 1 produit à DLC aujourd’hui, 1 produit à DLC demain/ })
+    fireEvent.click(tile)
+    await screen.findByRole('heading', { name: 'Étiquettes DLC', level: 1 })
+    expect(screen.getByRole('alert')).toHaveTextContent('1 produit a dépassé sa DLC')
+    press('Jeté – Cheddar en tranches')
+    const dialog = await screen.findByRole('dialog', { name: 'Produit jeté' })
+    fireEvent.change(within(dialog).getByLabelText('Quantité (facultatif)'), { target: { value: '1/2 paquet' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer la perte' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const w = (await core.listRecords({ type: 'waste' }))[0].payload as unknown as WastePayload
+    expect(w).toEqual({ product: 'Cheddar en tranches', reason: 'expired', related_record_id: expiredId, quantity: '1/2 paquet' })
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Jeté – Cheddar en tranches' })).not.toBeInTheDocument())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('« Épuisé » retire de la liste sans rien écrire au registre', async () => {
+    const core = setup({ initialRecords: records })
+    await openLabels()
+    press('Épuisé (utilisé) – Pain burger')
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Jeté – Pain burger' })).not.toBeInTheDocument())
+    expect(await core.listRecords({ type: 'waste' })).toHaveLength(0)
+  })
+})
+
+describe('historique et correction', () => {
+  it('corriger la DLC : original barré, correction valide, réimpression proposée', async () => {
+    const id = '44444444-0000-4000-8000-000000000001'
+    const core = setup({ initialRecords: [seed(id, label({ made_at: '2026-11-15T08:00:00.000Z', dlc_at: '2026-11-18T08:00:00.000Z' }))] })
+    await openLabels()
+    press(/^Historique/)
+    press('Corriger (Cheddar en tranches)')
+    fireEvent.change(await screen.findByLabelText('Date limite de consommation'), { target: { value: '2026-11-17' } })
+    press('Erreur de DLC')
+    press('Enregistrer la correction')
+    expect(await screen.findByRole('heading', { name: 'Réimprimer l’étiquette corrigée' })).toBeInTheDocument()
+    const c = (await core.listRecords({ type: 'correction' }))[0]
+    expect(c.supersedes_id).toBe(id)
+    expect(validatePayload('correction', c.payload, { supersededType: 'label_printed' }).ok).toBe(true)
+    expect((c.payload.replacement as LabelPrintedPayload).dlc_at).toBe('2026-11-17T08:00:00.000Z')
+    press('Terminé')
+    expect(await screen.findByLabelText('DLC d’origine 18/11/2026 09:00, corrigée')).toBeInTheDocument()
+  })
+})
+
+describe('tableau des allergènes', () => {
+  it('recettes actives × 14 allergènes, produits en option, PDF A4', async () => {
+    setup()
+    fireEvent.click(await screen.findByRole('button', { name: /^Tableau des allergènes/ }))
+    const table = await screen.findByRole('table')
+    const row = within(table).getByRole('row', { name: /Sauce cheddar maison/ })
+    expect(within(row).getByRole('img', { name: 'Contient : Céréales contenant du gluten' })).toBeInTheDocument()
+    expect(within(row).getByRole('img', { name: 'Contient : Lait' })).toBeInTheDocument()
+    expect(within(row).getAllByRole('img')).toHaveLength(2)
+    expect(within(table).queryByRole('row', { name: /Cornichons/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText(/Afficher aussi les produits/))
+    expect(within(table).getByRole('row', { name: /Cornichons/ })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Imprimer/ })).toBeEnabled(), { timeout: 4000 })
+    window.open = vi.fn(() => ({}) as Window)
+    press(/^Imprimer/)
+    await waitFor(() => expect(window.open).toHaveBeenCalledWith('blob:etiquette', '_blank'))
+    press('Accueil')
+    expect(await screen.findByRole('heading', { name: 'Aujourd’hui' })).toBeInTheDocument()
+  })
+})
+
+describe('Gestion › Produits et Recettes', () => {
+  async function openTab(tab: string) {
+    fireEvent.click(await screen.findByRole('button', { name: /^Gestion/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: tab }))
+  }
+
+  it('ajouter un produit (allergènes cochés, durées en jours / heures), désactiver', async () => {
+    const manager = createMockManagerApi({ seeded: true, signedIn: true })
+    const core = createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null })
+    renderWithCore(core, undefined, manager)
+    await openTab('Produits')
+    press('Ajouter un produit')
+    const dialog = await screen.findByRole('dialog', { name: 'Ajouter un produit' })
+    fireEvent.change(within(dialog).getByLabelText('Nom du produit'), { target: { value: 'Mayonnaise' } })
+    fireEvent.click(within(dialog).getByLabelText('Œufs'))
+    fireEvent.click(within(dialog).getByLabelText('Moutarde'))
+    fireEvent.click(within(dialog).getByRole('button', { name: '24 h' }))
+    expect(within(dialog).getByText('Soit 24 h.')).toBeInTheDocument()
+    expect(within(dialog).getByText(/à vérifier sur vos fiches fournisseurs/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const p = manager.simulate.state().products.find((x) => x.name === 'Mayonnaise')!
+    expect(p).toMatchObject({ allergens: ['oeufs', 'moutarde'], storage: 'fridge', shelf_life_opened_hours: 24, shelf_life_thawed_hours: null, active: true })
+
+    press('Désactiver – Mayonnaise')
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Désactiver' }))
+    await waitFor(() => expect(manager.simulate.state().products.find((x) => x.id === p.id)?.active).toBe(false))
+    expect(await screen.findByRole('button', { name: 'Réactiver – Mayonnaise' })).toBeInTheDocument()
+  })
+
+  it('recette : ingrédients + allergènes supplémentaires, allergènes calculés en direct', async () => {
+    const manager = createMockManagerApi({ seeded: true, signedIn: true })
+    renderWithCore(createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null }), undefined, manager)
+    await openTab('Recettes')
+    await screen.findByRole('button', { name: 'Modifier – Sauce cheddar maison' })
+    press('Ajouter une recette')
+    const dialog = await screen.findByRole('dialog', { name: 'Ajouter une recette' })
+    fireEvent.change(within(dialog).getByLabelText('Nom de la recette'), { target: { value: 'Burger maison' } })
+    fireEvent.click(within(dialog).getByLabelText(/^Pain burger/))
+    fireEvent.click(within(dialog).getByLabelText(/^Cheddar en tranches/))
+    const computed = within(dialog).getByRole('region', { name: 'Allergènes de la recette (calculés)' })
+    expect(computed).toHaveTextContent('Céréales contenant du gluten — Pain burger')
+    expect(computed).toHaveTextContent('Lait — Cheddar en tranches')
+    // Lait apporté par le cheddar : coché et verrouillé dans les allergènes supplémentaires.
+    expect(within(dialog).getByLabelText(/^Lait/)).toBeDisabled()
+    fireEvent.click(within(dialog).getByLabelText(/^Céleri/))
+    expect(computed).toHaveTextContent('Céleri — ajouté à la recette')
+    fireEvent.click(within(dialog).getByRole('button', { name: '24 h' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(manager.simulate.state().recipes.find((r) => r.name === 'Burger maison')).toMatchObject({
+      ingredient_product_ids: [PAIN.id, CHEDDAR.id],
+      extra_allergens: ['celeri'],
+      shelf_life_hours: 24,
+    })
+    expect(await screen.findByText(/Gluten, Lait, Céleri, Sésame/)).toBeInTheDocument()
+  })
+
+  it('Réglages : hauteur des étiquettes enregistrée sur l’appareil', async () => {
+    renderWithCore(createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null }), undefined, createMockManagerApi({ seeded: true, signedIn: true }))
+    await openTab('Réglages')
+    fireEvent.click(await screen.findByRole('button', { name: '62 mm' }))
+    expect(screen.getByLabelText('Hauteur des étiquettes')).toHaveTextContent('62 × 62 mm')
+    press('Hauteur : 1 mm de plus')
+    expect(localStorage.getItem('haccp.labels.height_mm')).toBe('63')
+  })
+})

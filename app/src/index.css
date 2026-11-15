@@ -1,3 +1,33 @@
 @import "tailwindcss";
 @import "@fontsource/bowlby-one/latin-400.css";
 @import "./ui/theme.css";
+
+/* Impression directe (window.print) : seules les vues dédiées sont imprimées (étiquettes 62 mm, tableau A4). */
+#label-print-root,
+#a4-print-root {
+  display: none;
+}
+@media print {
+  body.printing-labels > *:not(#label-print-root),
+  body.printing-a4 > *:not(#a4-print-root) {
+    display: none !important;
+  }
+  body.printing-labels,
+  body.printing-a4 {
+    background: #fff !important;
+    margin: 0;
+  }
+  body.printing-labels #label-print-root,
+  body.printing-a4 #a4-print-root {
+    display: block;
+  }
+  .label-print-page {
+    overflow: hidden;
+    break-after: page;
+    page-break-after: always;
+  }
+  .label-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}

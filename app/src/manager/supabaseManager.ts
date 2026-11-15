@@ -2,9 +2,9 @@
 // Seule la clé publique « anon » est utilisée ; les droits viennent de la session du gérant (RLS is_manager()).
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { DeviceEnrollResponse, Equipment, Threshold } from '../../../shared/types.ts'
-import { PHOTO_BUCKET, type Supplier } from '../../../shared/payloads.ts'
+import { PHOTO_BUCKET, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
 import { ManagerError, MESSAGES, type ManagedStaff, type ManagerApi, type ManagerSettings } from './api.ts'
-import { normalizeSupplierInput } from './helpers.ts'
+import { normalizeProductInput, normalizeRecipeInput, normalizeSupplierInput } from './helpers.ts'
 
 export interface SupabaseManagerOptions {
   url: string
@@ -20,6 +20,8 @@ const EQUIPMENT_COLS = 'id,name,kind,active,updated_at'
 const THRESHOLD_COLS = 'id,equipment_id,check_type,min_c,max_c,tolerance_minutes,updated_at'
 const STAFF_COLS = 'id,display_name,role,active,updated_at'
 const SUPPLIER_COLS = 'id,name,phone,email,active,updated_at'
+const PRODUCT_COLS = 'id,name,allergens,storage,shelf_life_opened_hours,shelf_life_thawed_hours,active,updated_at'
+const RECIPE_COLS = 'id,name,ingredient_product_ids,extra_allergens,storage,shelf_life_hours,active,updated_at'
 
 interface PgError {
   message: string
@@ -259,6 +261,40 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
       const p: Record<string, unknown> = { ...n.value }
       if (active !== undefined) p.active = active
       return run<Supplier>(sb.from('suppliers').update(p).eq('id', id).select(SUPPLIER_COLS).single())
+    },
+
+    // Produits / recettes : RLS gérant ; la base refuse la suppression et un ingrédient inconnu.
+    async listProducts() {
+      return run<Product[]>(sb.from('products').select(PRODUCT_COLS).order('name'))
+    },
+    async addProduct(input) {
+      const n = normalizeProductInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      return run<Product>(sb.from('products').insert(n.value).select(PRODUCT_COLS).single())
+    },
+    async updateProduct(id, patch) {
+      const { active, ...fields } = patch
+      const n = normalizeProductInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const p: Record<string, unknown> = { ...n.value }
+      if (active !== undefined) p.active = active
+      return run<Product>(sb.from('products').update(p).eq('id', id).select(PRODUCT_COLS).single())
+    },
+    async listRecipes() {
+      return run<Recipe[]>(sb.from('recipes').select(RECIPE_COLS).order('name'))
+    },
+    async addRecipe(input) {
+      const n = normalizeRecipeInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      return run<Recipe>(sb.from('recipes').insert(n.value).select(RECIPE_COLS).single())
+    },
+    async updateRecipe(id, patch) {
+      const { active, ...fields } = patch
+      const n = normalizeRecipeInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const p: Record<string, unknown> = { ...n.value }
+      if (active !== undefined) p.active = active
+      return run<Recipe>(sb.from('recipes').update(p).eq('id', id).select(RECIPE_COLS).single())
     },
 
     async downloadPhoto(path) {

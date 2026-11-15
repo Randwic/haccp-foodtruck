@@ -1,5 +1,5 @@
 // Implémentation de CoreApi : registre local append-only, chaîne de hachage, synchro, session PIN.
-import Dexie from 'dexie'
+import Dexie, { type Table } from 'dexie'
 import { canonicalJson, computeRecordHash } from '../../../shared/canonical.ts'
 import {
   GENESIS_HASH,
@@ -13,7 +13,7 @@ import {
   type SyncPullResponse,
   type Threshold,
 } from '../../../shared/types.ts'
-import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Supplier } from '../../../shared/payloads.ts'
+import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
 import { referencedPhotoPaths } from '../../../shared/validation.ts'
 import type { CoreApi, DeviceInfo, PhotoStatus, SyncStatus, UnlockResult } from './api.ts'
 import { CoreDb, type DeviceRow, type PhotoRow, type RecordSyncRow, type StoredRecord } from './db.ts'
@@ -249,17 +249,34 @@ export function createCore(options: CoreOptions): Core {
   }
 
   async function applyPull(resp: SyncPullResponse): Promise<void> {
-    await db.transaction('rw', [db.staff, db.equipment, db.thresholds, db.suppliers, db.meta], async () => {
+    const refTables = [db.staff, db.equipment, db.thresholds, db.suppliers, db.products, db.recipes, db.cleaning_tasks, db.checklists, db.meta]
+    await db.transaction('rw', refTables, async () => {
       if (resp.staff.length) await db.staff.bulkPut(resp.staff)
       if (resp.equipment.length) await db.equipment.bulkPut(resp.equipment)
       if (resp.thresholds.length) await db.thresholds.bulkPut(resp.thresholds)
-      // `suppliers` (lot 3) : absent d'un serveur plus ancien.
-      if (Array.isArray(resp.suppliers) && resp.suppliers.length) await db.suppliers.bulkPut(resp.suppliers)
-      for (const d of resp.deleted) {
-        // Staff / équipements / fournisseurs : on garde la ligne (nom des anciens enregistrements) mais inactive.
-        if (d.table === 'staff') await db.staff.update(d.id, { active: false })
-        else if (d.table === 'equipment') await db.equipment.update(d.id, { active: false })
-        else if (d.table === 'suppliers') await db.suppliers.update(d.id, { active: false })
+      // `suppliers` (lot 3), `products` / `recipes` (lot 4), `cleaning_tasks` / `checklists` (lot 5) :
+      // absents d'un serveur plus ancien.
+      const put = async <T,>(table: Table<T, string>, rows: T[] | undefined) => {
+        if (Array.isArray(rows) && rows.length) await table.bulkPut(rows)
+      }
+      await put(db.suppliers, resp.suppliers)
+      await put(db.products, resp.products)
+      await put(db.recipes, resp.recipes)
+      await put(db.cleaning_tasks, resp.cleaning_tasks)
+      await put(db.checklists, resp.checklists)
+      // Tables dont une référence désactivée est gardée (nom des anciens enregistrements) mais inactive.
+      const keepInactive: Record<string, Table<{ active: boolean }, string>> = {
+        staff: db.staff,
+        equipment: db.equipment,
+        suppliers: db.suppliers,
+        products: db.products,
+        recipes: db.recipes,
+        cleaning_tasks: db.cleaning_tasks,
+        checklists: db.checklists,
+      }
+      for (const d of resp.deleted ?? []) {
+        const table = keepInactive[d.table]
+        if (table) await table.update(d.id, { active: false })
         else if (d.table === 'thresholds') await db.thresholds.delete(d.id)
       }
       await db.setMeta('establishment', resp.establishment)
@@ -652,6 +669,14 @@ export function createCore(options: CoreOptions): Core {
     async listSuppliers(opts?: { includeInactive?: boolean }): Promise<Supplier[]> {
       const all = await db.suppliers.toArray()
       return all.filter((s) => opts?.includeInactive || s.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+    async listProducts(opts?: { includeInactive?: boolean }): Promise<Product[]> {
+      const all = await db.products.toArray()
+      return all.filter((p) => opts?.includeInactive || p.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+    async listRecipes(opts?: { includeInactive?: boolean }): Promise<Recipe[]> {
+      const all = await db.recipes.toArray()
+      return all.filter((r) => opts?.includeInactive || r.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
     },
 
     async addPhoto(image: Blob) {

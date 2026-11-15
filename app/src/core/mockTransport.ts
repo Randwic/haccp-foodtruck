@@ -15,7 +15,7 @@
 // dossier de l'appareil, signature RIFF/WEBP, ≤ PHOTO_MAX_BYTES ; absent → 201 created ; présent de même
 // taille → 200 already_present ; taille différente → 409 photo_conflict (jamais d'écrasement).
 import { computeRecordHash } from '../../../shared/canonical.ts'
-import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Supplier } from '../../../shared/payloads.ts'
+import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
 import {
   GENESIS_HASH,
   type DeviceEnrollResponse,
@@ -106,6 +106,27 @@ export const DEMO_SUPPLIERS: Supplier[] = [
   { id: '6f1c2a4e-0000-4000-8000-000000000503', name: 'Metro Lyon Nord', phone: null, email: null, active: true, updated_at: T0 },
 ]
 
+/**
+ * Produits et recette de démonstration (lot 4) : mêmes identifiants, allergènes et durées de vie que les
+ * données initiales du serveur (supabase/migrations/20261114001100_lot4_produits.sql).
+ * Allergènes indicatifs, à vérifier sur les fiches fournisseurs ; durées à confirmer selon le PMS.
+ */
+export const DEMO_PRODUCTS: Product[] = [
+  { id: '00000000-0000-4000-8000-000000000401', name: 'Pain burger', allergens: ['gluten', 'sesame'], storage: 'ambient', shelf_life_opened_hours: 48, shelf_life_thawed_hours: 48, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000402', name: 'Cheddar en tranches', allergens: ['lait'], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000403', name: 'Steak haché surgelé', allergens: [], storage: 'freezer', shelf_life_opened_hours: null, shelf_life_thawed_hours: 24, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000404', name: 'Sauce burger', allergens: ['oeufs', 'moutarde'], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000405', name: 'Frites surgelées', allergens: [], storage: 'freezer', shelf_life_opened_hours: 168, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000406', name: 'Bacon en tranches', allergens: [], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000407', name: 'Salade iceberg (sachet)', allergens: [], storage: 'fridge', shelf_life_opened_hours: 24, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000408', name: 'Cornichons', allergens: ['moutarde'], storage: 'ambient', shelf_life_opened_hours: 168, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
+]
+
+/** Recette d'exemple du serveur : sauce cheddar maison (cheddar + roux à la farine de blé → gluten). */
+export const DEMO_RECIPES: Recipe[] = [
+  { id: '00000000-0000-4000-8000-000000000451', name: 'Sauce cheddar maison', ingredient_product_ids: ['00000000-0000-4000-8000-000000000402'], extra_allergens: ['gluten'], storage: 'fridge', shelf_life_hours: 72, active: true, updated_at: T0 },
+]
+
 /** Appareil pré-enrôlé, pratique pour l'interface en développement. */
 export const DEMO_DEVICE: DeviceEnrollResponse = {
   device_id: '6f1c2a4e-0000-4000-8000-000000000401',
@@ -113,7 +134,7 @@ export const DEMO_DEVICE: DeviceEnrollResponse = {
 }
 
 // ---------- Serveur simulé ----------
-type RefTable = 'staff' | 'equipment' | 'thresholds' | 'suppliers'
+type RefTable = 'staff' | 'equipment' | 'thresholds' | 'suppliers' | 'products' | 'recipes'
 
 interface ServerDevice {
   device_id: string
@@ -153,6 +174,8 @@ export interface MockTransport extends Transport {
   /** Dépose un objet dans le bucket (pour simuler un conflit). */
   putStoredPhoto(path: string, bytes: Uint8Array): void
   upsertSupplier(s: Omit<Supplier, 'updated_at'>): void
+  upsertProduct(p: Omit<Product, 'updated_at'>): void
+  upsertRecipe(r: Omit<Recipe, 'updated_at'>): void
   enrollDevice(name: string): DeviceEnrollResponse
   revokeDevice(device_id: string): void
   /** Enregistrements acceptés par le serveur (copie). */
@@ -183,11 +206,16 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
     equipment: Map<string, Equipment>
     thresholds: Map<string, Threshold>
     suppliers: Map<string, Supplier>
+    products: Map<string, Product>
+    recipes: Map<string, Recipe>
   } = {
     staff: new Map(seed ? DEMO_STAFF.map((s) => [s.id, clone(s)]) : []),
     equipment: new Map(seed ? DEMO_EQUIPMENT.map((e) => [e.id, clone(e)]) : []),
     thresholds: new Map(seed ? DEMO_THRESHOLDS.map((t) => [t.id, clone(t)]) : []),
     suppliers: new Map(seed ? DEMO_SUPPLIERS.map((s) => [s.id, clone(s)]) : []),
+    // Comme le serveur : les données initiales des produits sont posées par la migration (même sans compte).
+    products: new Map(DEMO_PRODUCTS.map((p) => [p.id, clone(p)])),
+    recipes: new Map(DEMO_RECIPES.map((r) => [r.id, clone(r)])),
   }
   const photos = new Map<string, Uint8Array>()
   let photoFailures = 0
@@ -310,9 +338,9 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       thresholds: changed(refs.thresholds),
       // Comme la fonction : fournisseurs ACTIFS modifiés depuis `since` (désactivés dans `deleted`).
       suppliers: changed(refs.suppliers).filter((s) => s.active),
-      // Lot 4 (produits, recettes) : pas encore stockés par l'app.
-      products: [],
-      recipes: [],
+      // Lot 4 : produits et recettes ACTIFS modifiés depuis `since` (désactivés dans `deleted`).
+      products: changed(refs.products).filter((p) => p.active),
+      recipes: changed(refs.recipes).filter((r) => r.active),
       cleaning_tasks: [],
       checklists: [],
       settings,
@@ -349,6 +377,8 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
     storedPhotos: () => new Map([...photos].map(([k, v]) => [k, new Uint8Array(v)])),
     putStoredPhoto: (path, bytes) => void photos.set(path, new Uint8Array(bytes)),
     upsertSupplier: (sup) => void refs.suppliers.set(sup.id, { ...clone(sup), updated_at: stamp() }),
+    upsertProduct: (p) => void refs.products.set(p.id, { ...clone(p), updated_at: stamp() }),
+    upsertRecipe: (r) => void refs.recipes.set(r.id, { ...clone(r), updated_at: stamp() }),
     setOffline: (v) => {
       offline = v
     },

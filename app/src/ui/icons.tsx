@@ -12,6 +12,14 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
+  CalendarClock,
+  Copy,
+  PackageOpen,
+  Printer,
+  ShoppingBasket,
+  Soup,
+  TableProperties,
+  Wheat,
   ChefHat,
   CircleCheck,
   CircleExclamationPoint,
@@ -155,3 +163,13 @@ export const IconRefused = make(PackageX, 'IconRefused')
 export const IconWaste = make(PackageMinus, 'IconWaste')
 export const IconBan = make(Ban, 'IconBan')
 export const IconMail = make(Mail, 'IconMail')
+
+// Étiquettes, produits, recettes, allergènes (lot 4)
+export const IconPrint = make(Printer, 'IconPrint')
+export const IconOpened = make(PackageOpen, 'IconOpened')
+export const IconRecipe = make(Soup, 'IconRecipe')
+export const IconProduct = make(ShoppingBasket, 'IconProduct')
+export const IconAllergen = make(Wheat, 'IconAllergen')
+export const IconTable = make(TableProperties, 'IconTable')
+export const IconDlc = make(CalendarClock, 'IconDlc')
+export const IconCopies = make(Copy, 'IconCopies')

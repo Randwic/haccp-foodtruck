@@ -56,7 +56,7 @@ export function PhotoViewer({ paths, index, onClose, title }: { paths: readonly 
       previous?.focus?.()
     }
   }, [onClose, paths.length])
-  const nav = 'flex h-14 w-14 items-center justify-center rounded-full bg-white/15 text-white active:bg-white/30 disabled:opacity-30'
+  const nav = 'flex h-14 w-14 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/40 active:bg-black/80 disabled:opacity-0'
   return (
     <div role="dialog" aria-modal="true" aria-label={title ?? 'Photo'} className="safe-pt safe-pb fixed inset-0 z-[60] flex flex-col bg-black">
       <div className="flex items-center justify-between gap-3 px-4 py-2 text-white">

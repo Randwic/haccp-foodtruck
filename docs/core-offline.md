@@ -38,6 +38,31 @@ const core = createCore({ transport: createHttpTransport({ baseUrl, anonKey }) }
   `enroll_unauthorized`, rien n'est conservé. Pas de réseau → l'appareil reste enrôlé, les
   références arrivent à la synchro suivante (la liste des équipiers est vide d'ici là).
 
+## Photos (lot 3)
+
+- **Compression** (`photoEncoder.ts`) : décodage `createImageBitmap` (orientation EXIF) sinon `<img>`, côté long
+  ≤ 1600 px, WebP en qualité décroissante (0,82 → 0,42) jusqu'à ~200 Ko (250 Ko tolérés), puis réduction ×0,75 si
+  `PHOTO_MAX_BYTES` est dépassé. **Safari iOS** : `canvas.toBlob('image/webp')` y renvoie du PNG ; le type du blob et la
+  signature RIFF/WEBP sont vérifiés, et au premier échec l'encodeur bascule définitivement sur `@jsquash/webp`
+  (libwebp en WebAssembly, Apache-2.0, chargé à la demande, `.wasm` précaché par le service worker). Encodeur
+  injectable : `createCore({ photoEncoder })`.
+- **Stockage** : table Dexie `photos` (version 2 de la base, ajout de tables seulement) — `path` `<device_id>/<uuid>.webp`,
+  octets (`ArrayBuffer`), `state` : `draft` (prise, référencée par aucune saisie) → `pending` (référencée : passage dans
+  la MÊME transaction que `addRecord`, y compris pour les photos du remplacement d'une correction) → `uploaded`, ou
+  `failed` (refus définitif). Mises à jour par get + put (le `update` de Dexie perd les `ArrayBuffer`).
+- **Jamais supprimée tant qu'elle n'est pas confirmée envoyée** : seules disparaissent les photos `draft` retirées du
+  formulaire (`discardPhoto`) ou abandonnées depuis 7 jours ; une photo envoyée garde sa copie locale 45 jours, puis
+  seuls ses octets sont libérés (`local: false`, lisible par le gérant via `ManagerApi.downloadPhoto`).
+- **Envoi** (dans la synchro, après push + pull) : `PUT {base}/functions/v1/photo-upload?path=…` (en-têtes `apikey`,
+  `Authorization: Bearer <anon>`, `x-device-token`, `Content-Type: image/webp`), une photo à la fois, les plus anciennes
+  d'abord, photos de l'appareil courant uniquement. 201/200 → `uploaded` ; 409 `photo_conflict`, 415, 400, 413, 403
+  `device_mismatch` → `failed` avec le code (visible, jamais renvoyée) ; réseau / délai (60 s) / 5xx → erreur de synchro
+  et backoff habituel ; 401 → synchro arrêtée comme pour `device_revoked`. Le serveur simulé applique le même contrat.
+- **`SyncStatus`** : champs facultatifs `photos_pending` (référencées, pas encore confirmées) et `photos_failed`.
+- **API** : `addPhoto(blob) → { path, size, width, height }`, `discardPhoto(path)`, `getPhoto(path) → Blob | null`,
+  `getPhotoStatuses(paths)` ; `listSuppliers({ includeInactive? })` (table Dexie `suppliers`, `deleted` de la table
+  `suppliers` → inactif, gardé pour le nom des anciennes réceptions).
+
 ## Garanties
 
 - Aucune fonction de modification ni de suppression d'un enregistrement. Une correction est

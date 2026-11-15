@@ -139,11 +139,11 @@ export function ItemEditor({ item, suggestions, remainingPhotos, today, keepPhot
                   onClick={() => setDateKind(k)}
                   className={`min-h-9 flex-1 rounded-md px-2 ${dateKind === k ? 'bg-elevated text-fg shadow-card' : 'text-fg-muted'}`}
                 >
-                  {k === 'dlc' ? 'DLC (à consommer jusqu’au)' : 'DDM (de préférence avant)'}
+                  {k === 'dlc' ? 'DLC' : 'DDM'}
                 </button>
               ))}
             </div>
-            <TextField label={dateKind === 'dlc' ? 'DLC' : 'DDM'} type="date" value={date} onChange={setDate} />
+            <TextField label={dateKind === 'dlc' ? 'DLC — à consommer jusqu’au' : 'DDM — de préférence avant'} type="date" value={date} onChange={setDate} />
           </div>
         </div>
         {expired && <Notice>DLC dépassée ({frenchDate(date)}) : ce produit doit être refusé.</Notice>}

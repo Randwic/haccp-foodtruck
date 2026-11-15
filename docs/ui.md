@@ -13,7 +13,8 @@ L'interface ne dépend que de `CoreApi` (`app/src/core/api.ts`, via `useCore()`)
 
 Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|error|stale|rejected|offline`, `?staff=empty`,
 `&releves=demo` (7 jours de relevés, une correction, une action corrective) ou `&releves=alerte` (+ relevé hors seuil sans action ce matin),
-`&procedes=demo` (lots en cours, cuissons, décongélations, historique avec correction et action) ou `&procedes=alerte` (+ refroidissement en retard, cuisson hors seuil sans action).
+`&procedes=demo` (lots en cours, cuissons, décongélations, historique avec correction et action) ou `&procedes=alerte` (+ refroidissement en retard, cuisson hors seuil sans action),
+`&receptions=demo` (réceptions sur 3 jours avec refus, photos d'étiquettes dessinées, photos en attente, correction, action corrective, une perte) ou `&receptions=alerte` (+ produit accepté hors température sans action).
 Équipiers factices : Gérant `123456`, Équipier `654321` (blocage 5 min après 5 erreurs).
 
 ## Écrans (`app/src/features/`)
@@ -26,6 +27,7 @@ Paramètres de démo (fakeCore) : `?demo=enrolled|unlocked`, `?sync=pending|erro
 | Aujourd'hui | `today/TodayScreen.tsx` | bandeaux rouges (relevé ou procédé hors seuil sans action corrective) ; rappel des lots chronométrés en cours (« 1 refroidissement en cours · 1 h 12 restante », ambre puis rouge) ; tuiles **Températures**, **Refroidissement**, **Remise en température**, **Cuisson & maintien**, **Décongélation** avec compteurs réels (icône + texte) ; autres modules « Bientôt » ; outils |
 | Procédés | `processes/` | voir « Module Procédés » ci-dessous |
 | Températures | `temperatures/TemperaturesScreen.tsx` | voir « Module Températures » ci-dessous |
+| Réception | `reception/ReceptionScreen.tsx` | voir « Module Réception » ci-dessous |
 | Test d'enregistrement | `system-test/SystemTestPanel.tsx` | `addRecord('system_test')`, 20 derniers enregistrements (heure, auteur, statut) |
 
 Enchaînement, en-tête et verrouillage auto : `app/src/ui/AppShell.tsx`, `AppHeader.tsx`, `hooks/useAutoLock.ts`
@@ -69,9 +71,43 @@ Enchaînement, en-tête et verrouillage auto : `app/src/ui/AppShell.tsx`, `AppHe
   correction de la DLC). Corrections : `CorrectionForms.tsx` (motif obligatoire, remplacement complet, original barré).
   Tous les payloads passent par `validatePayload` avant `addRecord`.
 
+## Module Réception (`app/src/features/reception/`, lot 3)
+- **Calcul pur** (`model.ts`, testé dans `reception.test.ts`) : lecture des payloads `reception`/`waste`, réceptions
+  reconstruites par `buildEntries` (corrections en chaîne, actions correctives liées à une version), seuils par
+  conservation `RECEPTION_THRESHOLDS` (frigo ≤ 4 °C, congélateur ≤ −18 °C, ambiant sans contrôle — « à confirmer selon
+  votre PMS », non configurables tant que le contrat n'a pas de seuil par conservation), `missingAction` = ligne acceptée
+  hors seuil sans action, `diffReception` (ce qu'une correction a changé), suggestions de produits par fournisseur,
+  `matchingReceptions` (lien perte → réception), `summarizeReceptions` (accueil).
+- **Données** : `useReceptionData.ts` (fournisseurs y compris désactivés, 32 jours de `reception`/`waste`/`correction`/
+  `corrective_action`, état des photos via `getPhotoStatuses`, rechargés à chaque changement de synchro).
+- **Écrans** : accueil du module (actions manquantes, photos en attente / refusées, « Nouvelle réception »,
+  « Perte / produit jeté », réceptions du jour, refus des 7 jours) ; `ReceptionForm` en 3 étapes (1 Livraison :
+  fournisseur en cartes + « Nouveau fournisseur » pour le gérant (`NewSupplierModal`, Internet + session gérant, mot de
+  passe redemandé si besoin), n° de BL, photo du BL, véhicule / emballages Oui/Non ; 2 Produits : `ItemEditor` — produit
+  (suggestions du fournisseur, conservation reprise), lot, DLC ou DDM (`type=date`, DLC dépassée signalée), conservation,
+  `TemperatureInput` (obligatoire hors ambiant), photos d'étiquette 0..5, décision Accepté/Refusé + motif obligatoire ;
+  ligne acceptée hors seuil → encadré rouge « Refuser ce produit » / « Accepter avec action corrective » ; 3 Validation :
+  récapitulatif, commentaire, enregistrement), plafond de 20 photos (compteur « photos n/20 ») ; après l'enregistrement,
+  `CorrectiveActionFlow` lié à la réception si besoin. `WasteForm` (produit, lots déjà reçus en pastilles, quantité,
+  motif parmi les 6 du contrat, commentaire obligatoire si « Autre », photo, lien facultatif vers une réception).
+  `ReceptionHistory` (30 jours, onglets Réceptions / Pertes, filtre par fournisseur, refus en rouge, miniatures plein
+  écran, statut d'envoi des photos, corrections : motif + valeurs d'origine barrées, actions correctives, « Corriger »
+  rouvre le parcours pré-rempli avec motif obligatoire → `correction` qui vise la dernière version).
+- **Points d'extension** (`extensions.ts`) : `registerReceptionExtensions({ readLabel, scanBarcode })` — lecture OCR
+  d'une photo d'étiquette (pré-remplit les champs vides, « Lu sur l'étiquette : vérifiez »), scan GTIN (bouton affiché
+  seulement si branché) ; `findByLot` (model.ts) pour la recherche de lot / rappel.
+
+## Photos (`app/src/ui/photos/`)
+`PhotoPicker` (`<input type=file accept=image/* capture=environment>`, compression par `core.addPhoto`, miniatures
+retirables — un brouillon retiré est effacé —, plafond par champ et global), `PhotoThumb` / `PhotoGallery` (pastille
+« en attente » / « refusée »), `PhotoViewer` (plein écran, précédente/suivante, Échap), `usePhotoUrl` (copie locale, sinon
+`manager.downloadPhoto` si une session gérant existe). Gestion › **Fournisseurs** (`management/SupplierSection.tsx`) :
+ajout (nom, téléphone, email facultatifs, `normalizeSupplierInput`), modification, désactivation / réactivation.
+
 ## Synchro et PWA (`app/src/ui/`)
-- `SyncIndicator.tsx` + `syncState.ts` : vert « Tout est synchronisé », orange « N saisies en attente »,
-  rouge si erreur, saisies refusées ou attente > 24 h ; détail + « Synchroniser maintenant » au toucher.
+- `SyncIndicator.tsx` + `syncState.ts` : vert « Tout est synchronisé », orange « N saisies en attente » (ou « N photos
+  en attente »), rouge si erreur, saisies ou photos refusées, attente > 24 h ; détail (dont photos en attente / refusées)
+  + « Synchroniser maintenant » au toucher. Le `.wasm` de l'encodeur WebP est précaché (hors-ligne).
 - `pwa/InstallBanner.tsx`, `pwa/InstallGuide.tsx` : bannière si non installée (`display-mode: standalone` / `navigator.standalone`), guide illustré iPhone/iPad.
 - `pwa/UpdatePrompt.tsx` : « Nouvelle version disponible – Mettre à jour » (`useRegisterSW`).
 - `pwa/OfflineBanner.tsx` : « Hors-ligne – vos saisies sont enregistrées sur l'appareil ».

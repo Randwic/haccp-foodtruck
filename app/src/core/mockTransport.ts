@@ -114,19 +114,19 @@ export const DEMO_SUPPLIERS: Supplier[] = [
  * Allergènes indicatifs, à vérifier sur les fiches fournisseurs ; durées à confirmer selon le PMS.
  */
 export const DEMO_PRODUCTS: Product[] = [
-  { id: '00000000-0000-4000-8000-000000000401', name: 'Pain burger', allergens: ['gluten', 'sesame'], storage: 'ambient', shelf_life_opened_hours: 48, shelf_life_thawed_hours: 48, active: true, updated_at: T0 },
-  { id: '00000000-0000-4000-8000-000000000402', name: 'Cheddar en tranches', allergens: ['lait'], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
-  { id: '00000000-0000-4000-8000-000000000403', name: 'Steak haché surgelé', allergens: [], storage: 'freezer', shelf_life_opened_hours: null, shelf_life_thawed_hours: 24, active: true, updated_at: T0 },
-  { id: '00000000-0000-4000-8000-000000000404', name: 'Sauce burger', allergens: ['oeufs', 'moutarde'], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
-  { id: '00000000-0000-4000-8000-000000000405', name: 'Frites surgelées', allergens: [], storage: 'freezer', shelf_life_opened_hours: 168, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
-  { id: '00000000-0000-4000-8000-000000000406', name: 'Bacon en tranches', allergens: [], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
-  { id: '00000000-0000-4000-8000-000000000407', name: 'Salade iceberg (sachet)', allergens: [], storage: 'fridge', shelf_life_opened_hours: 24, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
-  { id: '00000000-0000-4000-8000-000000000408', name: 'Cornichons', allergens: ['moutarde'], storage: 'ambient', shelf_life_opened_hours: 168, shelf_life_thawed_hours: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000401', name: 'Pain burger', allergens: ['gluten', 'sesame'], storage: 'ambient', shelf_life_opened_hours: 48, shelf_life_thawed_hours: 48, may_contain: [], cook_min_c: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000402', name: 'Cheddar en tranches', allergens: ['lait'], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, may_contain: [], cook_min_c: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000403', name: 'Steak haché surgelé', allergens: [], storage: 'freezer', shelf_life_opened_hours: null, shelf_life_thawed_hours: 24, may_contain: [], cook_min_c: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000404', name: 'Sauce burger', allergens: ['oeufs', 'moutarde'], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, may_contain: [], cook_min_c: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000405', name: 'Frites surgelées', allergens: [], storage: 'freezer', shelf_life_opened_hours: 168, shelf_life_thawed_hours: null, may_contain: [], cook_min_c: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000406', name: 'Bacon en tranches', allergens: [], storage: 'fridge', shelf_life_opened_hours: 72, shelf_life_thawed_hours: null, may_contain: [], cook_min_c: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000407', name: 'Salade iceberg (sachet)', allergens: [], storage: 'fridge', shelf_life_opened_hours: 24, shelf_life_thawed_hours: null, may_contain: [], cook_min_c: null, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000408', name: 'Cornichons', allergens: ['moutarde'], storage: 'ambient', shelf_life_opened_hours: 168, shelf_life_thawed_hours: null, may_contain: [], cook_min_c: null, active: true, updated_at: T0 },
 ]
 
 /** Recette d'exemple du serveur : sauce cheddar maison (cheddar + roux à la farine de blé → gluten). */
 export const DEMO_RECIPES: Recipe[] = [
-  { id: '00000000-0000-4000-8000-000000000451', name: 'Sauce cheddar maison', ingredient_product_ids: ['00000000-0000-4000-8000-000000000402'], extra_allergens: ['gluten'], storage: 'fridge', shelf_life_hours: 72, active: true, updated_at: T0 },
+  { id: '00000000-0000-4000-8000-000000000451', name: 'Sauce cheddar maison', kind: 'preparation', category: null, ingredient_product_ids: ['00000000-0000-4000-8000-000000000402'], ingredient_recipe_ids: [], extra_allergens: ['gluten'], may_contain: [], storage: 'fridge', shelf_life_hours: 72, active: true, updated_at: T0 },
 ]
 
 /**

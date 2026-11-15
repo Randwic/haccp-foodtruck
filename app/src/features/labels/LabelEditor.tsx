@@ -6,7 +6,7 @@ import { LIMITS } from '../../../../shared/validation.ts'
 import { Button, Modal, Notice, TextField, useToast } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { initials } from '../../ui/format.ts'
-import { IconCheck, IconCopies, IconMinus, IconPlus, IconPrint, IconWarn } from '../../ui/icons.tsx'
+import { IconCheck, IconCopies, IconInfo, IconMinus, IconPlus, IconPrint, IconWarn } from '../../ui/icons.tsx'
 import { chipClass, EntryLayout, ErrorNotice, useRecordSaver } from '../processes/common.tsx'
 import { useLabelHeightMm } from './labelSettings.ts'
 import { LabelPaper, LabelPrintSheet, printSheet, useLabelFonts, useLabelLayout } from './LabelPreview.tsx'
@@ -20,11 +20,13 @@ import {
   KIND_MADE_LABEL,
   recentLots,
   recipeAllergens,
+  recipeTraces,
   toLocalInputs,
   weekdayOf,
   type LabelContent,
   type LabelKind,
 } from './model.ts'
+import { productTraces } from './allergens.ts'
 import { buildLabelPdf } from './pdf.ts'
 import { canSharePdf, pdfFilename, sharePdf } from './printing.ts'
 import type { LabelData } from './useLabelData.ts'
@@ -36,8 +38,8 @@ export interface LabelDraft {
   recipe?: Recipe
   /** Ouverture / fabrication / fin de décongélation. */
   madeAt: Date
-  /** DLC proposée (modifiable). */
-  dlc: Date
+  /** DLC proposée (modifiable) ; null = DLC du fabricant à saisir (produit « selon l'étiquette »). */
+  dlc: Date | null
   /** Origine de la DLC proposée, affichée (« ouverture + 2 jours »). */
   dlcOrigin: string
   /** Enregistrements amont déjà connus (décongélation reprise du module Procédés). */
@@ -46,13 +48,19 @@ export interface LabelDraft {
   thawProductName?: string
 }
 
+/** Mention sous le champ de DLC quand elle est lue sur l'emballage. */
+export const MANUFACTURER_DLC_ORIGIN = 'DLC du fabricant, lue sur l’emballage'
+
 export function draftFor(kind: LabelKind, item: Product | Recipe, now: Date): LabelDraft {
   const madeAt = new Date(Math.floor(now.getTime() / 60_000) * 60_000)
   if (kind === 'prepared') {
     const r = item as Recipe
-    return { kind, recipe: r, madeAt, dlc: computeDlc(madeAt, r.shelf_life_hours), dlcOrigin: `préparation + ${formatShelfLife(r.shelf_life_hours)}`, sourceIds: [] }
+    const h = r.shelf_life_hours ?? 0
+    return { kind, recipe: r, madeAt, dlc: computeDlc(madeAt, h), dlcOrigin: `préparation + ${formatShelfLife(h)}`, sourceIds: [] }
   }
   const p = item as Product
+  // Ouverture d'un produit « selon l'étiquette du fabricant » : pas de DLC calculée, elle est saisie à la main.
+  if (kind === 'opened' && p.shelf_life_opened_hours === null) return { kind, product: p, madeAt, dlc: null, dlcOrigin: MANUFACTURER_DLC_ORIGIN, sourceIds: [] }
   const hours = kind === 'opened' ? p.shelf_life_opened_hours! : p.shelf_life_thawed_hours!
   return { kind, product: p, madeAt, dlc: computeDlc(madeAt, hours), dlcOrigin: `${kind === 'opened' ? 'ouverture' : 'décongélation'} + ${formatShelfLife(hours)}`, sourceIds: [] }
 }
@@ -83,10 +91,27 @@ export function CopiesStepper({ value, onChange }: { value: number; onChange: (n
 }
 
 /** Champs date + heure (heure locale de l'établissement). */
-export function DlcFields({ date, time, onDate, onTime, error }: { date: string; time: string; onDate: (v: string) => void; onTime: (v: string) => void; error?: string | null }) {
+export function DlcFields({
+  date,
+  time,
+  onDate,
+  onTime,
+  error,
+  legend = 'À consommer jusqu’au',
+  timeOptional = false,
+}: {
+  date: string
+  time: string
+  onDate: (v: string) => void
+  onTime: (v: string) => void
+  error?: string | null
+  legend?: string
+  /** Heure facultative (DLC du fabricant) : vide = 23:59. */
+  timeOptional?: boolean
+}) {
   return (
     <fieldset>
-      <legend className="mb-1.5 text-[15px] font-semibold text-fg">À consommer jusqu’au</legend>
+      <legend className="mb-1.5 text-[15px] font-semibold text-fg">{legend}</legend>
       <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-2">
         <input
           type="date"
@@ -98,12 +123,13 @@ export function DlcFields({ date, time, onDate, onTime, error }: { date: string;
         <input
           type="time"
           step={60}
-          aria-label="Heure limite de consommation"
+          aria-label={timeOptional ? 'Heure limite de consommation (facultative)' : 'Heure limite de consommation'}
           value={time}
           onChange={(e) => onTime(e.target.value)}
           className={`min-h-14 w-full min-w-0 rounded-xl border bg-elevated px-3 text-[17px] text-fg tabular-nums focus:border-accent ${error ? 'border-danger' : 'border-line-strong'}`}
         />
       </div>
+      {timeOptional && <p className="mt-1.5 text-[14px] text-fg-muted">Heure facultative : sans heure, la DLC court jusqu’à 23:59.</p>}
       {error && (
         <p className="mt-2 flex items-start gap-1.5 text-[15px] font-medium text-danger">
           <IconWarn size={18} className="mt-0.5 shrink-0" />
@@ -182,7 +208,8 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
   const [productId, setProductId] = useState<string | null>(draft.product?.id ?? null)
   const product = draft.kind === 'prepared' ? undefined : data.products.find((p) => p.id === productId)
   const recipe = draft.recipe
-  const initial = toLocalInputs(draft.dlc, tz)
+  const manual = draft.dlc === null
+  const initial = draft.dlc ? toLocalInputs(draft.dlc, tz) : { date: '', time: '' }
   const [date, setDate] = useState(initial.date)
   const [time, setTime] = useState(initial.time)
   const [lot, setLot] = useState('')
@@ -190,10 +217,15 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
   const [copies, setCopies] = useState(1)
   const [confirm, setConfirm] = useState(false)
 
-  const dlc = fromLocalInputs(date, time, tz)
-  const problem = dlcProblem(draft.madeAt, dlc)
+  // DLC du fabricant : date obligatoire, heure facultative (fin de journée).
+  const dlc = manual && !date ? null : fromLocalInputs(date, manual && !time ? '23:59' : time, tz)
+  const problem = manual && !date ? 'Saisissez la DLC lue sur l’emballage avant d’imprimer.' : dlcProblem(draft.madeAt, dlc)
   const name = (recipe?.name ?? product?.name ?? draft.thawProductName ?? '').slice(0, LIMITS.labelNameMax)
-  const allergens = useMemo(() => (recipe ? recipeAllergens(recipe, data.products) : (product?.allergens ?? [])), [recipe, product, data.products])
+  const allergens = useMemo(() => (recipe ? recipeAllergens(recipe, data.products, data.recipes) : (product?.allergens ?? [])), [recipe, product, data.products, data.recipes])
+  const traces = useMemo(
+    () => (recipe ? recipeTraces(recipe, data.products, data.recipes) : productTraces(product ?? { allergens: [], may_contain: [] })),
+    [recipe, product, data.products, data.recipes],
+  )
   const storage = recipe?.storage ?? (draft.kind === 'thawed' ? 'fridge' : (product?.storage ?? 'fridge'))
   const lots = useMemo(() => (product ? recentLots(data.receptions, product.name) : draft.thawProductName ? recentLots(data.receptions, draft.thawProductName) : []), [product, draft.thawProductName, data.receptions])
   const trimmedLot = lot.trim().slice(0, LIMITS.lotMax)
@@ -201,9 +233,9 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
   const content = useMemo<LabelContent | null>(
     () =>
       name && dlc && !problem
-        ? { kind: draft.kind, name, madeAt: draft.madeAt.toISOString(), dlcAt: dlc.toISOString(), storage, allergens, lot: trimmedLot || undefined, operator, timeZone: tz }
+        ? { kind: draft.kind, name, madeAt: draft.madeAt.toISOString(), dlcAt: dlc.toISOString(), storage, allergens, traces, lot: trimmedLot || undefined, operator, timeZone: tz }
         : null,
-    [name, dlc?.getTime(), problem, draft.kind, draft.madeAt, storage, allergens, trimmedLot, operator, tz],
+    [name, dlc?.getTime(), problem, draft.kind, draft.madeAt, storage, allergens, traces, trimmedLot, operator, tz],
   )
   const { layout, pdf, fontError } = useLabelPdf(content, copies, heightMm)
   const needsProduct = draft.kind !== 'prepared' && !product
@@ -253,6 +285,8 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
               <Notice>Aperçu impossible : {fontError}</Notice>
             ) : needsProduct ? (
               <Notice tone="warn">Choisissez le produit du catalogue correspondant pour imprimer l’étiquette (allergènes).</Notice>
+            ) : manual && !date ? (
+              <Notice tone="info">Saisissez la DLC indiquée sur l’emballage du fabricant : l’aperçu s’affiche ensuite.</Notice>
             ) : problem ? null : (
               <div className="mx-auto aspect-[62/50] w-full max-w-[26rem] animate-pulse rounded-[6px] bg-sunken" aria-label="Préparation de l’aperçu" />
             )}
@@ -281,22 +315,34 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
             </div>
           )}
           <div>
+            {manual && (
+              <p className="mb-3 flex items-start gap-2 rounded-xl border border-warn/35 bg-warn-soft px-4 py-3 text-[15px] leading-snug text-fg">
+                <IconInfo size={20} className="mt-px shrink-0 text-warn" />
+                <span>
+                  Durée après ouverture <span className="font-semibold">selon l’étiquette du fabricant</span> : recopiez la date limite indiquée sur l’emballage (après ouverture).
+                </span>
+              </p>
+            )}
             <DlcFields
               date={date}
               time={time}
               onDate={setDate}
               onTime={setTime}
+              legend={manual ? 'DLC lue sur l’emballage' : undefined}
+              timeOptional={manual}
               error={problem && (date || time) ? problem : null}
             />
             <p className="mt-2 text-[15px] text-fg-muted">
               {dlc && !problem ? (
                 <>
-                  <span className="font-semibold text-fg">{weekdayOf(dlc, tz).replace(/^./, (c) => c.toUpperCase())}</span> · proposée : {draft.dlcOrigin}
+                  <span className="font-semibold text-fg">{weekdayOf(dlc, tz).replace(/^./, (c) => c.toUpperCase())}</span> · {manual ? draft.dlcOrigin : `proposée : ${draft.dlcOrigin}`}
                 </>
+              ) : manual ? (
+                <>Obligatoire avant l’impression.</>
               ) : (
                 <>Proposée : {draft.dlcOrigin}</>
               )}
-              {(date !== initial.date || time !== initial.time) && (
+              {!manual && (date !== initial.date || time !== initial.time) && (
                 <>
                   {' · '}
                   <button

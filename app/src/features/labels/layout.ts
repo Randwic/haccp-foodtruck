@@ -207,6 +207,25 @@ function layoutAt(content: LabelContent, W: number, H: number, s: number, measur
   })
   y += small + (al.length - 1) * lead
 
+  // Traces possibles (peut en contenir), sous les allergènes, en normal — jamais tronquées.
+  const traces = (content.traces ?? []).filter((a) => !content.allergens.includes(a))
+  if (traces.length) {
+    y += 1.6 * s
+    const tl = wrapRuns(
+      [
+        { text: 'Traces possibles : ', weight: 'regular' },
+        { text: allergenText({ allergens: traces }), weight: 'regular' },
+      ],
+      small,
+      cw,
+      measure,
+    )
+    tl.forEach((l, i) => {
+      for (const p of merge(l)) ops.push({ kind: 'text', x: mx + p.x, y: y + small * 0.8 + i * lead, text: p.text, size: small, weight: p.weight })
+    })
+    y += small + (tl.length - 1) * lead
+  }
+
   // Pied : lot et opérateur, collés au bas de l'étiquette.
   const foot = 7 * s
   const footerTop = H - my - foot

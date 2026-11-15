@@ -51,22 +51,36 @@ export interface SupplierInput {
   email?: string | null
 }
 
-/** Produit saisi par le gérant (durées de vie en heures, null = non applicable). */
+/**
+ * Produit saisi par le gérant (durées de vie en heures). Après ouverture : null = « selon l'étiquette du
+ * fabricant » (DLC lue sur l'emballage, saisie à l'impression) ; après décongélation : null = non applicable.
+ */
 export interface ProductInput {
   name: string
   allergens: Allergen[]
   storage: StorageMode
   shelf_life_opened_hours: number | null
   shelf_life_thawed_hours: number | null
+  /** Lot 4 bis : traces (peut en contenir), disjointes de `allergens`. */
+  may_contain: Allergen[]
+  /** Lot 4 bis : température à cœur minimale à la cuisson / remise en température (°C), null = seuil générique. */
+  cook_min_c: number | null
 }
 
-/** Recette saisie par le gérant. */
+/** Recette saisie par le gérant (lot 4 bis : préparation maison ou plat du menu). */
 export interface RecipeInput {
   name: string
+  kind: 'preparation' | 'menu_item'
+  /** Rubrique du menu (0..40), null si aucune. */
+  category: string | null
   ingredient_product_ids: string[]
+  /** Préparations maison utilisées (sous-recettes), sans boucle. */
+  ingredient_recipe_ids: string[]
   extra_allergens: Allergen[]
+  may_contain: Allergen[]
   storage: StorageMode
-  shelf_life_hours: number
+  /** Préparation : 1..2160 h ; plat du menu : null. */
+  shelf_life_hours: number | null
 }
 
 /** Tâche du plan de nettoyage saisie par le gérant (produit / méthode : null pour effacer). */

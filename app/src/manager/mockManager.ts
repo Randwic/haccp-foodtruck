@@ -18,6 +18,8 @@ import {
 } from '../core/index.ts'
 import type { DeviceEnrollResponse, Equipment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import { normalizeProduct, normalizeRecipe } from '../core/catalog.ts'
+import { wouldCreateCycle } from '../features/labels/allergens.ts'
 import { ManagerError, MESSAGES, type ManagedStaff, type ManagerApi, type ManagerErrorCode, type ManagerSettings } from './api.ts'
 import { normalizeChecklistInput, normalizeCleaningTaskInput, normalizeProductInput, normalizeRecipeInput, normalizeSupplierInput, oilSettingsError } from './helpers.ts'
 
@@ -38,6 +40,22 @@ export interface MockManagerOptions {
   isOnline?: () => boolean
   /** Session gérant déjà ouverte (mode `seeded` uniquement ; démo de l'interface). */
   signedIn?: boolean
+  /** Catalogue initial (défaut : produits / recette de démonstration du serveur). */
+  catalog?: { products: Product[]; recipes: Recipe[] }
+  /**
+   * Démo `?demo=` : répercute les écritures de références sur le core factice (fakeCore.simulate), pour que
+   * les produits / recettes créés dans Gestion apparaissent aussitôt dans Étiquettes, Cuisson…
+   */
+  referenceSink?: ReferenceSink
+}
+
+/** Ce que le core factice expose pour recevoir les références (même forme que FakeCore.simulate). */
+export interface ReferenceSink {
+  upsertSupplier(s: Supplier): void
+  upsertProduct(p: Product): void
+  upsertRecipe(r: Recipe): void
+  upsertCleaningTask(t: CleaningTask): void
+  upsertChecklist(c: Checklist): void
 }
 
 interface MockState {
@@ -132,6 +150,11 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
   let failedLogins = 0
 
   let state: MockState = initialState(opts.seeded ?? false)
+  if (opts.catalog) {
+    state.products = clone(opts.catalog.products)
+    state.recipes = clone(opts.catalog.recipes)
+  }
+  const sink = opts.referenceSink
   if (opts.signedIn && state.account) state.session = state.account.email
   if (opts.storageKey) {
     try {
@@ -142,6 +165,8 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       state.recipes ??= clone(DEMO_RECIPES)
       state.cleaning_tasks ??= clone(DEMO_CLEANING_TASKS) // état enregistré avant le lot 5
       state.checklists ??= clone(DEMO_CHECKLISTS)
+      state.products = state.products.map(normalizeProduct) // état enregistré avant le lot 4 bis
+      state.recipes = state.recipes.map(normalizeRecipe)
     } catch {
       /* état illisible : on repart de zéro */
     }
@@ -187,6 +212,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     t.upsertThreshold(rest)
   }
   const pushSupplier = (s: Supplier) => {
+    sink?.upsertSupplier(clone(s))
     if (!t) return
     const { updated_at: _u, ...rest } = s
     void _u
@@ -194,6 +220,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     if (!s.active) t.deactivate('suppliers', s.id)
   }
   const pushProduct = (p: Product) => {
+    sink?.upsertProduct(clone(p))
     if (!t) return
     const { updated_at: _u, ...rest } = p
     void _u
@@ -201,6 +228,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     if (!p.active) t.deactivate('products', p.id)
   }
   const pushRecipe = (r: Recipe) => {
+    sink?.upsertRecipe(clone(r))
     if (!t) return
     const { updated_at: _u, ...rest } = r
     void _u
@@ -208,6 +236,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     if (!r.active) t.deactivate('recipes', r.id)
   }
   const pushCleaningTask = (x: CleaningTask) => {
+    sink?.upsertCleaningTask(clone(x))
     if (!t) return
     const { updated_at: _u, ...rest } = x
     void _u
@@ -215,6 +244,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     if (!x.active) t.deactivate('cleaning_tasks', x.id)
   }
   const pushChecklist = (x: Checklist) => {
+    sink?.upsertChecklist(clone(x))
     if (!t) return
     const { updated_at: _u, ...rest } = x
     void _u
@@ -231,6 +261,15 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     state.equipment.forEach(pushEquipment)
     state.thresholds.forEach(pushThreshold)
     pushSettings()
+  }
+
+  /** Mêmes règles que la base : préparations existantes, de type 'preparation', sans boucle. */
+  const checkSubRecipes = (selfId: string, ids: string[]) => {
+    for (const x of ids) {
+      const sub = state.recipes.find((r) => r.id === x)
+      if (!sub || sub.kind !== 'preparation') throw new ManagerError('validation', 'Préparation inconnue.', 400)
+      if (wouldCreateCycle(selfId, x, state.recipes)) throw new ManagerError('validation', 'Une préparation ne peut pas se contenir elle-même.', 400)
+    }
   }
 
   const online = () => !offline && (opts.isOnline ? opts.isOnline() : typeof navigator === 'undefined' || navigator.onLine !== false)
@@ -464,6 +503,8 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
         storage: n.value.storage ?? 'fridge',
         shelf_life_opened_hours: n.value.shelf_life_opened_hours ?? null,
         shelf_life_thawed_hours: n.value.shelf_life_thawed_hours ?? null,
+        may_contain: n.value.may_contain ?? [],
+        cook_min_c: n.value.cook_min_c ?? null,
         active: true,
         updated_at: nowIso(),
       }
@@ -496,13 +537,21 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       if (!n.ok) throw new ManagerError('validation', n.message, 400)
       const ids = n.value.ingredient_product_ids ?? []
       if (ids.some((x) => !state.products.some((p) => p.id === x))) throw new ManagerError('validation', 'Ingrédient inconnu.', 400)
+      const id = uuid()
+      checkSubRecipes(id, n.value.ingredient_recipe_ids ?? [])
+      const kind = n.value.kind ?? 'preparation'
+      if (kind === 'preparation' && !n.value.shelf_life_hours) throw new ManagerError('validation', 'Indiquez une durée de vie.', 400)
       const r: Recipe = {
-        id: uuid(),
+        id,
         name: n.value.name!,
+        kind,
+        category: n.value.category ?? null,
         ingredient_product_ids: ids,
+        ingredient_recipe_ids: n.value.ingredient_recipe_ids ?? [],
         extra_allergens: n.value.extra_allergens ?? [],
+        may_contain: n.value.may_contain ?? [],
         storage: n.value.storage ?? 'fridge',
-        shelf_life_hours: n.value.shelf_life_hours!,
+        shelf_life_hours: kind === 'menu_item' ? null : n.value.shelf_life_hours!,
         active: true,
         updated_at: nowIso(),
       }
@@ -519,6 +568,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       const n = normalizeRecipeInput(fields)
       if (!n.ok) throw new ManagerError('validation', n.message, 400)
       if ((n.value.ingredient_product_ids ?? []).some((x) => !state.products.some((p) => p.id === x))) throw new ManagerError('validation', 'Ingrédient inconnu.', 400)
+      if (n.value.ingredient_recipe_ids) checkSubRecipes(id, n.value.ingredient_recipe_ids)
       Object.assign(r, n.value)
       if (active !== undefined) r.active = active
       r.updated_at = nowIso()

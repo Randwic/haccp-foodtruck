@@ -60,3 +60,6 @@ export {
 } from './mockTransport.ts'
 export { hashPin, verifyPin, isValidPinFormat, PIN_MAX_FAILURES, PIN_LOCKOUT_MS } from './pin.ts'
 export { RECORD_TYPES } from './recordTypes.ts'
+// Lot 4 bis : valeurs par défaut des nouveaux champs (serveur / base plus anciens), échantillon du menu Space Diner.
+export { normalizeProduct, normalizeRecipe, normalizeProducts, normalizeRecipes } from './catalog.ts'
+export { MENU_PRODUCTS, MENU_RECIPES, SAUCE_UFO_ID } from './demoMenu.ts'

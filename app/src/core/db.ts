@@ -14,6 +14,7 @@ import type {
   Threshold,
 } from '../../../shared/types.ts'
 import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import { normalizeProduct, normalizeRecipe } from './catalog.ts'
 
 /** Appareil enrôlé (une seule ligne, clé 'self'). Le jeton ne sort jamais du core. */
 export interface DeviceRow {
@@ -146,6 +147,21 @@ export class CoreDb extends Dexie {
         checklists: '&id',
       })
       .upgrade(async (tx) => {
+        await tx.table('meta').put({ key: 'since', value: null })
+      })
+    // Lot 4 bis : nouveaux champs des produits (traces, température de cuisson) et des recettes (type, rubrique,
+    // sous-recettes, traces). Mêmes tables, mêmes index : les lignes existantes reçoivent les valeurs par défaut
+    // (une ancienne recette devient une « préparation maison »), puis `since` est remis à zéro pour que le
+    // prochain sync-pull rapporte les vraies valeurs du serveur. Aucun enregistrement du registre n'est touché.
+    this.version(4)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx.table('products').toCollection().modify((p: Product, ref: { value: Product }) => {
+          ref.value = normalizeProduct(p)
+        })
+        await tx.table('recipes').toCollection().modify((r: Recipe, ref: { value: Recipe }) => {
+          ref.value = normalizeRecipe(r)
+        })
         await tx.table('meta').put({ key: 'since', value: null })
       })
     // Garde-fou : toute tentative de réécriture ou de suppression d'un enregistrement échoue,

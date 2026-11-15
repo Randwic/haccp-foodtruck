@@ -1,20 +1,16 @@
 // Étiquettes de démonstration (?demo=unlocked&etiquettes=demo) pour la démo de l'interface et les captures.
 // Uniquement avec le core factice : jamais dans le vrai registre.
-import type { LabelPrintedPayload, Recipe } from '../../../../shared/payloads.ts'
+import type { LabelPrintedPayload, Product, Recipe } from '../../../../shared/payloads.ts'
+import { MENU_PRODUCTS, MENU_RECIPES } from '../../core/demoMenu.ts'
 import { DEMO_PRODUCTS, DEMO_RECIPES, DEMO_SUPPLIERS } from '../../core/mockTransport.ts'
 import type { FakeRecordSeed } from '../../ui/fakeCore.ts'
 import { recipeAllergens } from './model.ts'
 
-const [PAIN, CHEDDAR, STEAK, SAUCE, FRITES, BACON, SALADE, CORNICHONS] = DEMO_PRODUCTS
-const T0 = '2026-01-01T00:00:00.000Z'
+const [PAIN, CHEDDAR, STEAK, SAUCE, , , SALADE] = DEMO_PRODUCTS
 
-/** Plats de la carte (démo du tableau des allergènes) en plus de la recette du serveur. */
-export const DEMO_MENU_RECIPES: Recipe[] = [
-  ...DEMO_RECIPES,
-  { id: '8c0d0000-0000-4000-8000-000000000001', name: 'Burger classique', ingredient_product_ids: [PAIN.id, STEAK.id, CHEDDAR.id, SAUCE.id, SALADE.id, CORNICHONS.id], extra_allergens: [], storage: 'fridge', shelf_life_hours: 4, active: true, updated_at: '2026-11-10T09:12:00.000Z' },
-  { id: '8c0d0000-0000-4000-8000-000000000002', name: 'Cheese bacon', ingredient_product_ids: [PAIN.id, STEAK.id, CHEDDAR.id, BACON.id, DEMO_PRODUCTS[3].id], extra_allergens: [], storage: 'fridge', shelf_life_hours: 4, active: true, updated_at: '2026-11-10T09:12:00.000Z' },
-  { id: '8c0d0000-0000-4000-8000-000000000003', name: 'Frites maison', ingredient_product_ids: [FRITES.id], extra_allergens: [], storage: 'ambient', shelf_life_hours: 2, active: true, updated_at: T0 },
-]
+/** Catalogue de la démo : produits / recette du serveur + échantillon du vrai menu Space Diner (lot 4 bis). */
+export const DEMO_MENU_PRODUCTS: Product[] = [...DEMO_PRODUCTS, ...MENU_PRODUCTS]
+export const DEMO_MENU_RECIPES: Recipe[] = [...DEMO_RECIPES, ...MENU_RECIPES]
 
 export function demoLabels(now: Date): FakeRecordSeed[] {
   let n = 0

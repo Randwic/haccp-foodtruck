@@ -131,6 +131,12 @@ export function thresholdSummary(t: { min_c: number | null; max_c: number | null
 /** Durée de vie maximale (heures) acceptée par la base : 90 jours. */
 export const SHELF_LIFE_MAX_HOURS = 2160
 export const RECIPE_INGREDIENTS_MAX = 50
+export const RECIPE_SUBRECIPES_MAX = 20
+export const CATEGORY_MAX = 40
+/** Rubriques proposées (liste libre) pour les plats du menu, dans l'ordre du tableau des allergènes. */
+export const MENU_CATEGORIES = ['Croq’Brioche', 'Dessert', 'Frites', 'Menu enfant'] as const
+/** Température à cœur minimale acceptée pour un produit (°C, une décimale). */
+export const COOK_MIN_RANGE = { min: 40, max: 100 } as const
 
 type Normalized<T> = { ok: true; value: T } | { ok: false; field: string; message: string }
 
@@ -178,10 +184,29 @@ export function normalizeProductInput(input: Partial<ProductInput>): Normalized<
   if (e2) return { ok: false, field: 'shelf_life_thawed_hours', message: e2 }
   if (input.shelf_life_opened_hours !== undefined) out.shelf_life_opened_hours = input.shelf_life_opened_hours
   if (input.shelf_life_thawed_hours !== undefined) out.shelf_life_thawed_hours = input.shelf_life_thawed_hours
+  if (input.may_contain !== undefined) {
+    if (!knownAllergens(input.may_contain)) return { ok: false, field: 'may_contain', message: 'Allergène inconnu.' }
+    const traces = sortAllergens(input.may_contain)
+    const present = out.allergens ?? input.allergens
+    if (present && traces.some((a) => present.includes(a))) {
+      return { ok: false, field: 'may_contain', message: 'Un allergène ne peut pas être à la fois présent et en traces.' }
+    }
+    out.may_contain = traces
+  }
+  if (input.cook_min_c !== undefined) {
+    const c = input.cook_min_c
+    if (c !== null && (!Number.isFinite(c) || Math.round(c * 10) / 10 !== c || c < COOK_MIN_RANGE.min || c > COOK_MIN_RANGE.max)) {
+      return { ok: false, field: 'cook_min_c', message: `Température à cœur invalide : de ${COOK_MIN_RANGE.min} à ${COOK_MIN_RANGE.max} °C, une décimale au plus.` }
+    }
+    out.cook_min_c = c
+  }
   return { ok: true, value: out }
 }
 
-/** Mêmes règles que la table `recipes` (nom 1–80, 0..50 ingrédients distincts, durée 1..2160 h). */
+/**
+ * Mêmes règles que la table `recipes` : nom 1–80, 0..50 produits et 0..20 préparations distincts, rubrique 0..40,
+ * durée 1..2160 h pour une préparation, null pour un plat du menu (forcée à null).
+ */
 export function normalizeRecipeInput(input: Partial<RecipeInput>): Normalized<Partial<RecipeInput>> {
   const out: Partial<RecipeInput> = {}
   const n = normName(input.name, 'de la recette')
@@ -200,9 +225,33 @@ export function normalizeRecipeInput(input: Partial<RecipeInput>): Normalized<Pa
     if (!knownStorage(input.storage)) return { ok: false, field: 'storage', message: 'Mode de conservation inconnu.' }
     out.storage = input.storage
   }
-  const e = checkHours(input.shelf_life_hours, 'de la préparation', false)
-  if (e) return { ok: false, field: 'shelf_life_hours', message: e }
-  if (input.shelf_life_hours !== undefined) out.shelf_life_hours = input.shelf_life_hours
+  if (input.kind !== undefined) {
+    if (input.kind !== 'preparation' && input.kind !== 'menu_item') return { ok: false, field: 'kind', message: 'Type de recette inconnu.' }
+    out.kind = input.kind
+  }
+  if (input.category !== undefined) {
+    const c = (input.category ?? '').trim().replace(/\s+/g, ' ')
+    if (c.length > CATEGORY_MAX) return { ok: false, field: 'category', message: `Rubrique trop longue (${CATEGORY_MAX} caractères au plus).` }
+    out.category = c || null
+  }
+  if (input.ingredient_recipe_ids !== undefined) {
+    const ids = [...new Set(input.ingredient_recipe_ids)]
+    if (ids.length > RECIPE_SUBRECIPES_MAX) return { ok: false, field: 'ingredient_recipe_ids', message: `${RECIPE_SUBRECIPES_MAX} préparations au plus.` }
+    out.ingredient_recipe_ids = ids
+  }
+  if (input.may_contain !== undefined) {
+    if (!knownAllergens(input.may_contain)) return { ok: false, field: 'may_contain', message: 'Allergène inconnu.' }
+    out.may_contain = sortAllergens(input.may_contain)
+  }
+  const kind = out.kind ?? input.kind
+  if (kind === 'menu_item') {
+    // Plat du menu : servi immédiatement, pas de durée de vie.
+    if (input.shelf_life_hours !== undefined || input.kind !== undefined) out.shelf_life_hours = null
+  } else {
+    const e = checkHours(input.shelf_life_hours, 'de la préparation', false)
+    if (e) return { ok: false, field: 'shelf_life_hours', message: e }
+    if (input.shelf_life_hours !== undefined) out.shelf_life_hours = input.shelf_life_hours
+  }
   return { ok: true, value: out }
 }
 

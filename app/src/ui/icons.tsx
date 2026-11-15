@@ -3,6 +3,7 @@
 // Aucun emoji ni pictogramme Unicode dans les écrans : on passe toujours par ce fichier.
 import type { ComponentType } from 'react'
 import {
+  Circle,
   ArrowDown,
   ArrowLeft,
   ArrowUp,
@@ -116,6 +117,8 @@ export const IconOk = make(CircleCheck, 'IconOk')
 export const IconWarn = make(TriangleExclamationPoint, 'IconWarn')
 export const IconError = make(CircleExclamationPoint, 'IconError')
 export const IconInfo = make(Info, 'IconInfo')
+/** Rond vide : « peut en contenir » (traces). */
+export const IconCircle = make(Circle, 'IconCircle')
 export const IconSynced = make(CloudCheck, 'IconSynced')
 export const IconSyncPending = make(CloudUpload, 'IconSyncPending')
 export const IconSyncError = make(CloudExclamationPoint, 'IconSyncError')

@@ -13,6 +13,7 @@ import {
   type SyncPullResponse,
   type Threshold,
 } from '../../../shared/types.ts'
+import { normalizeProduct, normalizeProducts, normalizeRecipe, normalizeRecipes } from './catalog.ts'
 import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Checklist, type CleaningTask, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
 import { referencedPhotoPaths } from '../../../shared/validation.ts'
 import type { CoreApi, DeviceInfo, PhotoStatus, SyncStatus, UnlockResult } from './api.ts'
@@ -260,8 +261,9 @@ export function createCore(options: CoreOptions): Core {
         if (Array.isArray(rows) && rows.length) await table.bulkPut(rows)
       }
       await put(db.suppliers, resp.suppliers)
-      await put(db.products, resp.products)
-      await put(db.recipes, resp.recipes)
+      // Lot 4 bis : champs absents d'un serveur plus ancien → valeurs par défaut (aucune trace, préparation…).
+      if (Array.isArray(resp.products)) await put(db.products, normalizeProducts(resp.products))
+      if (Array.isArray(resp.recipes)) await put(db.recipes, normalizeRecipes(resp.recipes))
       await put(db.cleaning_tasks, resp.cleaning_tasks)
       await put(db.checklists, resp.checklists)
       // Tables dont une référence désactivée est gardée (nom des anciens enregistrements) mais inactive.
@@ -671,11 +673,11 @@ export function createCore(options: CoreOptions): Core {
       return all.filter((s) => opts?.includeInactive || s.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
     },
     async listProducts(opts?: { includeInactive?: boolean }): Promise<Product[]> {
-      const all = await db.products.toArray()
+      const all = (await db.products.toArray()).map(normalizeProduct)
       return all.filter((p) => opts?.includeInactive || p.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
     },
     async listRecipes(opts?: { includeInactive?: boolean }): Promise<Recipe[]> {
-      const all = await db.recipes.toArray()
+      const all = (await db.recipes.toArray()).map(normalizeRecipe)
       return all.filter((r) => opts?.includeInactive || r.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
     },
     async listCleaningTasks(opts?: { includeInactive?: boolean }): Promise<CleaningTask[]> {

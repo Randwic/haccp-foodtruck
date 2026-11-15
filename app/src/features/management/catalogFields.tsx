@@ -1,46 +1,65 @@
 // Champs communs aux fiches Produits et Recettes : 14 allergènes à cocher, conservation, durée de vie conviviale.
 import { useId } from 'react'
 import { ALLERGEN_LABELS, ALLERGENS, type Allergen, type StorageMode } from '../../../../shared/payloads.ts'
-import { IconCheck, IconFridge, IconInfo, IconSnowflake, IconBox } from '../../ui/icons.tsx'
+import { IconCheck, IconCircle, IconFridge, IconInfo, IconSnowflake, IconBox } from '../../ui/icons.tsx'
 import { STORAGE_LABELS, formatShelfLife, shelfLifeHours, type ShelfUnit } from '../labels/model.ts'
 
-/** Les 14 allergènes (annexe II INCO) en grandes cases à cocher. `locked` : déjà apportés (recette), cochés et grisés. */
+/**
+ * Les 14 allergènes (annexe II INCO) en grandes cases à cocher. `locked` : déjà apportés (recette), cochés et grisés.
+ * `excluded` : déjà cochés dans l'autre liste (présent ↔ traces), non cochables. `tone="traces"` : cases ○ jaunes.
+ */
 export function AllergenChecklist({
   value,
   onChange,
   legend,
+  hint,
   locked = [],
+  lockedNote = 'apporté par un ingrédient',
+  excluded = [],
+  excludedNote = 'déjà coché en « présent »',
+  tone = 'present',
 }: {
   value: readonly Allergen[]
   onChange: (v: Allergen[]) => void
   legend: string
+  hint?: string
   locked?: readonly Allergen[]
+  lockedNote?: string
+  excluded?: readonly Allergen[]
+  excludedNote?: string
+  tone?: 'present' | 'traces'
 }) {
+  const traces = tone === 'traces'
   const toggle = (a: Allergen) => onChange(value.includes(a) ? value.filter((x) => x !== a) : ALLERGENS.filter((x) => x === a || value.includes(x)))
   return (
     <fieldset>
       <legend className="mb-1.5 text-[15px] font-semibold text-fg">{legend}</legend>
+      {hint && <p className="mb-2 text-[15px] text-fg-muted">{hint}</p>}
       <div className="grid grid-cols-2 gap-2">
         {ALLERGENS.map((a) => {
           const isLocked = locked.includes(a)
-          const checked = isLocked || value.includes(a)
+          const isExcluded = !isLocked && excluded.includes(a)
+          const checked = isLocked || (!isExcluded && value.includes(a))
+          const on = traces ? 'border-warn bg-warn-soft font-semibold text-fg' : 'border-accent bg-accent-soft font-semibold text-fg'
+          const box = traces ? 'border-warn bg-warn text-canvas' : 'border-accent bg-accent text-on-accent'
           return (
             <label
               key={a}
-              className={`flex min-h-14 cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-[15px] transition-colors sm:gap-3 sm:px-3.5 sm:text-[16px] ${
-                checked ? 'border-accent bg-accent-soft font-semibold text-fg' : 'border-line-strong bg-elevated text-fg'
-              } ${isLocked ? 'cursor-default opacity-80' : 'active:bg-pressed'}`}
+              className={`flex min-h-14 items-center gap-2.5 rounded-xl border px-3 py-2 text-[15px] transition-colors sm:gap-3 sm:px-3.5 sm:text-[16px] ${
+                checked ? on : isExcluded ? 'border-line bg-sunken text-fg-muted' : 'border-line-strong bg-elevated text-fg'
+              } ${isLocked || isExcluded ? 'cursor-default' : 'cursor-pointer active:bg-pressed'} ${isLocked ? 'opacity-80' : ''}`}
             >
-              <input type="checkbox" className="sr-only" checked={checked} disabled={isLocked} onChange={() => toggle(a)} />
+              <input type="checkbox" className="sr-only" checked={checked} disabled={isLocked || isExcluded} onChange={() => toggle(a)} />
               <span
                 aria-hidden="true"
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 ${checked ? 'border-accent bg-accent text-on-accent' : 'border-line-strong bg-surface'}`}
+                className={`flex h-7 w-7 shrink-0 items-center justify-center border-2 ${traces ? 'rounded-full' : 'rounded-lg'} ${checked ? box : 'border-line-strong bg-surface'}`}
               >
-                {checked && <IconCheck size={18} strokeWidth={3} />}
+                {checked && (traces ? <IconCircle size={14} strokeWidth={3} /> : <IconCheck size={18} strokeWidth={3} />)}
               </span>
               <span className="min-w-0 leading-snug">
                 {ALLERGEN_LABELS[a]}
-                {isLocked && <span className="block text-[13px] font-normal text-fg-muted">apporté par un ingrédient</span>}
+                {isLocked && <span className="block text-[13px] font-normal text-fg-muted">{lockedNote}</span>}
+                {isExcluded && <span className="block text-[13px] font-normal text-fg-muted">{excludedNote}</span>}
               </span>
             </label>
           )
@@ -79,7 +98,7 @@ export function StoragePicker({ value, onChange, label = 'Conservation' }: { val
 }
 
 export interface ShelfLifeValue {
-  /** Non applicable (null en base) — seulement pour les produits. */
+  /** null en base : « non applicable », ou « selon l'étiquette du fabricant » (après ouverture). */
   none: boolean
   value: string
   unit: ShelfUnit
@@ -106,6 +125,8 @@ export function ShelfLifeField({
   value,
   onChange,
   nullable,
+  noneLabel = 'Non applicable',
+  noneSummary = 'Pas de DLC proposée pour ce cas.',
   error,
 }: {
   label: string
@@ -113,6 +134,9 @@ export function ShelfLifeField({
   value: ShelfLifeValue
   onChange: (v: ShelfLifeValue) => void
   nullable?: boolean
+  /** Libellé de l'option « null » (ex. « Selon l'étiquette du fabricant »). */
+  noneLabel?: string
+  noneSummary?: string
   error?: string
 }) {
   const id = useId()
@@ -126,7 +150,7 @@ export function ShelfLifeField({
       {nullable && (
         <label className="mb-2.5 flex min-h-11 cursor-pointer items-center gap-3 text-[16px] text-fg">
           <input type="checkbox" className="h-6 w-6 accent-[var(--accent)]" checked={value.none} onChange={(e) => onChange({ ...value, none: e.target.checked, value: e.target.checked ? '' : value.value })} />
-          Non applicable
+          {noneLabel}
         </label>
       )}
       {!value.none && (
@@ -168,7 +192,7 @@ export function ShelfLifeField({
         </>
       )}
       <p id={`${id}-sum`} className={`mt-2 text-[15px] ${error ? 'font-medium text-danger' : 'text-fg-muted'}`}>
-        {error ?? (value.none ? 'Pas de DLC proposée pour ce cas.' : hours !== null && !Number.isNaN(hours) ? `Soit ${formatShelfLife(hours)}.` : '')}
+        {error ?? (value.none ? noneSummary : hours !== null && !Number.isNaN(hours) ? `Soit ${formatShelfLife(hours)}.` : '')}
       </p>
     </fieldset>
   )

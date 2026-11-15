@@ -19,7 +19,7 @@ describe('produits et recettes (sync-pull)', () => {
     expect(products.find((p) => p.name === 'Pain burger')?.allergens).toEqual(['gluten', 'sesame'])
     expect((await core.listRecipes()).map((r) => r.name)).toEqual(['Sauce cheddar maison'])
 
-    server.upsertProduct({ id: '00000000-0000-4000-8000-000000000499', name: 'Oignons rouges', allergens: [], storage: 'fridge', shelf_life_opened_hours: 48, shelf_life_thawed_hours: null, active: true })
+    server.upsertProduct({ id: '00000000-0000-4000-8000-000000000499', name: 'Oignons rouges', allergens: [], storage: 'fridge', shelf_life_opened_hours: 48, shelf_life_thawed_hours: null, may_contain: [], cook_min_c: null, active: true })
     server.deactivate('products', DEMO_PRODUCTS[7].id)
     server.deactivate('recipes', DEMO_RECIPES[0].id)
     await core.syncNow()
@@ -94,7 +94,7 @@ describe('produits et recettes (sync-pull)', () => {
 
     const db = new CoreDb(dbName)
     await db.open()
-    expect(db.verno).toBe(3)
+    expect(db.verno).toBe(4)
     expect(await db.getMeta('since', 'absent')).toBeNull()
     expect(await db.products.count()).toBe(0)
     db.close()

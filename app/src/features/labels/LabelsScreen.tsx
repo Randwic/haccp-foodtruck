@@ -1,7 +1,8 @@
 // Module Étiquettes DLC (lot 4) : 3 parcours en 2 touches (ouverture, préparation maison, décongélation),
 // aperçu fidèle + impression 62 mm, échéances (« Jeté » → perte), historique 7 jours et corrections.
 import { useMemo, useState, type ReactNode } from 'react'
-import type { LabelPrintedPayload, Product, Recipe, WastePayload } from '../../../../shared/payloads.ts'
+import type { Allergen, LabelPrintedPayload, Product, Recipe, WastePayload } from '../../../../shared/payloads.ts'
+import { productTraces } from './allergens.ts'
 import { LIMITS } from '../../../../shared/validation.ts'
 import { Badge, Button, Modal, Notice, TextField, useToast } from '../../ui/components/index.ts'
 import { formatTime, initials } from '../../ui/format.ts'
@@ -41,6 +42,7 @@ import {
   KIND_TITLES,
   productForName,
   recipeAllergens,
+  recipeTraces,
   STORAGE_LABELS,
   toLocalInputs,
   type DueItem,
@@ -366,11 +368,12 @@ function WasteModal({ item, tz, onClose, onSaved }: { item: DueItem; tz: string;
 
 // ---------- Étape 1 : choix du produit / de la recette ----------
 
-function AllergenLine({ allergens }: { allergens: readonly string[] }) {
-  return allergens.length ? (
-    <span className="font-semibold text-fg">{allergens.map((a) => ALLERGEN_SHORT[a as keyof typeof ALLERGEN_SHORT]).join(', ')}</span>
-  ) : (
-    <span>Aucun allergène déclaré</span>
+function AllergenLine({ allergens, traces = [] }: { allergens: readonly Allergen[]; traces?: readonly Allergen[] }) {
+  return (
+    <>
+      {allergens.length ? <span className="font-semibold text-fg">{allergens.map((a) => ALLERGEN_SHORT[a]).join(', ')}</span> : <span>Aucun allergène déclaré</span>}
+      {traces.length > 0 && <span> · traces possibles : {traces.map((a) => ALLERGEN_SHORT[a]).join(', ')}</span>}
+    </>
   )
 }
 
@@ -403,9 +406,12 @@ function Picker({ kind, data, now, onPick }: { kind: LabelKind; data: LabelData;
   const products = data.products.filter((p) => p.active)
   const Icon = KIND_ICON[kind]
   const hoursOf = (p: Product) => (kind === 'opened' ? p.shelf_life_opened_hours : p.shelf_life_thawed_hours)
-  const usable = products.filter((p) => hoursOf(p) !== null)
-  const others = products.filter((p) => hoursOf(p) === null)
-  const recipes = data.recipes.filter((r) => r.active)
+  // Ouverture : un produit sans durée = « selon l'étiquette du fabricant » (DLC saisie à la main), donc proposé.
+  const usable = products.filter((p) => kind === 'opened' || hoursOf(p) !== null)
+  const others = products.filter((p) => kind !== 'opened' && hoursOf(p) === null)
+  // Préparation maison : seulement les recettes de type 'preparation' (pas les plats du menu).
+  const recipes = data.recipes.filter((r) => r.active && r.kind === 'preparation' && r.shelf_life_hours !== null)
+  const dlcText = (p: Product) => (hoursOf(p) === null ? 'selon l’étiquette du fabricant' : `${kind === 'opened' ? 'ouverture' : 'décongélation'} + ${formatShelfLife(hoursOf(p))}`)
   const thaws = kind === 'thawed' ? finishedThaws(data.thaws, now) : []
 
   const productCard = (p: Product) => (
@@ -413,8 +419,8 @@ function Picker({ kind, data, now, onPick }: { kind: LabelKind; data: LabelData;
       <ChoiceCard
         title={p.name}
         icon={<Icon size={20} />}
-        ariaLabel={`${p.name} — DLC ${kind === 'opened' ? 'ouverture' : 'décongélation'} + ${formatShelfLife(hoursOf(p)).replace(/ /g, ' ')}`}
-        lines={[`DLC : ${kind === 'opened' ? 'ouverture' : 'décongélation'} + ${formatShelfLife(hoursOf(p))} · ${STORAGE_LABELS[kind === 'thawed' ? 'fridge' : p.storage]}`, <AllergenLine key="a" allergens={p.allergens} />]}
+        ariaLabel={`${p.name} — DLC ${dlcText(p).replace(/\u00a0/g, ' ')}`}
+        lines={[`DLC : ${dlcText(p)} · ${STORAGE_LABELS[kind === 'thawed' ? 'fridge' : p.storage]}`, <AllergenLine key="a" allergens={p.allergens} traces={productTraces(p)} />]}
         onClick={() => onPick(draftFor(kind, p, new Date()))}
       />
     </li>
@@ -425,7 +431,7 @@ function Picker({ kind, data, now, onPick }: { kind: LabelKind; data: LabelData;
         title={r.name}
         icon={<IconRecipe size={20} />}
         ariaLabel={`${r.name} — DLC préparation + ${formatShelfLife(r.shelf_life_hours).replace(/ /g, ' ')}`}
-        lines={[`DLC : préparation + ${formatShelfLife(r.shelf_life_hours)} · ${STORAGE_LABELS[r.storage]}`, <AllergenLine key="a" allergens={recipeAllergens(r, data.products)} />]}
+        lines={[`DLC : préparation + ${formatShelfLife(r.shelf_life_hours)} · ${STORAGE_LABELS[r.storage]}`, <AllergenLine key="a" allergens={recipeAllergens(r, data.products, data.recipes)} traces={recipeTraces(r, data.products, data.recipes)} />]}
         onClick={() => onPick(draftFor('prepared', r, new Date()))}
       />
     </li>
@@ -654,7 +660,7 @@ function LabelCorrection({ entry, data, onCancel, onSaved }: { entry: LabelEntry
 function Reprint({ entry, data, onDone }: { entry: LabelEntry; data: LabelData; onDone: () => void }) {
   const heightMm = useLabelHeightMm()
   const author = data.staff.find((s) => s.id === entry.latest.author_id)
-  const content = useMemo(() => contentFromPayload(entry.payload, author ? initials(author.display_name) : '?', data.timeZone), [entry.payload, author, data.timeZone])
+  const content = useMemo(() => contentFromPayload(entry.payload, author ? initials(author.display_name) : '?', data.timeZone, data), [entry.payload, author, data])
   const { layout, pdf } = useLabelPdf(content, entry.payload.copies, heightMm)
   return (
     <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] md:gap-10">

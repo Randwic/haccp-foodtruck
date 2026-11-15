@@ -7,6 +7,7 @@ import type { LabelPrintedPayload, WastePayload } from '../../../../shared/paylo
 import { validatePayload } from '../../../../shared/validation.ts'
 import { DEMO_PRODUCTS, DEMO_RECIPES } from '../../core/mockTransport.ts'
 import { createMockManagerApi } from '../../manager/mockManager.ts'
+import { MENU_PRODUCTS, MENU_RECIPES, SAUCE_UFO_ID } from '../../core/demoMenu.ts'
 import { createFakeCore, type FakeCoreOptions, type FakeRecordSeed } from '../../ui/fakeCore.ts'
 import { renderWithCore } from '../../ui/testUtils.tsx'
 import { useInlineFonts } from './testFonts.ts'
@@ -271,15 +272,15 @@ describe('Gestion › Produits et Recettes', () => {
     press('Ajouter un produit')
     const dialog = await screen.findByRole('dialog', { name: 'Ajouter un produit' })
     fireEvent.change(within(dialog).getByLabelText('Nom du produit'), { target: { value: 'Mayonnaise' } })
-    fireEvent.click(within(dialog).getByLabelText('Œufs'))
-    fireEvent.click(within(dialog).getByLabelText('Moutarde'))
+    fireEvent.click(within(dialog).getAllByLabelText(/^Œufs/)[0])
+    fireEvent.click(within(dialog).getAllByLabelText(/^Moutarde/)[0])
     fireEvent.click(within(dialog).getByRole('button', { name: '24 h' }))
     expect(within(dialog).getByText('Soit 24 h.')).toBeInTheDocument()
     expect(within(dialog).getByText(/à vérifier sur vos fiches fournisseurs/)).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     const p = manager.simulate.state().products.find((x) => x.name === 'Mayonnaise')!
-    expect(p).toMatchObject({ allergens: ['oeufs', 'moutarde'], storage: 'fridge', shelf_life_opened_hours: 24, shelf_life_thawed_hours: null, active: true })
+    expect(p).toMatchObject({ allergens: ['oeufs', 'moutarde'], may_contain: [], cook_min_c: null, storage: 'fridge', shelf_life_opened_hours: 24, shelf_life_thawed_hours: null, active: true })
 
     press('Désactiver – Mayonnaise')
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Désactiver' }))
@@ -287,32 +288,105 @@ describe('Gestion › Produits et Recettes', () => {
     expect(await screen.findByRole('button', { name: 'Réactiver – Mayonnaise' })).toBeInTheDocument()
   })
 
-  it('recette : ingrédients + allergènes supplémentaires, allergènes calculés en direct', async () => {
+  it('produit (lot 4 bis) : traces exclusives des allergènes présents, cuisson à cœur, DLC « selon l’étiquette du fabricant »', async () => {
+    const manager = createMockManagerApi({ seeded: true, signedIn: true })
+    renderWithCore(createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null }), undefined, manager)
+    await openTab('Produits')
+    press('Ajouter un produit')
+    const dialog = await screen.findByRole('dialog', { name: 'Ajouter un produit' })
+    fireEvent.change(within(dialog).getByLabelText('Nom du produit'), { target: { value: 'Nuggets de poulet' } })
+    // Gluten présent : la même case est verrouillée dans « Peut en contenir ».
+    fireEvent.click(within(dialog).getAllByLabelText(/^Céréales contenant du gluten/)[0])
+    const [, glutenTrace] = within(dialog).getAllByLabelText(/^Céréales contenant du gluten/)
+    expect(glutenTrace).toBeDisabled()
+    expect(within(dialog).getAllByText('déjà coché en « présent »').length).toBe(1)
+    // Céleri en traces : la case « présent » est verrouillée.
+    fireEvent.click(within(dialog).getAllByLabelText(/^Céleri/)[1])
+    expect(within(dialog).getAllByLabelText(/^Céleri/)[0]).toBeDisabled()
+    fireEvent.click(within(dialog).getAllByLabelText(/^Œufs/)[1])
+    fireEvent.click(within(dialog).getByLabelText('Selon l’étiquette du fabricant'))
+    expect(within(dialog).getByText(/recopie la DLC indiquée sur l’emballage/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: '74 °C' }))
+    expect(within(dialog).getByLabelText(/^Température à cœur minimale/)).toHaveValue('74')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(manager.simulate.state().products.find((x) => x.name === 'Nuggets de poulet')).toMatchObject({
+      allergens: ['gluten'],
+      may_contain: ['oeufs', 'celeri'],
+      cook_min_c: 74,
+      shelf_life_opened_hours: null,
+    })
+    const card = (await screen.findByRole('heading', { name: 'Nuggets de poulet' })).closest('li')!
+    expect(card).toHaveTextContent('Après ouverture : selon l’étiquette du fabricant')
+    expect(card).toHaveTextContent('traces possibles : Œufs, Céleri')
+    expect(card).toHaveTextContent('Cuisson à cœur : ≥ 74 °C')
+  })
+
+  it('préparation : ingrédients + allergènes supplémentaires, allergènes calculés en direct', async () => {
     const manager = createMockManagerApi({ seeded: true, signedIn: true })
     renderWithCore(createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null }), undefined, manager)
     await openTab('Recettes')
+    fireEvent.click(await screen.findByRole('tab', { name: /^Préparations/ }))
     await screen.findByRole('button', { name: 'Modifier – Sauce cheddar maison' })
-    press('Ajouter une recette')
-    const dialog = await screen.findByRole('dialog', { name: 'Ajouter une recette' })
-    fireEvent.change(within(dialog).getByLabelText('Nom de la recette'), { target: { value: 'Burger maison' } })
+    press('Ajouter une préparation')
+    const dialog = await screen.findByRole('dialog', { name: 'Ajouter une préparation' })
+    fireEvent.change(within(dialog).getByLabelText('Nom de la préparation'), { target: { value: 'Burger maison' } })
     fireEvent.click(within(dialog).getByLabelText(/^Pain burger/))
     fireEvent.click(within(dialog).getByLabelText(/^Cheddar en tranches/))
-    const computed = within(dialog).getByRole('region', { name: 'Allergènes de la recette (calculés)' })
+    const computed = within(dialog).getByRole('region', { name: 'Allergènes calculés' })
     expect(computed).toHaveTextContent('Céréales contenant du gluten — Pain burger')
     expect(computed).toHaveTextContent('Lait — Cheddar en tranches')
-    // Lait apporté par le cheddar : coché et verrouillé dans les allergènes supplémentaires.
-    expect(within(dialog).getByLabelText(/^Lait/)).toBeDisabled()
-    fireEvent.click(within(dialog).getByLabelText(/^Céleri/))
+    // Lait apporté par le cheddar : coché et verrouillé dans les allergènes ajoutés.
+    expect(within(dialog).getAllByLabelText(/^Lait/)[0]).toBeDisabled()
+    fireEvent.click(within(dialog).getAllByLabelText(/^Céleri/)[0])
     expect(computed).toHaveTextContent('Céleri — ajouté à la recette')
     fireEvent.click(within(dialog).getByRole('button', { name: '24 h' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(manager.simulate.state().recipes.find((r) => r.name === 'Burger maison')).toMatchObject({
+      kind: 'preparation',
+      category: null,
       ingredient_product_ids: [PAIN.id, CHEDDAR.id],
+      ingredient_recipe_ids: [],
       extra_allergens: ['celeri'],
       shelf_life_hours: 24,
     })
     expect(await screen.findByText(/Gluten, Lait, Céleri, Sésame/)).toBeInTheDocument()
+  })
+
+  it('plat du menu : rubrique, sous-recette (Sauce UFO), traces propres, ● présents et ○ traces avec leur origine', async () => {
+    const manager = createMockManagerApi({ seeded: true, signedIn: true, catalog: { products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS], recipes: [...DEMO_RECIPES, ...MENU_RECIPES] } })
+    renderWithCore(createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null }), undefined, manager)
+    await openTab('Recettes')
+    // Onglet « Menu » par défaut, plats groupés par rubrique.
+    expect(await screen.findByRole('button', { name: 'Modifier – Supernova' })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(expect.arrayContaining(['Croq’Brioche(2)', 'Dessert(2)', 'Frites(2)', 'Menu enfant(1)']))
+    expect(screen.queryByRole('button', { name: 'Modifier – Sauce UFO' })).not.toBeInTheDocument()
+    press('Ajouter un plat')
+    const dialog = await screen.findByRole('dialog', { name: 'Ajouter un plat du menu' })
+    fireEvent.change(within(dialog).getByLabelText('Nom du plat'), { target: { value: 'Orion' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Croq’Brioche' }))
+    fireEvent.click(within(dialog).getByLabelText(/^Sauce UFO/))
+    fireEvent.click(within(dialog).getByLabelText(/^Pain brioché/))
+    const computed = within(dialog).getByRole('region', { name: 'Allergènes calculés' })
+    expect(computed).toHaveTextContent('Poissons — Sauce UFO')
+    expect(computed).toHaveTextContent('Œufs — Pain brioché, Sauce UFO')
+    expect(computed).toHaveTextContent('Céleri — Sauce UFO')
+    // Soja en trace propre (friteuse, plan de travail commun…).
+    fireEvent.click(within(dialog).getAllByLabelText(/^Soja/)[1])
+    expect(computed).toHaveTextContent('Soja — indiqué sur la recette')
+    // Pas de durée de vie pour un plat du menu.
+    expect(within(dialog).queryByText('Durée de vie de la préparation')).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(manager.simulate.state().recipes.find((r) => r.name === 'Orion')).toMatchObject({
+      kind: 'menu_item',
+      category: 'Croq’Brioche',
+      ingredient_recipe_ids: [SAUCE_UFO_ID],
+      may_contain: ['soja'],
+      shelf_life_hours: null,
+    })
+    expect(await screen.findByRole('button', { name: 'Modifier – Orion' })).toBeInTheDocument()
   })
 
   it('Réglages : hauteur des étiquettes enregistrée sur l’appareil', async () => {

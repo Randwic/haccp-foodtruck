@@ -4,11 +4,11 @@ import './index.css'
 import App from './App.tsx'
 import type { CoreApi } from './core/api.ts'
 import { setActivityNotifier } from './ui/activity.ts'
-import { createFakeCore } from './ui/fakeCore.ts'
+import { createFakeCore, type FakeCore } from './ui/fakeCore.ts'
 import { demoTemperatureRecords } from './features/temperatures/demoData.ts'
 import { demoProcessAlerts, demoProcessRecords } from './features/processes/demoData.ts'
 import { demoReceptions } from './features/reception/demoData.ts'
-import { DEMO_MENU_RECIPES, demoLabels } from './features/labels/demoData.ts'
+import { DEMO_MENU_PRODUCTS, DEMO_MENU_RECIPES, demoLabels } from './features/labels/demoData.ts'
 import { demoCleaningRecords, demoOilRecords, demoWasteRecords } from './features/cleaning/demoData.ts'
 import { createCore, createHttpTransport, createMockTransport, notifyActivity } from './core/index.ts'
 import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, type ManagerApi } from './manager/index.ts'
@@ -34,7 +34,7 @@ import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, 
 //      - ?mock=seeded : compte existant gerant@demo.fr / demo-demo-demo, équipe de démo
 //        (PIN Gérant 123456, Équipier 654321) → écran « Connexion gérant ».
 // ─────────────────────────────────────────────────────────────────────────────
-function createDemoCore(): CoreApi {
+function createDemoCore(): FakeCore {
   const params = new URLSearchParams(location.search)
   const demo = params.get('demo')
   const sync = params.get('sync')
@@ -71,7 +71,9 @@ function createDemoCore(): CoreApi {
     noStaffUntilSync: params.get('staff') === 'empty',
     initialRecords: seeds.length ? seeds : undefined,
     initialPhotos: rc?.initialPhotos,
-    recipes: etiquettes ? DEMO_MENU_RECIPES : undefined,
+    // Lot 4 bis : catalogue réel (menu Space Diner) dans toute la démo, partagé avec l'espace gérant simulé.
+    products: DEMO_MENU_PRODUCTS,
+    recipes: DEMO_MENU_RECIPES,
   })
 }
 const TRIAL_DB_PREFIX = 'haccp-essai-'
@@ -97,7 +99,18 @@ function createApp(): { core: CoreApi; manager: ManagerApi } {
   const params = new URLSearchParams(location.search)
   if (params.has('demo') || params.has('sync') || params.has('staff')) {
     setActivityNotifier(null)
-    return { core: createDemoCore(), manager: createMockManagerApi({ seeded: true, signedIn: true, enrollAs: 'demo', latencyMs: 300 }) }
+    // Gestion et core factice partagent le même catalogue : un produit / une recette créés dans Gestion
+    // apparaissent aussitôt dans Étiquettes, Cuisson, Nettoyage… (fakeCore.simulate = « sync-pull » simulé).
+    const core = createDemoCore()
+    const manager = createMockManagerApi({
+      seeded: true,
+      signedIn: true,
+      enrollAs: 'demo',
+      latencyMs: 300,
+      catalog: { products: DEMO_MENU_PRODUCTS, recipes: DEMO_MENU_RECIPES },
+      referenceSink: core.simulate,
+    })
+    return { core, manager }
   }
   const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -107,7 +120,7 @@ function createApp(): { core: CoreApi; manager: ManagerApi } {
   if (params.has('essai')) {
     void cleanOldTrialDatabases()
     const server = createMockTransport({ seed: false, latencyMs: 150 })
-    const manager = createMockManagerApi({ transport: server, seeded: false, enrollAs: 'demo', latencyMs: 400 })
+    const manager = createMockManagerApi({ transport: server, seeded: false, enrollAs: 'demo', latencyMs: 400, catalog: { products: DEMO_MENU_PRODUCTS, recipes: DEMO_MENU_RECIPES } })
     const named = withEstablishmentName(server, () => manager.simulate.state().establishment_name)
     return { core: createCore({ transport: named, dbName: TRIAL_DB_PREFIX + Date.now() }), manager }
   }
@@ -124,6 +137,7 @@ function createApp(): { core: CoreApi; manager: ManagerApi } {
     seeded,
     enrollAs: 'demo',
     latencyMs: 400,
+    catalog: { products: DEMO_MENU_PRODUCTS, recipes: DEMO_MENU_RECIPES },
     storageKey: seeded ? 'haccp.mock-manager.seeded' : 'haccp.mock-manager',
   })
   const named = withEstablishmentName(server, () => manager.simulate.state().establishment_name)

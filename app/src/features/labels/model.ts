@@ -6,6 +6,7 @@
 import { ALLERGEN_LABELS, ALLERGENS, type Allergen, type LabelPrintedPayload, type Product, type Recipe, type StorageMode } from '../../../../shared/payloads.ts'
 import type { HaccpRecord } from '../../../../shared/types.ts'
 import { LIMITS, STORAGE_KINDS } from '../../../../shared/validation.ts'
+import { recipeProfile, type AllergenOrigin, type RecipeLike } from './allergens.ts'
 import { buildEntries, type Entry, type ThawBatch } from '../processes/entries.ts'
 import type { ReceptionEntry, WasteEntry } from '../reception/model.ts'
 import { addDays, localDateOf, zonedParts, zonedTimeToDate, type LocalDate } from '../temperatures/schedule.ts'
@@ -55,22 +56,19 @@ export function orderAllergens(list: Iterable<string>): Allergen[] {
   return ALLERGENS.filter((a) => set.has(a))
 }
 
-/** Allergènes d'une recette = union de ceux de ses ingrédients + allergènes supplémentaires. */
-export function recipeAllergens(recipe: Pick<Recipe, 'ingredient_product_ids' | 'extra_allergens'>, products: readonly Product[]): Allergen[] {
-  const byId = new Map(products.map((p) => [p.id, p]))
-  return orderAllergens([...recipe.ingredient_product_ids.flatMap((id) => byId.get(id)?.allergens ?? []), ...recipe.extra_allergens])
+/** Allergènes présents d'une recette = union récursive (produits + préparations + ajoutés) — voir allergens.ts. */
+export function recipeAllergens(recipe: RecipeLike, products: readonly Product[], recipes: readonly Recipe[] = []): Allergen[] {
+  return recipeProfile(recipe, products, recipes).present
 }
 
-/** Pour chaque allergène de la recette : d'où il vient (noms des ingrédients, « ajouté » pour un extra). */
-export function allergenSources(recipe: Pick<Recipe, 'ingredient_product_ids' | 'extra_allergens'>, products: readonly Product[]): { allergen: Allergen; from: string[] }[] {
-  const byId = new Map(products.map((p) => [p.id, p]))
-  return recipeAllergens(recipe, products).map((allergen) => ({
-    allergen,
-    from: [
-      ...recipe.ingredient_product_ids.map((id) => byId.get(id)).filter((p): p is Product => !!p && p.allergens.includes(allergen)).map((p) => p.name),
-      ...(recipe.extra_allergens.includes(allergen) ? ['ajouté à la recette'] : []),
-    ],
-  }))
+/** Traces (« peut en contenir ») d'une recette, sans les allergènes présents. */
+export function recipeTraces(recipe: RecipeLike, products: readonly Product[], recipes: readonly Recipe[] = []): Allergen[] {
+  return recipeProfile(recipe, products, recipes).traces
+}
+
+/** Pour chaque allergène présent : d'où il vient (noms des ingrédients, « ajouté à la recette »). */
+export function allergenSources(recipe: RecipeLike, products: readonly Product[], recipes: readonly Recipe[] = []): AllergenOrigin[] {
+  return recipeProfile(recipe, products, recipes).presentFrom
 }
 
 // ---------- Durées de vie ----------
@@ -337,11 +335,24 @@ export interface LabelContent {
   dlcAt: string
   storage: StorageMode
   allergens: Allergen[]
+  /** « Traces possibles » (peut en contenir), imprimées sous les allergènes. Hors payload : reprises du catalogue. */
+  traces?: Allergen[]
   lot?: string
   operator: string
   timeZone: string
 }
 
-export function contentFromPayload(p: LabelPrintedPayload, operator: string, timeZone: string): LabelContent {
-  return { kind: p.kind, name: p.name, madeAt: p.made_at, dlcAt: p.dlc_at, storage: p.storage, allergens: p.allergens, lot: p.lot, operator, timeZone }
+/**
+ * Contenu d'une étiquette déjà enregistrée (réimpression). Les traces ne font pas partie du payload
+ * `label_printed` : elles sont relues dans le catalogue actuel (produit ou recette), sans les allergènes imprimés.
+ */
+export function contentFromPayload(p: LabelPrintedPayload, operator: string, timeZone: string, catalog?: { products: readonly Product[]; recipes: readonly Recipe[] }): LabelContent {
+  let traces: Allergen[] = []
+  if (catalog) {
+    const recipe = p.recipe_id ? catalog.recipes.find((r) => r.id === p.recipe_id) : undefined
+    const product = p.product_id ? catalog.products.find((x) => x.id === p.product_id) : undefined
+    traces = recipe ? recipeTraces(recipe, catalog.products, catalog.recipes) : product ? product.may_contain ?? [] : []
+  }
+  traces = traces.filter((a) => !p.allergens.includes(a))
+  return { kind: p.kind, name: p.name, madeAt: p.made_at, dlcAt: p.dlc_at, storage: p.storage, allergens: p.allergens, traces, lot: p.lot, operator, timeZone }
 }

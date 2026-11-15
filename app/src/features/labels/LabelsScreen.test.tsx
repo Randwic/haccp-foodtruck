@@ -111,6 +111,57 @@ describe('parcours', () => {
     expect(p.lot).toBe('P1511-1030')
   })
 
+  it('ouverture « selon l’étiquette du fabricant » : DLC saisie à la main (heure facultative), obligatoire, traces imprimées', async () => {
+    const core = setup({ products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS], recipes: [...DEMO_RECIPES, ...MENU_RECIPES] })
+    await openLabels()
+    press(/^Ouverture d’un produit/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Mayonnaise \(seau\) — DLC selon l’étiquette du fabricant/ }))
+    expect(await screen.findByText(/Saisissez la DLC indiquée sur l’emballage/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Date limite de consommation')).toHaveValue('')
+    expect(screen.getByText('Obligatoire avant l’impression.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Impression directe' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Rétablir' })).not.toBeInTheDocument()
+    // Date seule : DLC jusqu'à 23:59 ce jour-là (heure de Paris).
+    fireEvent.change(screen.getByLabelText('Date limite de consommation'), { target: { value: '2026-12-20' } })
+    const preview = await screen.findByRole('img', { name: /Aperçu de l’étiquette Mayonnaise/ })
+    expect(preview).toHaveTextContent('Allergènes : Œufs, Moutarde')
+    expect(preview).toHaveTextContent('Traces possibles : Céleri, Sulfites')
+    expect(preview).toHaveTextContent('20/12/2026 23:59')
+    await printAndConfirm()
+    const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
+    expect(p).toMatchObject({ kind: 'opened', product_id: MENU_PRODUCTS[4].id, made_at: '2026-11-15T09:30:00.000Z', dlc_at: '2026-12-20T22:59:00.000Z', allergens: ['oeufs', 'moutarde'] })
+    expect(validatePayload('label_printed', p).ok).toBe(true)
+  })
+
+  it('DLC du fabricant avec heure ; antérieure à l’ouverture : refusée', async () => {
+    const core = setup({ products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS] })
+    await openLabels()
+    press(/^Ouverture d’un produit/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Ketchup — DLC selon l’étiquette/ }))
+    fireEvent.change(await screen.findByLabelText('Date limite de consommation'), { target: { value: '2026-11-10' } })
+    expect(await screen.findByText(/postérieure/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Impression directe' })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Date limite de consommation'), { target: { value: '2027-01-05' } })
+    fireEvent.change(screen.getByLabelText('Heure limite de consommation (facultative)'), { target: { value: '12:00' } })
+    await printAndConfirm()
+    expect(((await lastLabel(core)).payload as unknown as LabelPrintedPayload).dlc_at).toBe('2027-01-05T11:00:00.000Z')
+  })
+
+  it('préparation maison : seules les recettes « préparation » sont proposées (pas les plats du menu) ; sous-recettes et traces', async () => {
+    const core = setup({ products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS], recipes: [...DEMO_RECIPES, ...MENU_RECIPES] })
+    await openLabels()
+    press(/^Préparation maison/)
+    const ufo = await screen.findByRole('button', { name: /^Sauce UFO/ })
+    expect(ufo).toHaveTextContent('traces possibles : Céleri, Sulfites')
+    expect(screen.queryByRole('button', { name: /^Supernova/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Menu enfant/ })).not.toBeInTheDocument()
+    fireEvent.click(ufo)
+    const preview = await screen.findByRole('img', { name: /Aperçu de l’étiquette Sauce UFO/ })
+    expect(preview).toHaveTextContent('Traces possibles : Céleri, Sulfites')
+    await printAndConfirm()
+    expect(((await lastLabel(core)).payload as unknown as LabelPrintedPayload).allergens).toEqual(['oeufs', 'poissons', 'moutarde'])
+  })
+
   it('DLC antérieure à la fabrication : impression bloquée', async () => {
     setup()
     await openLabels()

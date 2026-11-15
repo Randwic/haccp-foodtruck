@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import type { CookingCheckPayload, CoolingPayload, HotHoldingPayload, LabelPrintedPayload, ReceptionPayload, ThawingPayload, WastePayload } from './payloads.ts'
+import type {
+  ChecklistDonePayload,
+  CleaningDonePayload,
+  CookingCheckPayload,
+  CoolingPayload,
+  HotHoldingPayload,
+  LabelPrintedPayload,
+  OilChangePayload,
+  OilCheckPayload,
+  ReceptionPayload,
+  ThawingPayload,
+  WastePayload,
+} from './payloads.ts'
 import { GENESIS_HASH } from './types.ts'
 import {
   CORRECTIVE_ACTIONS,
@@ -12,6 +24,9 @@ import {
   referencedEquipmentId,
   referencedProductId,
   referencedRecipeId,
+  referencedCleaningTaskId,
+  referencedChecklistId,
+  requiredEquipmentKind,
   validatePayload,
   validateRecordSemantics,
   validateRecordShape,
@@ -259,7 +274,7 @@ describe('validatePayload — correction', () => {
     expectFail(res, 'invalid_payload', /replacement \(temperature_check\) : replacement\.value_c/)
   })
   it('refuse de corriger vers un type non pris en charge ou « correction »', () => {
-    expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'oil_check' }), 'unknown_type')
+    expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'alert_ack' }), 'unknown_type')
     expectFail(validatePayload('correction', { reason: 'r', replacement: {} }, { supersededType: 'correction' }))
   })
   it('refuse un champ en trop', () => {
@@ -705,5 +720,122 @@ describe('validatePayload — label_printed (lot 4)', () => {
     expect(referencedRecipeId('label_printed', opened as unknown as Record<string, unknown>)).toBeNull()
     expect(referencedRecipeId('label_printed', prepared as unknown as Record<string, unknown>)).toBe(U(42))
     expect(referencedProductId('waste', { product_id: U(40) })).toBeNull()
+  })
+})
+
+describe('validatePayload — lot 5 (nettoyage, checklists, huiles)', () => {
+  const photo = (n: number) => `${U(3)}/${U(n)}.webp`
+  const cleaning: CleaningDonePayload = { task_id: U(50), comment: 'RAS', photo_paths: [photo(1), photo(2), photo(3)] }
+  const checklist: ChecklistDonePayload = {
+    checklist_id: U(51),
+    answers: [
+      { item_id: 'lave_mains', ok: true },
+      { item_id: 'gaz', ok: false, comment: 'robinet bloqué, technicien appelé' },
+    ],
+    all_ok: false,
+  }
+  const oilCheck: OilCheckPayload = { equipment_id: U(52), polar_percent: 24.5, method: 'tester', in_range: true }
+  const oilChange: OilChangePayload = { equipment_id: U(52), comment: 'huile neuve' }
+
+  it('sont pris en charge ; payloads valides acceptés (champs facultatifs absents compris)', () => {
+    for (const t of ['cleaning_done', 'checklist_done', 'oil_check', 'oil_change']) expect(SUPPORTED_RECORD_TYPES as readonly string[]).toContain(t)
+    expect(validatePayload('cleaning_done', cleaning).ok).toBe(true)
+    expect(validatePayload('cleaning_done', { task_id: U(50) }).ok).toBe(true)
+    expect(validatePayload('cleaning_done', { task_id: U(50), comment: '', photo_paths: [] }).ok).toBe(true)
+    expect(validatePayload('checklist_done', checklist).ok).toBe(true)
+    expect(validatePayload('checklist_done', { checklist_id: U(51), answers: [{ item_id: 'a', ok: true, comment: 'vu' }], all_ok: true }).ok).toBe(true)
+    expect(validatePayload('oil_check', oilCheck).ok).toBe(true)
+    expect(validatePayload('oil_check', { ...oilCheck, polar_percent: 27, method: 'strip', in_range: false }).ok).toBe(true)
+    expect(validatePayload('oil_change', oilChange).ok).toBe(true)
+    expect(validatePayload('oil_change', { equipment_id: U(52) }).ok).toBe(true)
+  })
+
+  it('cleaning_done : task_id uuid, commentaire 0..300, photos 0..3 au format PHOTO_PATH_RE', () => {
+    const v = (p: unknown) => validatePayload('cleaning_done', p)
+    expectFail(v({}), 'invalid_payload', /task_id : obligatoire/)
+    expectFail(v({ task_id: 'tache-1' }), 'invalid_payload', /task_id/)
+    expect(v({ task_id: U(50), comment: 'é'.repeat(300) }).ok).toBe(true)
+    expectFail(v({ task_id: U(50), comment: 'é'.repeat(301) }), 'invalid_payload', /comment/)
+    expectFail(v({ task_id: U(50), photo_paths: [photo(1), photo(2), photo(3), photo(4)] }), 'invalid_payload', /3 éléments maximum/)
+    expectFail(v({ task_id: U(50), photo_paths: ['photos/a.jpg'] }), 'invalid_payload', /photo_paths\[0\]/)
+    expectFail(v({ task_id: U(50), photo_paths: photo(1) }), 'invalid_payload', /tableau/)
+    expectFail(v({ ...cleaning, done_at: '2026-11-14' }), 'invalid_payload', /champ inconnu/)
+  })
+
+  it('checklist_done : réponses 1..40, item_id au format, uniques, commentaire obligatoire si non conforme', () => {
+    const v = (p: unknown) => validatePayload('checklist_done', p)
+    expectFail(v({ ...checklist, answers: [] }), 'invalid_payload', /1 élément/)
+    const forty = Array.from({ length: 40 }, (_, i) => ({ item_id: `p${i}`, ok: true }))
+    expect(v({ ...checklist, answers: forty, all_ok: true }).ok).toBe(true)
+    expectFail(v({ ...checklist, answers: [...forty, { item_id: 'p40', ok: true }], all_ok: true }), 'invalid_payload', /40 éléments/)
+    expect(v({ ...checklist, answers: [{ item_id: 'a'.repeat(40), ok: true }], all_ok: true }).ok).toBe(true)
+    for (const id of ['', 'A', 'a b', 'a'.repeat(41), 'é', 3]) {
+      expectFail(v({ ...checklist, answers: [{ item_id: id, ok: true }], all_ok: true }), 'invalid_payload', /item_id/)
+    }
+    expectFail(v({ ...checklist, answers: [{ item_id: 'a', ok: true }, { item_id: 'a', ok: true }], all_ok: true }), 'invalid_payload', /en double/)
+    expectFail(v({ ...checklist, answers: [{ item_id: 'gaz', ok: false }], all_ok: false }), 'invalid_payload', /comment : obligatoire/)
+    expectFail(v({ ...checklist, answers: [{ item_id: 'gaz', ok: false, comment: '   ' }], all_ok: false }), 'invalid_payload', /comment : obligatoire/)
+    expectFail(v({ ...checklist, answers: [{ item_id: 'gaz', ok: false, comment: 'x'.repeat(301) }], all_ok: false }), 'invalid_payload', /300 caractères/)
+    expectFail(v({ ...checklist, answers: [{ item_id: 'gaz', ok: 'non', comment: 'x' }] }), 'invalid_payload', /ok : booléen/)
+    expectFail(v({ ...checklist, answers: [{ item_id: 'gaz', ok: true, note: 'x' }], all_ok: true }), 'invalid_payload', /champ inconnu/)
+    expectFail(v({ ...checklist, answers: ['gaz'] }), 'invalid_payload', /objet attendu/)
+    expectFail(v({ ...checklist, checklist_id: 'ouverture' }), 'invalid_payload', /checklist_id/)
+  })
+
+  it('checklist_done : all_ok obligatoire et cohérent avec les réponses', () => {
+    const v = (p: unknown) => validatePayload('checklist_done', p)
+    const { all_ok: _a, ...noAllOk } = checklist
+    expectFail(v(noAllOk), 'invalid_payload', /all_ok : obligatoire/)
+    expectFail(v({ ...checklist, all_ok: true }), 'invalid_payload', /all_ok : doit valoir false/)
+    expectFail(v({ ...checklist, answers: [{ item_id: 'a', ok: true }], all_ok: false }), 'invalid_payload', /all_ok : doit valoir true/)
+  })
+
+  it('oil_check : polar_percent 0..50 à une décimale, méthode tester|strip, in_range booléen', () => {
+    const v = (p: unknown) => validatePayload('oil_check', p)
+    for (const x of [0, 50, 25, 22.5]) expect(v({ ...oilCheck, polar_percent: x }).ok).toBe(true)
+    for (const x of [-0.1, 50.1, 24.55, '24', Number.NaN]) expectFail(v({ ...oilCheck, polar_percent: x }), 'invalid_payload', /polar_percent/)
+    expectFail(v({ ...oilCheck, method: 'bandelette' }), 'invalid_payload', /method/)
+    expectFail(v({ ...oilCheck, in_range: 'oui' }), 'invalid_payload', /in_range/)
+    for (const k of ['equipment_id', 'polar_percent', 'method', 'in_range']) {
+      const p: Record<string, unknown> = { ...oilCheck }
+      delete p[k]
+      expectFail(v(p), 'invalid_payload', new RegExp(`${k} : obligatoire`))
+    }
+    // Pas de contrôle in_range / réglages (choix : réglages changeants hors réseau).
+    expect(v({ ...oilCheck, polar_percent: 30, in_range: true }).ok).toBe(true)
+  })
+
+  it('oil_change : equipment_id uuid, commentaire 0..300', () => {
+    const v = (p: unknown) => validatePayload('oil_change', p)
+    expectFail(v({}), 'invalid_payload', /equipment_id : obligatoire/)
+    expect(v({ ...oilChange, comment: 'x'.repeat(300) }).ok).toBe(true)
+    expectFail(v({ ...oilChange, comment: 'x'.repeat(301) }), 'invalid_payload', /comment/)
+    expectFail(v({ ...oilChange, polar_percent: 12 }), 'invalid_payload', /champ inconnu/)
+  })
+
+  it('acceptés en remplacement d’une correction (et validés)', () => {
+    const c = (t: 'cleaning_done' | 'checklist_done' | 'oil_check' | 'oil_change', replacement: unknown) =>
+      validatePayload('correction', { reason: 'erreur de saisie', replacement }, { supersededType: t })
+    expect(c('cleaning_done', cleaning).ok).toBe(true)
+    expect(c('checklist_done', checklist).ok).toBe(true)
+    expect(c('oil_check', oilCheck).ok).toBe(true)
+    expect(c('oil_change', oilChange).ok).toBe(true)
+    expectFail(c('oil_check', { ...oilCheck, polar_percent: 60 }), 'invalid_payload', /replacement\.polar_percent/)
+    expectFail(c('checklist_done', { ...checklist, answers: [{ item_id: 'gaz', ok: false }] }), 'invalid_payload', /replacement\.answers\[0\]\.comment/)
+  })
+
+  it('références : tâche, checklist, équipement (bac de friteuse exigé pour les huiles), photos', () => {
+    const rec = (p: unknown) => p as Record<string, unknown>
+    expect(referencedCleaningTaskId('cleaning_done', rec(cleaning))).toBe(U(50))
+    expect(referencedCleaningTaskId('oil_change', rec(cleaning))).toBeNull()
+    expect(referencedChecklistId('checklist_done', rec(checklist))).toBe(U(51))
+    expect(referencedChecklistId('cleaning_done', rec(checklist))).toBeNull()
+    expect(referencedEquipmentId('oil_check', rec(oilCheck))).toBe(U(52))
+    expect(referencedEquipmentId('oil_change', rec(oilChange))).toBe(U(52))
+    expect(requiredEquipmentKind('oil_check')).toBe('fryer_vat')
+    expect(requiredEquipmentKind('oil_change')).toBe('fryer_vat')
+    expect(requiredEquipmentKind('temperature_check')).toBeNull()
+    expect(referencedPhotoPaths('cleaning_done', rec({ ...cleaning, photo_paths: [photo(1), photo(1)] }))).toEqual([photo(1)])
+    expect(referencedPhotoPaths('checklist_done', rec(checklist))).toEqual([])
   })
 })

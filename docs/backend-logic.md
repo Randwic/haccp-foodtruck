@@ -1,6 +1,6 @@
 # Backend — logique serveur (Edge Functions)
 
-Lots 1 à 4. Supabase offre gratuite (UE), Edge Functions Deno. Contrat : `shared/types.ts` et `shared/payloads.ts` (payloads des lots 2 à 4).
+Lots 1 à 5. Supabase offre gratuite (UE), Edge Functions Deno. Contrat : `shared/types.ts` et `shared/payloads.ts` (payloads des lots 2 à 5).
 
 ## Organisation
 
@@ -43,6 +43,8 @@ supabase/functions/
 **Payloads du lot 2** (`shared/validation.ts`, selon `shared/payloads.ts`) : champs inconnus refusés ; `product` 1–80 caractères non blanc ; `value_c` −50..300, 1 décimale ; `step` `start|check|end` (`thawing` : `start|end`) ; `cooling`/`reheating` à `end` : `in_range` et `duration_min` (entier 0–1440) obligatoires (facultatifs avant) ; `thawing` à `end` : `dlc` date réelle `AAAA-MM-JJ` ; uuid en minuscules.
 **Payloads du lot 3** : `reception` (`supplier_id`, `delivery_note` 1–40, `vehicle_ok`, `packaging_ok`, `items` 1–50, `photo_paths` 0–5, `comment` 0–500) ; ligne : `product` 1–80, `lot` 1–40, `dlc`/`ddm` dates réelles, `gtin` 8–14 chiffres (texte), `temperature_c` −50..300 à 1 décimale, `storage` `fridge|freezer|ambient`, `accepted`, `refusal_reason` 1–200 **obligatoire si `accepted` faux**, `photo_paths`. `waste` : `product`, `lot` 1–40, `quantity` 1–40, `reason` (liste fermée), `comment` 0–500 **obligatoire et non blanc si `reason = 'other'`**, `related_record_id`, `photo_paths`. Chemins de photo : `PHOTO_PATH_RE`, 5 au plus par tableau. Champs inconnus refusés partout ; une `correction` valide son `replacement` selon ces règles.
 **Payload du lot 4** : `label_printed` (aussi en `replacement` de correction) — `kind` `opened|prepared|thawed` ; `product_id` obligatoire pour `opened`/`thawed` et `recipe_id` interdit, l'inverse pour `prepared` ; `name` 1–80 ; `made_at`, `dlc_at` ISO UTC canoniques, `dlc_at` strictement après `made_at` et au plus 90 jours après ; `allergens` ⊂ 14 codes sans doublon ; `storage` ; `lot` 1–40 ; `source_record_ids` 0–20 uuid ; `copies` entier 1–20.
+**Payloads du lot 5** (aussi en `replacement` de correction) : `cleaning_done` — `task_id`, `comment` 0–300, `photo_paths` 0–3 (`PHOTO_PATH_RE`) ; `checklist_done` — `checklist_id`, `answers` 1–40 (`item_id` `[a-z0-9_-]{1,40}` unique, `ok`, `comment` 0–300 **obligatoire et non blanc si `ok` faux**), `all_ok` qui doit valoir « tous les `ok` vrais » (cohérence interne du payload) ; `oil_check` — `equipment_id`, `polar_percent` 0–50 à 1 décimale, `method` `tester|strip`, `in_range` (non rejugé contre `oil_polar_max`) ; `oil_change` — `equipment_id`, `comment` 0–300. Côté serveur : tâche / checklist existantes (même désactivées), équipement existant **et de type `fryer_vat`** pour les huiles, photos du nettoyage dans le dossier de l'appareil (même règle qu'au lot 3). Sinon quarantaine `invalid_payload`.
+**Choix : les `answers[].item_id` ne sont pas comparés aux points actuels de la checklist.** Elle a pu changer pendant une tournée hors réseau ; l'enregistrement atteste les réponses données.
 **Choix : aucun contrôle que les allergènes imprimés correspondent au produit / à la recette.** La fiche a pu changer depuis l'impression (souvent hors réseau) ; l'enregistrement atteste ce qui a été imprimé. Un écart se repère a posteriori (fiche vs étiquette).
 **Choix : aucun contrôle `in_range` / seuils côté serveur.** `in_range` est calculé par l'app avec le seuil en vigueur au moment de la saisie, souvent hors réseau ; le gérant a pu changer le seuil entre-temps, le serveur ne peut donc pas rejuger sans faux refus. Les seuils restent consultables pour un contrôle a posteriori.
 
@@ -62,6 +64,7 @@ Limites : 500 enregistrements (413 `too_many_records`), 1 Mo (413 `payload_too_l
 
 `suppliers` (lot 3) : fournisseurs **actifs** (`id, name, phone, email, active, updated_at`) ; désactivés depuis `since` dans `deleted` avec `table: 'suppliers'`.
 `products` / `recipes` (lot 4) : **actifs**, champs exacts de `Product` / `Recipe` ; désactivés depuis `since` dans `deleted` avec `table: 'products'` / `'recipes'`. Une recette active peut citer un produit désactivé (absent de `products`, déjà connu de l'app ou signalé dans `deleted`).
+`cleaning_tasks` / `checklists` (lot 5) : **actifs**, champs exacts de `CleaningTask` / `Checklist` (points réduits à `id, label, required`) ; désactivés dans `deleted` avec `table: 'cleaning_tasks'` / `'checklists'`. Réglages `oil_polar_max` / `oil_polar_warn` dans `settings`.
 
 ### photo-upload
 `PUT /functions/v1/photo-upload?path=<device_id>/<uuid>.webp`, en-tête `x-device-token`, corps = octets WebP.

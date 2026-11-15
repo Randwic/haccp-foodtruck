@@ -13,6 +13,9 @@ export const FRIDGE_ID = '00000000-0000-4000-8000-0000000000e1'
 export const SUPPLIER_ID = '00000000-0000-4000-8000-0000000000b1'
 export const PRODUCT_ID = '00000000-0000-4000-8000-0000000000c3'
 export const RECIPE_ID = '00000000-0000-4000-8000-0000000000c4'
+export const FRYER_ID = '00000000-0000-4000-8000-0000000000e3'
+export const CLEANING_TASK_ID = '00000000-0000-4000-8000-000000000501'
+export const CHECKLIST_ID = '00000000-0000-4000-8000-000000000551'
 export const TOKEN = 'tok_' + 'A'.repeat(39)
 export const OTHER_TOKEN = 'tok_' + 'B'.repeat(39)
 export const NOW = new Date('2026-11-14T10:00:00.000Z')
@@ -34,6 +37,26 @@ export async function seededRepo(): Promise<MemoryRepo> {
     { id: INACTIVE_STAFF_ID, display_name: 'Ancien', role: 'staff', active: false, pin_salt: 'c2Fs', pin_hash: 'aGFzaA==', updated_at: '2026-11-10T00:00:00.000Z' },
   )
   repo.equipment.push({ id: FRIDGE_ID, name: 'Frigo 1', kind: 'fridge', active: true, updated_at: '2026-11-01T00:00:00.000Z' })
+  repo.cleaningTasks.push({
+    id: CLEANING_TASK_ID,
+    name: 'Plans de travail',
+    frequency: 'after_service',
+    product: 'Détergent-désinfectant contact alimentaire',
+    method: null,
+    active: true,
+    updated_at: '2026-11-01T00:00:00.000Z',
+  })
+  repo.checklists.push({
+    id: CHECKLIST_ID,
+    name: 'Ouverture',
+    kind: 'opening',
+    items: [
+      { id: 'lave_mains', label: 'Lave-mains approvisionné', required: true },
+      { id: 'eau_potable', label: 'Eau potable disponible', required: true },
+    ],
+    active: true,
+    updated_at: '2026-11-01T00:00:00.000Z',
+  })
   repo.suppliers.push({ id: SUPPLIER_ID, name: 'Boucherie Martin', phone: '0102030405', email: null, active: true, updated_at: '2026-11-01T00:00:00.000Z' })
   repo.products.push({
     id: PRODUCT_ID,

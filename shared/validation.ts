@@ -2,8 +2,17 @@
 // TS pur, sans dépendance : utilisé par l'app (avant mise en file d'envoi) et par les Edge Functions
 // (contrôle définitif côté serveur). Toute règle ajoutée ici s'applique donc des deux côtés.
 import { ALLERGENS, PHOTO_PATH_RE } from './payloads.ts'
-import type { LabelPrintedPayload, MeasureSource, ProcessStep, ReceptionItem, ThawingPayload, WastePayload } from './payloads.ts'
-import type { RecordType, RejectReason } from './types.ts'
+import type {
+  Checklist,
+  LabelPrintedPayload,
+  MeasureSource,
+  OilCheckPayload,
+  ProcessStep,
+  ReceptionItem,
+  ThawingPayload,
+  WastePayload,
+} from './payloads.ts'
+import type { EquipmentKind, RecordType, RejectReason } from './types.ts'
 
 export type ValidationResult = { ok: true } | { ok: false; reason: RejectReason; detail: string }
 
@@ -32,7 +41,7 @@ type _Exhaustive = Exclude<RecordType, (typeof RECORD_TYPES)[number]> extends ne
 const _exhaustive: _Exhaustive = true
 void _exhaustive
 
-/** Types dont le schéma de payload est défini (lots 1 à 4). Les autres sont refusés en `unknown_type`. */
+/** Types dont le schéma de payload est défini (lots 1 à 5). Les autres sont refusés en `unknown_type`. */
 export const SUPPORTED_RECORD_TYPES = [
   'system_test',
   'temperature_check',
@@ -45,6 +54,10 @@ export const SUPPORTED_RECORD_TYPES = [
   'reception',
   'waste',
   'label_printed',
+  'cleaning_done',
+  'checklist_done',
+  'oil_check',
+  'oil_change',
   'correction',
 ] as const
 
@@ -67,6 +80,11 @@ export const STORAGE_KINDS = ['fridge', 'freezer', 'ambient'] as const satisfies
 export const WASTE_REASONS = ['expired', 'non_compliant', 'temperature', 'damaged', 'recall', 'other'] as const satisfies readonly WastePayload['reason'][]
 /** Lot 4 : nature d'une étiquette imprimée. */
 export const LABEL_KINDS = ['opened', 'prepared', 'thawed'] as const satisfies readonly LabelPrintedPayload['kind'][]
+/** Lot 5 : méthode de mesure des composés polaires, nature d'une checklist. */
+export const OIL_METHODS = ['tester', 'strip'] as const satisfies readonly OilCheckPayload['method'][]
+export const CHECKLIST_KINDS = ['opening', 'closing', 'pest_control', 'other'] as const satisfies readonly Checklist['kind'][]
+/** Identifiant stable d'un point de checklist (ChecklistItem.id). */
+export const CHECKLIST_ITEM_ID_RE = /^[a-z0-9_-]{1,40}$/
 
 export const LIMITS = {
   noteMax: 500,
@@ -91,6 +109,15 @@ export const LIMITS = {
   labelSourceRecordsMax: 20,
   /** dlc_at − made_at : au plus 90 jours. */
   labelMaxShelfLifeMs: 90 * 24 * 3_600_000,
+  /** Lot 5 (nettoyage, checklists, huiles) — bornes de shared/payloads.ts. */
+  cleaningCommentMax: 300,
+  cleaningPhotosMax: 3,
+  checklistAnswersMax: 40,
+  /** Commentaire d'un point de checklist (borne non précisée par le contrat : alignée sur les autres commentaires du lot). */
+  checklistCommentMax: 300,
+  oilCommentMax: 300,
+  polarMin: 0,
+  polarMax: 50,
   valueMinC: -50,
   valueMaxC: 300,
   /** Taille max du payload sérialisé (caractères JSON canonique, approximé par JSON.stringify). */
@@ -348,6 +375,31 @@ const copiesField: FieldCheck = (v, name) =>
     ? null
     : `${name} : entier de 1 à ${LIMITS.labelCopiesMax} attendu`
 
+/** Composés polaires : 0..50 %, une décimale. */
+const polarField: FieldCheck = (v, name) => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return `${name} : nombre attendu`
+  if (v < LIMITS.polarMin || v > LIMITS.polarMax) return `${name} : entre ${LIMITS.polarMin} et ${LIMITS.polarMax} %`
+  if (Math.round(v * 10) / 10 !== v) return `${name} : une décimale maximum`
+  return null
+}
+const checklistItemIdField: FieldCheck = (v, name) =>
+  typeof v === 'string' && CHECKLIST_ITEM_ID_RE.test(v) ? null : `${name} : identifiant de point attendu ([a-z0-9_-], 1 à 40 caractères)`
+/** Réponse à un point de checklist : un « non » exige un commentaire non vide. */
+const CHECKLIST_ANSWER_SCHEMA: Record<string, FieldSpec> = {
+  item_id: { check: checklistItemIdField },
+  ok: { check: boolField },
+  comment: { check: str({ max: LIMITS.checklistCommentMax }), optional: true },
+}
+const checklistAnswerField: FieldCheck = (v, name) => {
+  if (!isPlainObject(v)) return `${name} : objet attendu`
+  const e = checkObject(v, CHECKLIST_ANSWER_SCHEMA, name)
+  if (e) return e
+  if (v.ok === false && (typeof v.comment !== 'string' || v.comment.trim() === '')) {
+    return `${name}.comment : obligatoire quand le point n’est pas conforme (ok = false)`
+  }
+  return null
+}
+
 /** Une ligne de livraison (ReceptionItem). */
 const RECEPTION_ITEM_SCHEMA: Record<string, FieldSpec> = {
   product: { check: productField },
@@ -392,6 +444,10 @@ type SchemaType =
   | 'reception'
   | 'waste'
   | 'label_printed'
+  | 'cleaning_done'
+  | 'checklist_done'
+  | 'oil_check'
+  | 'oil_change'
 
 const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
   system_test: {
@@ -463,17 +519,56 @@ const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
     source_record_ids: { check: arrayOf(uuidField, { min: 0, max: LIMITS.labelSourceRecordsMax }), optional: true },
     copies: { check: copiesField },
   },
+  cleaning_done: {
+    task_id: { check: uuidField },
+    comment: { check: str({ max: LIMITS.cleaningCommentMax }), optional: true },
+    photo_paths: { check: arrayOf(photoRefField, { min: 0, max: LIMITS.cleaningPhotosMax }), optional: true },
+  },
+  checklist_done: {
+    checklist_id: { check: uuidField },
+    answers: { check: arrayOf(checklistAnswerField, { min: 1, max: LIMITS.checklistAnswersMax }) },
+    all_ok: { check: boolField },
+  },
+  oil_check: {
+    equipment_id: { check: uuidField },
+    polar_percent: { check: polarField },
+    method: { check: oneOf(OIL_METHODS) },
+    in_range: { check: boolField },
+  },
+  oil_change: {
+    equipment_id: { check: uuidField },
+    comment: { check: str({ max: LIMITS.oilCommentMax }), optional: true },
+  },
 }
 
 /**
  * Équipement référencé par un payload valide (pour le contrôle d'existence côté serveur), ou null.
- * temperature_check et thawing : obligatoire ; hot_holding : facultatif.
+ * temperature_check, thawing, oil_check, oil_change : obligatoire ; hot_holding : facultatif.
  */
 export function referencedEquipmentId(type: RecordType | string, payload: Record<string, unknown>): string | null {
-  if (type === 'temperature_check' || type === 'thawing' || type === 'hot_holding') {
+  if (type === 'temperature_check' || type === 'thawing' || type === 'hot_holding' || type === 'oil_check' || type === 'oil_change') {
     return typeof payload.equipment_id === 'string' ? payload.equipment_id : null
   }
   return null
+}
+
+/** Nature d'équipement exigée par le type (huiles : bac de friteuse), ou null si indifférente. */
+export function requiredEquipmentKind(type: RecordType | string): EquipmentKind | null {
+  return type === 'oil_check' || type === 'oil_change' ? 'fryer_vat' : null
+}
+
+/** Tâche du plan de nettoyage référencée (`cleaning_done.task_id`), ou null. */
+export function referencedCleaningTaskId(type: RecordType | string, payload: Record<string, unknown>): string | null {
+  return type === 'cleaning_done' && typeof payload.task_id === 'string' ? payload.task_id : null
+}
+
+/**
+ * Checklist référencée (`checklist_done.checklist_id`), ou null. Le serveur vérifie qu'elle existe
+ * (même désactivée), mais PAS que chaque `answers[].item_id` figure dans sa version actuelle : la
+ * checklist a pu changer pendant une tournée hors réseau ; l'enregistrement atteste les réponses données.
+ */
+export function referencedChecklistId(type: RecordType | string, payload: Record<string, unknown>): string | null {
+  return type === 'checklist_done' && typeof payload.checklist_id === 'string' ? payload.checklist_id : null
 }
 
 /**
@@ -496,14 +591,14 @@ export function referencedSupplierId(type: RecordType | string, payload: Record<
 
 /**
  * Chemins de photos (lot 3, `<device_id>/<uuid>.webp`) référencés par un payload valide :
- * `photo_paths` (reception, waste) et `items[].photo_paths` (reception). Sans doublon.
+ * `photo_paths` (reception, waste, cleaning_done) et `items[].photo_paths` (reception). Sans doublon.
  * Le `photo_path` libre de corrective_action (lot 2) n'est pas concerné.
  */
 /** Plafond total de photos d'une réception (reste sous la limite de taille d'un payload). */
 export const RECEPTION_MAX_PHOTOS = 20
 
 export function referencedPhotoPaths(type: RecordType | string, payload: Record<string, unknown>): string[] {
-  if (type !== 'reception' && type !== 'waste') return []
+  if (type !== 'reception' && type !== 'waste' && type !== 'cleaning_done') return []
   const out = new Set<string>()
   const add = (v: unknown) => {
     if (Array.isArray(v)) for (const p of v) if (typeof p === 'string') out.add(p)
@@ -557,12 +652,32 @@ export function validatePayload(type: RecordType | string, payload: unknown, ctx
     const e = checkLabel(payload)
     if (e) return fail(e)
   }
+  if (type === 'checklist_done') {
+    const e = checkChecklistDone(payload)
+    if (e) return fail(e)
+  }
   if (type === 'waste' && payload.reason === 'other' && (typeof payload.comment !== 'string' || payload.comment.trim() === '')) {
     return fail('payload.comment : obligatoire quand le motif est « other »')
   }
   // Pas de contrôle de cohérence in_range / seuils : l'app calcule in_range avec le seuil en vigueur
   // au moment de la saisie (éventuellement hors réseau) ; le serveur ne peut pas le rejuger.
   return ok
+}
+
+/**
+ * Règles croisées d'une checklist remplie : `item_id` uniques, `all_ok` = tous les points ok.
+ * L'appartenance des `item_id` à la checklist n'est pas vérifiée (voir referencedChecklistId).
+ */
+function checkChecklistDone(p: Record<string, unknown>): string | null {
+  const answers = p.answers as { item_id: string; ok: boolean }[]
+  const seen = new Set<string>()
+  for (let i = 0; i < answers.length; i++) {
+    if (seen.has(answers[i].item_id)) return `payload.answers[${i}].item_id : point en double (${answers[i].item_id})`
+    seen.add(answers[i].item_id)
+  }
+  const allOk = answers.every((a) => a.ok)
+  if (p.all_ok !== allOk) return `payload.all_ok : doit valoir ${allOk} (tous les points ok)`
+  return null
 }
 
 /** Règles croisées d'une étiquette (champs déjà validés un à un). */

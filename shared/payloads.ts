@@ -261,3 +261,61 @@ export interface OilChangePayload {
 
 /** Réglages huile (ajoutés à Settings) : limite 25 % (légale), alerte préventive 22 % (par défaut). */
 export const DEFAULT_OIL_SETTINGS = { oil_polar_max: 25, oil_polar_warn: 22 } as const
+
+// ───────────────────────────── Lot 6 : capteurs & alertes ─────────────────────────────
+
+export type SensorVendor = 'shelly_ht' | 'thermoworks_node' | 'tempstick' | 'generic'
+
+/** Capteur fixe (référence gérée dans Gestion, transmise par sync-pull). Le jeton d'envoi n'est jamais transmis. */
+export interface Sensor {
+  id: string
+  name: string // 1..80
+  equipment_id: string // enceinte surveillée
+  vendor: SensorVendor
+  active: boolean
+  last_seen_at: string | null // dernière mesure reçue
+  last_value_c: number | null
+  battery_percent: number | null // 0..100 si fourni par le capteur
+  updated_at: string
+}
+
+export type AlertKind =
+  | 'sensor_out_of_range' // enceinte hors seuil au-delà de la tolérance
+  | 'sensor_silent' // aucune mesure depuis settings.sensor_silent_minutes
+  | 'sensor_battery_low' // pile < 20 %
+  | 'check_overdue' // relevé manuel d'un créneau non fait (après 1 h)
+  | 'process_overdue' // refroidissement / remise en température non clôturé à l'échéance
+  | 'corrective_action_missing' // saisie hors seuil sans action corrective (après 30 min)
+
+/** Alerte (calculée par le serveur, transmise par sync-pull ; jamais supprimée). */
+export interface Alert {
+  id: string
+  kind: AlertKind
+  equipment_id: string | null
+  sensor_id: string | null
+  related_record_id: string | null
+  message: string // texte prêt à afficher (français)
+  opened_at: string
+  resolved_at: string | null // condition disparue (ex. température revenue dans le seuil)
+  acknowledged_at: string | null // pris en compte via un record 'alert_ack'
+  last_notified_at: string | null
+}
+
+/** Prise en compte d'une alerte — type 'alert_ack'. */
+export interface AlertAckPayload {
+  alert_id: string
+  comment?: string // 0..300
+  corrective_action_id?: string // action corrective saisie en réponse
+}
+
+/** Abonnement Web Push d'un appareil (POST /functions/v1/push-subscribe, en-tête x-device-token). */
+export interface PushSubscribeRequest {
+  endpoint: string // URL https du service push
+  keys: { p256dh: string; auth: string }
+}
+
+/** Réglages alertes (ajoutés à Settings) — défauts. */
+export const DEFAULT_ALERT_SETTINGS = {
+  sensor_silent_minutes: 60,
+  alert_repeat_minutes: 15, // rappel tant que non prise en compte
+} as const

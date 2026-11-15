@@ -15,6 +15,8 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
 | `…0900_reglages_procedes.sql` | `settings.missed_slot_carry_over`, `settings.thaw_dlc_days` |
 | `…1000_lot3_reception.sql` | Fournisseurs, bucket privé `photos` et ses politiques, `photos_to_purge()`, `record_photo_purge()` (idempotente, rejouée par les tests) |
 | `…1100_lot4_produits.sql` | Produits, recettes, produits d'exemple, index de traçabilité aval, `trace_lot()` (idempotente, rejouée par les tests) |
+| `…1200_reglages_huile.sql` | `settings.oil_polar_max` (25) / `oil_polar_warn` (22) |
+| `…1300_lot5_nettoyage.sql` | Plan de nettoyage, checklists, données d'exemple (idempotente, rejouée par les tests) |
 
 ## Tables
 
@@ -35,6 +37,9 @@ Migrations : `supabase/migrations/` (appliquées dans l'ordre), données initial
   - Index : `records_lots_idx` (GIN sur `haccp_record_lots(payload)`, types `reception|waste|label_printed|correction`), `records_label_sources_idx` (GIN `jsonb_path_ops` sur `payload->'source_record_ids'`, étiquettes : `… @> jsonb_build_array('<uuid>')`), `records_correction_sources_idx` (idem sous `replacement`), `records_waste_related_idx` (`payload->>'related_record_id'` des pertes).
   - `trace_lot(p_lot)` (SECURITY DEFINER, **gérant seulement** : `HACCP: forbidden` sinon ; EXECUTE accordé à `authenticated` uniquement ; lot vide → `HACCP: invalid_lot`). Renvoie `kind` (`reception|label_printed|waste`, type d'origine pour une correction), `matched_by` (`lot` | `source_record` | `related_record`), `record_id`, `record_type`, `supersedes_id`, `corrected` (corrigé depuis), `quarantine_reason`, `device_time`, `server_time`, `author_id`, `device_id`, `payload`. Contenu : réceptions dont une ligne porte le lot (et toute leur chaîne de corrections), étiquettes portant le lot ou citant une de ces réceptions dans `source_record_ids`, pertes portant le lot ou liées (`related_record_id`) à une de ces réceptions / étiquettes. La quarantaine est incluse et signalée (pour un rappel, mieux vaut trop que pas assez). Un seul niveau : une étiquette faite à partir d'une autre étiquette n'est pas suivie.
   - Appel depuis l'app gérant : `supabase.rpc('trace_lot', { p_lot })`.
+- `cleaning_tasks` (lot 5) : `name` 1–80 (non blanc), `frequency` `after_service|daily|weekly|monthly`, `product` ≤ 80 ou null, `method` ≤ 500 ou null.
+- `checklists` (lot 5) : `name` 1–80, `kind` `opening|closing|pest_control|other`, `items jsonb` contrôlé par `haccp_valid_checklist_items()` : tableau de 1 à 40 objets ayant exactement `id` (`[a-z0-9_-]{1,40}`, unique dans la checklist), `label` (1–120, non blanc), `required` (booléen).
+- Tâches et checklists : **même régime que `products`** (RLS gérant, `service_role` en lecture seule, audit, `updated_at` forcé, DELETE/TRUNCATE bloqués → désactiver). Données d'exemple (uuid fixes `…0501`–`…0511` pour 11 tâches, `…0551`–`…0553` pour les checklists Ouverture / Fermeture / Contrôle nuisibles, `on conflict do nothing`). **Produits et modes opératoires génériques, à adapter selon le PMS.** La vidange du bac de friteuse est en `weekly` par défaut (en pratique : à chaque changement d'huile).
 
 ## Règles de sécurité
 
@@ -103,7 +108,7 @@ Prérequis : PostgreSQL 16 (`/usr/lib/postgresql/16/bin`, modifiable avec `PGBIN
 Le script :
 - crée un cluster jetable sur un port libre ;
 - installe les stubs Supabase (`supabase/tests/supabase_stubs.sql` : rôles, `auth.users`, `auth.uid()`, privilèges par défaut, schéma `storage` minimal avec RLS et le blocage du `DELETE` direct) ;
-- applique les migrations (celles des lots 3 et 4 deux fois) et le seed (deux fois), pour vérifier l'idempotence, puis `helpers.sql` ;
+- applique les migrations (celles des lots 3, 4 et 5 deux fois) et le seed (deux fois), pour vérifier l'idempotence, puis `helpers.sql` ;
 - exécute chaque `supabase/tests/sql/*.sql` dans une base clonée neuve ;
 - vérifie la concurrence de `bootstrap_manager()` avec deux sessions `psql` simultanées (une seule réussit) ;
 - détruit le cluster.

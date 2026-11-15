@@ -1,8 +1,8 @@
 // Adaptateur Deno : implémente les interfaces Repo avec supabase-js (clé service_role).
 // Seul endroit (avec les index.ts) qui dépend de Deno / npm. Non couvert par Vitest.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import type { Product, Recipe, Supplier } from '../../../shared/payloads.ts'
-import type { Equipment, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
+import type { Checklist, ChecklistItem, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Equipment, EquipmentKind, Establishment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
 import { jsonLogger, parseAllowedOrigins, type HttpEnv } from '../_shared/http.ts'
 import { classifyDbError } from '../_shared/repo.ts'
 import type {
@@ -122,10 +122,10 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
     if (error) throw new DbError('staff.select', error)
     return data
   }
-  async equipmentExists(equipmentId: string): Promise<boolean> {
-    const { data, error } = await this.db.from('equipment').select('id').eq('id', equipmentId).maybeSingle()
+  async getEquipmentKind(equipmentId: string): Promise<EquipmentKind | null> {
+    const { data, error } = await this.db.from('equipment').select('kind').eq('id', equipmentId).maybeSingle()
     if (error) throw new DbError('equipment.select', error)
-    return data !== null
+    return data ? (data.kind as EquipmentKind) : null
   }
   async supplierExists(supplierId: string): Promise<boolean> {
     const { data, error } = await this.db.from('suppliers').select('id').eq('id', supplierId).maybeSingle()
@@ -140,6 +140,16 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
   async recipeExists(recipeId: string): Promise<boolean> {
     const { data, error } = await this.db.from('recipes').select('id').eq('id', recipeId).maybeSingle()
     if (error) throw new DbError('recipes.select', error)
+    return data !== null
+  }
+  async cleaningTaskExists(taskId: string): Promise<boolean> {
+    const { data, error } = await this.db.from('cleaning_tasks').select('id').eq('id', taskId).maybeSingle()
+    if (error) throw new DbError('cleaning_tasks.select', error)
+    return data !== null
+  }
+  async checklistExists(checklistId: string): Promise<boolean> {
+    const { data, error } = await this.db.from('checklists').select('id').eq('id', checklistId).maybeSingle()
+    if (error) throw new DbError('checklists.select', error)
     return data !== null
   }
   async getPayloadsByIds(ids: string[]): Promise<{ id: string; type: string; payload: unknown }[]> {
@@ -230,6 +240,21 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
       extra_allergens: r.extra_allergens ?? [],
       updated_at: isoReq(r.updated_at),
     }))
+  }
+
+  async listCleaningTasks(since: string | null): Promise<CleaningTask[]> {
+    let q = this.db.from('cleaning_tasks').select('id, name, frequency, product, method, active, updated_at')
+    if (since) q = q.gte('updated_at', since)
+    const { data, error } = await q.order('name')
+    if (error) throw new DbError('cleaning_tasks.list', error)
+    return (data ?? []).map((t) => ({ ...t, updated_at: isoReq(t.updated_at) }))
+  }
+  async listChecklists(since: string | null): Promise<Checklist[]> {
+    let q = this.db.from('checklists').select('id, name, kind, items, active, updated_at')
+    if (since) q = q.gte('updated_at', since)
+    const { data, error } = await q.order('name')
+    if (error) throw new DbError('checklists.list', error)
+    return (data ?? []).map((c) => ({ ...c, items: (c.items ?? []) as ChecklistItem[], updated_at: isoReq(c.updated_at) }))
   }
 
   // ---- enrôlement ----

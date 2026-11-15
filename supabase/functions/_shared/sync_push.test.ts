@@ -18,6 +18,9 @@ import {
   SUPPLIER_ID,
   PRODUCT_ID,
   RECIPE_ID,
+  CLEANING_TASK_ID,
+  CHECKLIST_ID,
+  FRYER_ID,
   rehash,
   seededRepo,
 } from './test_helpers.ts'
@@ -271,15 +274,15 @@ describe('sync-push — quarantaine (chaîne intègre, contenu refusé)', () => 
   it('type hors contrat → quarantaine unknown_type (stocké tel quel)', async () => {
     const chain = new ChainBuilder()
     const pizza = await chain.next({ type: 'pizza' as never })
-    const oil = await chain.next({ type: 'oil_check', payload: {} })
-    const out = await push([pizza, oil])
+    const ack = await chain.next({ type: 'alert_ack', payload: {} })
+    const out = await push([pizza, ack])
     expect(out.rejected.map((r) => [r.reason, r.detail])).toEqual([
       ['unknown_type', Q('unknown_type')],
       ['unknown_type', Q('unknown_type')],
     ])
     expect(repo.records.map((r) => [r.type, r.quarantine_reason])).toEqual([
       ['pizza', 'unknown_type'],
-      ['oil_check', 'unknown_type'],
+      ['alert_ack', 'unknown_type'],
     ])
     expect(out.last_device_seq).toBe(2)
   })
@@ -957,5 +960,146 @@ describe('sync-push — lot 4 (étiquettes)', () => {
     const recs = [await chain.next({ type: 'label_printed', payload: label() }), await chain.next({ type: 'label_printed', payload: label() })]
     expect((await push(recs)).accepted).toHaveLength(2)
     expect(repo.calls.productExists).toBe(1)
+  })
+})
+
+describe('sync-push — lot 5 (nettoyage, checklists, huiles)', () => {
+  const photo = (dev: string, n: number) => `${dev}/00000000-0000-4000-8000-${String(n).padStart(12, '0')}.webp`
+  beforeEach(() => {
+    repo.equipment.push({ id: FRYER_ID, name: 'Friteuse – bac gauche', kind: 'fryer_vat', active: true, updated_at: '2026-11-01T00:00:00.000Z' })
+  })
+  const cleaning = (over: Record<string, unknown> = {}) => ({ task_id: CLEANING_TASK_ID, comment: 'RAS', photo_paths: [photo(DEVICE_ID, 1)], ...over })
+  const checklist = (over: Record<string, unknown> = {}) => ({
+    checklist_id: CHECKLIST_ID,
+    answers: [
+      { item_id: 'lave_mains', ok: true },
+      { item_id: 'eau_potable', ok: false, comment: 'cuve vide, remplie avant service' },
+    ],
+    all_ok: false,
+    ...over,
+  })
+  const oilCheck = (over: Record<string, unknown> = {}) => ({ equipment_id: FRYER_ID, polar_percent: 23.5, method: 'tester', in_range: true, ...over })
+  const oilChange = (over: Record<string, unknown> = {}) => ({ equipment_id: FRYER_ID, comment: 'huile neuve', ...over })
+
+  it('accepte nettoyage, checklist, contrôle et changement d’huile valides', async () => {
+    const chain = new ChainBuilder()
+    const recs = [
+      await chain.next({ type: 'cleaning_done', payload: cleaning() }),
+      await chain.next({ type: 'checklist_done', payload: checklist() }),
+      await chain.next({ type: 'oil_check', payload: oilCheck() }),
+      await chain.next({ type: 'oil_change', payload: oilChange() }),
+    ]
+    const out = await push(recs)
+    expect(out.rejected).toEqual([])
+    expect(out.accepted.map((a) => a.id)).toEqual(recs.map((r) => r.id))
+  })
+  it('tâche, checklist, friteuse désactivées mais existantes : acceptées (saisie hors réseau)', async () => {
+    repo.cleaningTasks[0].active = false
+    repo.checklists[0].active = false
+    repo.equipment.find((e) => e.id === FRYER_ID)!.active = false
+    const chain = new ChainBuilder()
+    const out = await push([
+      await chain.next({ type: 'cleaning_done', payload: cleaning() }),
+      await chain.next({ type: 'checklist_done', payload: checklist() }),
+      await chain.next({ type: 'oil_change', payload: oilChange() }),
+    ])
+    expect(out.rejected).toEqual([])
+  })
+  it('tâche ou checklist inconnues → quarantaine invalid_payload, la chaîne avance', async () => {
+    const chain = new ChainBuilder()
+    const t = await chain.next({ type: 'cleaning_done', payload: cleaning({ task_id: newId() }) })
+    const c = await chain.next({ type: 'checklist_done', payload: checklist({ checklist_id: newId() }) })
+    const ok = await chain.next()
+    const out = await push([t, c, ok])
+    expect(out.rejected).toEqual([
+      { id: t.id, reason: 'invalid_payload', detail: expect.stringMatching(/tâche de nettoyage inconnue/), quarantined: true },
+      { id: c.id, reason: 'invalid_payload', detail: expect.stringMatching(/checklist inconnue/), quarantined: true },
+    ])
+    expect(out.accepted.map((x) => x.id)).toEqual([ok.id])
+    expect(out.last_device_seq).toBe(3)
+  })
+  it('checklist : points absents de la version actuelle acceptés (la checklist a pu changer hors réseau)', async () => {
+    const r = await new ChainBuilder().next({
+      type: 'checklist_done',
+      payload: checklist({ answers: [{ item_id: 'ancien_point', ok: true }], all_ok: true }),
+    })
+    expect((await push([r])).rejected).toEqual([])
+  })
+  it('huiles : équipement inconnu ou qui n’est pas un bac de friteuse → quarantaine invalid_payload', async () => {
+    const chain = new ChainBuilder()
+    const unknown = await chain.next({ type: 'oil_check', payload: oilCheck({ equipment_id: newId() }) })
+    const fridge = await chain.next({ type: 'oil_check', payload: oilCheck({ equipment_id: FRIDGE_ID }) })
+    const fridgeChange = await chain.next({ type: 'oil_change', payload: oilChange({ equipment_id: FRIDGE_ID }) })
+    const out = await push([unknown, fridge, fridgeChange])
+    expect(out.rejected.map((r) => [r.reason, r.quarantined])).toEqual([
+      ['invalid_payload', true],
+      ['invalid_payload', true],
+      ['invalid_payload', true],
+    ])
+    expect(out.rejected[0].detail).toMatch(/équipement inconnu/)
+    expect(out.rejected[1].detail).toMatch(/fryer_vat attendu \(reçu : fridge\)/)
+    expect(out.rejected[2].detail).toMatch(/fryer_vat/)
+    expect(out.last_device_seq).toBe(3)
+  })
+  it('le bac de friteuse reste accepté pour un relevé de température (pas de contrainte de nature hors huiles)', async () => {
+    const r = await new ChainBuilder().next({ type: 'temperature_check', payload: { equipment_id: FRYER_ID, value_c: 175, source: 'probe', in_range: true } })
+    expect((await push([r])).rejected).toEqual([])
+  })
+  it('n’évalue pas in_range contre les réglages d’huile (choix : réglages changeants hors réseau)', async () => {
+    const r = await new ChainBuilder().next({ type: 'oil_check', payload: oilCheck({ polar_percent: 28, in_range: true }) })
+    expect((await push([r])).rejected).toEqual([])
+  })
+  it('nettoyage : photo d’un autre appareil → quarantaine invalid_payload', async () => {
+    const r = await new ChainBuilder().next({ type: 'cleaning_done', payload: cleaning({ photo_paths: [photo(OTHER_DEVICE_ID, 4)] }) })
+    const out = await push([r])
+    expect(out.rejected).toEqual([{ id: r.id, reason: 'invalid_payload', detail: expect.stringMatching(/n’appartient pas à cet appareil/), quarantined: true }])
+  })
+  it('payload invalide (4 photos, « non » sans commentaire, all_ok incohérent, 50,5 %) → quarantaine', async () => {
+    const chain = new ChainBuilder()
+    const photos = await chain.next({ type: 'cleaning_done', payload: cleaning({ photo_paths: [1, 2, 3, 4].map((n) => photo(DEVICE_ID, n)) }) })
+    const noComment = await chain.next({ type: 'checklist_done', payload: checklist({ answers: [{ item_id: 'eau_potable', ok: false }] }) })
+    const allOk = await chain.next({ type: 'checklist_done', payload: checklist({ all_ok: true }) })
+    const polar = await chain.next({ type: 'oil_check', payload: oilCheck({ polar_percent: 50.5 }) })
+    const out = await push([photos, noComment, allOk, polar])
+    expect(out.rejected.map((r) => r.reason)).toEqual(['invalid_payload', 'invalid_payload', 'invalid_payload', 'invalid_payload'])
+    expect(out.rejected[0].detail).toMatch(/photo_paths/)
+    expect(out.rejected[1].detail).toMatch(/comment : obligatoire/)
+    expect(out.rejected[2].detail).toMatch(/all_ok/)
+    expect(out.rejected[3].detail).toMatch(/polar_percent/)
+  })
+  it('correction : remplacement validé, références vérifiées (tâche, friteuse), photos héritées', async () => {
+    const chain = new ChainBuilder()
+    const clean = await chain.next({ type: 'cleaning_done', payload: cleaning() })
+    const oil = await chain.next({ type: 'oil_check', payload: oilCheck() })
+    const goodClean = await chain.next({ type: 'correction', supersedes_id: clean.id, payload: { reason: 'oubli', replacement: cleaning({ comment: 'fait à 15 h' }) } })
+    const badTask = await chain.next({ type: 'correction', supersedes_id: clean.id, payload: { reason: 'r', replacement: cleaning({ task_id: newId() }) } })
+    const goodOil = await chain.next({ type: 'correction', supersedes_id: oil.id, payload: { reason: 'r', replacement: oilCheck({ polar_percent: 26, in_range: false }) } })
+    const badOil = await chain.next({ type: 'correction', supersedes_id: oil.id, payload: { reason: 'r', replacement: oilCheck({ equipment_id: FRIDGE_ID }) } })
+    const out = await push([clean, oil, goodClean, badTask, goodOil, badOil])
+    expect(out.accepted.map((a) => a.id)).toEqual([clean.id, oil.id, goodClean.id, goodOil.id])
+    expect(out.rejected.map((r) => [r.id, r.reason])).toEqual([
+      [badTask.id, 'invalid_payload'],
+      [badOil.id, 'invalid_payload'],
+    ])
+    expect(out.rejected[0].detail).toMatch(/tâche de nettoyage inconnue/)
+    expect(out.rejected[1].detail).toMatch(/fryer_vat/)
+    // Correction depuis un autre appareil : reprend la photo du nettoyage corrigé.
+    const other = await new ChainBuilder(OTHER_DEVICE_ID).next({ type: 'correction', supersedes_id: clean.id, payload: { reason: 'r', replacement: cleaning() } })
+    expect((await push([other], OTHER_DEVICE_ID, OTHER_TOKEN)).accepted.map((a) => a.id)).toEqual([other.id])
+  })
+  it('met en cache les contrôles de tâche, checklist et équipement dans un lot', async () => {
+    const chain = new ChainBuilder()
+    const recs = [
+      await chain.next({ type: 'cleaning_done', payload: cleaning() }),
+      await chain.next({ type: 'cleaning_done', payload: cleaning() }),
+      await chain.next({ type: 'checklist_done', payload: checklist() }),
+      await chain.next({ type: 'checklist_done', payload: checklist() }),
+      await chain.next({ type: 'oil_check', payload: oilCheck() }),
+      await chain.next({ type: 'oil_change', payload: oilChange() }),
+    ]
+    expect((await push(recs)).accepted).toHaveLength(6)
+    expect(repo.calls.cleaningTaskExists).toBe(1)
+    expect(repo.calls.checklistExists).toBe(1)
+    expect(repo.calls.getEquipmentKind).toBe(1)
   })
 })

@@ -3,7 +3,20 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { SyncPullResponse } from '../../../shared/types.ts'
 import type { MemoryRepo } from './memory_repo.ts'
 import { createSyncPullHandler, PULL_OVERLAP_MS } from './sync_pull.ts'
-import { FRIDGE_ID, INACTIVE_STAFF_ID, NOW, PRODUCT_ID, RECIPE_ID, STAFF_ID, SUPPLIER_ID, TOKEN, memoryLogger, seededRepo } from './test_helpers.ts'
+import {
+  CHECKLIST_ID,
+  CLEANING_TASK_ID,
+  FRIDGE_ID,
+  INACTIVE_STAFF_ID,
+  NOW,
+  PRODUCT_ID,
+  RECIPE_ID,
+  STAFF_ID,
+  SUPPLIER_ID,
+  TOKEN,
+  memoryLogger,
+  seededRepo,
+} from './test_helpers.ts'
 
 let repo: MemoryRepo
 let handler: (req: Request) => Promise<Response>
@@ -112,6 +125,45 @@ describe('sync-pull', () => {
     expect(since.products).toEqual([])
     expect(since.recipes).toEqual([])
     expect(since.deleted).toEqual(expect.arrayContaining([{ table: 'products', id: OLD_P }, { table: 'recipes', id: OLD_R }]))
+  })
+  it('tâches de nettoyage et checklists : actives seulement, champs du contrat, désactivées dans deleted (lot 5)', async () => {
+    const OLD_T = '00000000-0000-4000-8000-000000000502'
+    const OLD_C = '00000000-0000-4000-8000-000000000552'
+    repo.cleaningTasks.push({ id: OLD_T, name: 'Ancienne tâche', frequency: 'weekly', product: null, method: null, active: false, updated_at: '2026-11-12T00:00:00.000Z' })
+    repo.checklists.push({ id: OLD_C, name: 'Ancienne', kind: 'other', items: [{ id: 'a', label: 'A', required: false }], active: false, updated_at: '2026-11-12T00:00:00.000Z' })
+    ;(repo.cleaningTasks[0] as unknown as Record<string, unknown>).created_at = '2026-01-01'
+    ;(repo.checklists[0] as unknown as Record<string, unknown>).created_at = '2026-01-01'
+    ;(repo.checklists[0].items[0] as unknown as Record<string, unknown>).internal = 'x'
+    const all = await pull()
+    expect(all.cleaning_tasks).toEqual([
+      {
+        id: CLEANING_TASK_ID,
+        name: 'Plans de travail',
+        frequency: 'after_service',
+        product: 'Détergent-désinfectant contact alimentaire',
+        method: null,
+        active: true,
+        updated_at: '2026-11-01T00:00:00.000Z',
+      },
+    ])
+    expect(all.checklists).toEqual([
+      {
+        id: CHECKLIST_ID,
+        name: 'Ouverture',
+        kind: 'opening',
+        items: [
+          { id: 'lave_mains', label: 'Lave-mains approvisionné', required: true },
+          { id: 'eau_potable', label: 'Eau potable disponible', required: true },
+        ],
+        active: true,
+        updated_at: '2026-11-01T00:00:00.000Z',
+      },
+    ])
+    expect(all.deleted).toEqual([])
+    const since = await pull('2026-11-05T00:00:00.000Z')
+    expect(since.cleaning_tasks).toEqual([])
+    expect(since.checklists).toEqual([])
+    expect(since.deleted).toEqual(expect.arrayContaining([{ table: 'cleaning_tasks', id: OLD_T }, { table: 'checklists', id: OLD_C }]))
   })
   it('400 si since n’est pas une date', async () => {
     const res = await handler(pullReq('hier'))

@@ -21,7 +21,7 @@ export function parseSince(raw: string | null): Date | null {
 export async function processPull(since: Date | null, repo: PullRepo, now: Date): Promise<SyncPullResponse> {
   const serverNow = now.toISOString() // capturé AVANT les lectures
   const from = since ? new Date(since.getTime() - PULL_OVERLAP_MS).toISOString() : null
-  const [establishment, settings, staff, equipment, thresholds, suppliers, products, recipes] = await Promise.all([
+  const [establishment, settings, staff, equipment, thresholds, suppliers, products, recipes, cleaningTasks, checklists] = await Promise.all([
     repo.getEstablishment(),
     repo.getSettings(),
     repo.listStaff(from),
@@ -30,6 +30,8 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
     repo.listSuppliers(from),
     repo.listProducts(from),
     repo.listRecipes(from),
+    repo.listCleaningTasks(from),
+    repo.listChecklists(from),
   ])
   if (!establishment || !settings) throw new HttpError(503, 'not_configured', 'établissement ou paramètres absents')
 
@@ -40,6 +42,8 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
     for (const s of suppliers) if (!s.active) deleted.push({ table: 'suppliers', id: s.id })
     for (const p of products) if (!p.active) deleted.push({ table: 'products', id: p.id })
     for (const r of recipes) if (!r.active) deleted.push({ table: 'recipes', id: r.id })
+    for (const t of cleaningTasks) if (!t.active) deleted.push({ table: 'cleaning_tasks', id: t.id })
+    for (const c of checklists) if (!c.active) deleted.push({ table: 'checklists', id: c.id })
   }
   return {
     server_now: serverNow,
@@ -105,6 +109,27 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
         active: r.active,
         updated_at: r.updated_at,
       })),
+    cleaning_tasks: cleaningTasks
+      .filter((t) => t.active)
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        frequency: t.frequency,
+        product: t.product ?? null,
+        method: t.method ?? null,
+        active: t.active,
+        updated_at: t.updated_at,
+      })),
+    checklists: checklists
+      .filter((c) => c.active)
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        kind: c.kind,
+        items: c.items.map((i) => ({ id: i.id, label: i.label, required: i.required })),
+        active: c.active,
+        updated_at: c.updated_at,
+      })),
     deleted,
   }
 }
@@ -128,6 +153,8 @@ export function createSyncPullHandler(deps: SyncPullDeps): (req: Request) => Pro
       suppliers: res.suppliers.length,
       products: res.products.length,
       recipes: res.recipes.length,
+      cleaning_tasks: res.cleaning_tasks.length,
+      checklists: res.checklists.length,
       deleted: res.deleted.length,
     })
     return jsonResponse(200, res)

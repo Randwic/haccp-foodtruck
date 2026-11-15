@@ -313,6 +313,8 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       // Lot 4 (produits, recettes) : pas encore stockés par l'app.
       products: [],
       recipes: [],
+      cleaning_tasks: [],
+      checklists: [],
       settings,
       deleted: deletedLog.filter((d) => Date.parse(d.at) > sinceMs).map(({ table, id }) => ({ table, id })),
     })

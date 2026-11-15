@@ -56,7 +56,7 @@ export async function seededRepo(): Promise<MemoryRepo> {
     updated_at: '2026-11-01T00:00:00.000Z',
   })
   repo.establishment = { id: '00000000-0000-4000-8000-0000000000f1', name: 'Le Camion', timezone: 'Europe/Paris' }
-  repo.settings = { retention_years: 3, auto_lock_minutes: 2, clock_suspect_minutes: 5, email_alerts: true, daily_check_times: ['08:00', '18:00'], missed_slot_carry_over: true, thaw_dlc_days: 3 }
+  repo.settings = { retention_years: 3, auto_lock_minutes: 2, clock_suspect_minutes: 5, email_alerts: true, daily_check_times: ['08:00', '18:00'], missed_slot_carry_over: true, thaw_dlc_days: 3, oil_polar_max: 25, oil_polar_warn: 22 }
   return repo
 }
 

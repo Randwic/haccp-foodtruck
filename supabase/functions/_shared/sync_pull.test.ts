@@ -50,7 +50,7 @@ describe('sync-pull', () => {
     expect(out.staff[0]).toMatchObject({ pin_salt: 'c2Fs', pin_hash: 'aGFzaA==' })
     expect(out.equipment.map((e) => e.id)).toEqual([FRIDGE_ID])
     expect(out.thresholds).toHaveLength(1)
-    expect(out.settings).toEqual({ retention_years: 3, auto_lock_minutes: 2, clock_suspect_minutes: 5, email_alerts: true, daily_check_times: ['08:00', '18:00'], missed_slot_carry_over: true, thaw_dlc_days: 3 })
+    expect(out.settings).toEqual({ retention_years: 3, auto_lock_minutes: 2, clock_suspect_minutes: 5, email_alerts: true, daily_check_times: ['08:00', '18:00'], missed_slot_carry_over: true, thaw_dlc_days: 3, oil_polar_max: 25, oil_polar_warn: 22 })
     expect(out.deleted).toEqual([])
   })
   it('since vide = tout', async () => {

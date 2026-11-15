@@ -103,6 +103,8 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
     daily_check_times: ['08:00', '18:00'],
   missed_slot_carry_over: true,
   thaw_dlc_days: 3,
+  oil_polar_max: 25,
+  oil_polar_warn: 22,
     retention_years: 3,
     auto_lock_minutes: 5,
     clock_suspect_minutes: 5,

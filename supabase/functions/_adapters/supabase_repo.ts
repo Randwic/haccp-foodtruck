@@ -80,7 +80,7 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
   async getSettings(): Promise<Settings | null> {
     const { data, error } = await this.db
       .from('settings')
-      .select('retention_years, auto_lock_minutes, clock_suspect_minutes, email_alerts, daily_check_times, missed_slot_carry_over, thaw_dlc_days')
+      .select('retention_years, auto_lock_minutes, clock_suspect_minutes, email_alerts, daily_check_times, missed_slot_carry_over, thaw_dlc_days, oil_polar_max, oil_polar_warn')
       .eq('id', 1)
       .maybeSingle()
     if (error) throw new DbError('settings.select', error)

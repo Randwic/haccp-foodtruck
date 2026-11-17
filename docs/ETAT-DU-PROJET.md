@@ -4,11 +4,10 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
-## 0. EN COURS (session du 17/11/2026 soir) — à reprendre si la session a été coupée
-Branche `claude/project-thread-rnufx5` (poussée sur GitHub à chaque commit). Lot 7, écrans :
-- FAIT : `ManagerApi` (documents, `listRegistry`, `listDevices`, `verifyIntegrity`) Supabase + simulé ; `features/documents/` (report.ts = moteur PDF A4, model.ts, files.ts, DocumentsTab.tsx) ; `features/control/` (model.ts synthèse, load.ts, csv.ts, pdf.ts, integrity.ts, control.test.ts — 11 tests OK) ; `management/useManagerSession.tsx` (session gérant réutilisable).
-- RESTE : `ControlTab.tsx` (écran période + synthèse + intégrité + boutons PDF/CSV) ; assistant PMS (`features/pms/` : questionnaire, contenu pré-rempli, PDF avec réponses stockées dans les métadonnées du PDF via `Report.setInfoEntry` / `readInfoEntry`, enregistré comme document catégorie `pms`) ; écran « Documents & PMS » à 3 onglets + tuile d'accueil (gérant) + vue dans AppShell ; démo (`main.ts` : documents/registrySource/devices pour le gestionnaire simulé) ; tests d'écran ; captures ; docs (ui.md) ; PR.
-- Cédric veut des sauvegardes automatiques et fréquentes (commit + push après chaque étape).
+## 0. Dernière session (17/11/2026 soir) : écrans du lot 7
+Branche `claude/project-thread-rnufx5`, PR ouverte vers `main` (**ne pas fusionner sans l'accord de Cédric** : la fusion met en ligne).
+Écran « Documents & contrôle » (tuile d'accueil réservée au gérant), 3 onglets : Mode Contrôle, Documents, Plan (PMS). Détails dans `docs/ui.md`.
+Le contenu du classeur PMS papier de Cédric n'était pas disponible : l'assistant part des données de l'app et de textes types à relire.
 
 ## 1. Infrastructure (tout gratuit)
 | Élément | Où | Détail |
@@ -26,7 +25,7 @@ Secrets de fonctions posés : `ALLOWED_ORIGIN` (URL de l'app), `PURGE_PHOTOS_SEC
 - **Registre infalsifiable** : table `records` en insertion seule (triggers, même pour le propriétaire), chaîne de hash par appareil, corrections = nouvel enregistrement `correction` (original barré). Refus de contenu → **quarantaine** (stocké, chaîne avancée).
 - **App** : React 19 + TS + Vite + Tailwind v4, hors-ligne d'abord (Dexie), synchro `sync-push`/`sync-pull`, PIN PBKDF2, design « Space Diner » (thème auto clair/sombre, charte dans `docs/marque/`), icônes Lucide (aucun emoji).
 - **Modes** : URL nue = réel ; `?essai` = parcours complet sur serveur simulé (rien envoyé) ; `?demo=unlocked&…` = vitrine (paramètres : `releves`, `procedes`, `receptions`, `etiquettes`, `nettoyage`, `huiles`, `pertes`, `sync`).
-- Tests : `cd app && npx vitest run` (737 au 17/11), `npx tsc -b --noEmit`, `bash supabase/tests/run.sh` (835 assertions), `npx -y deno@latest check supabase/functions/*/index.ts`.
+- Tests : `cd app && npx vitest run` (752 au 17/11), `npx tsc -b --noEmit`, `bash supabase/tests/run.sh` (835 assertions), `npx -y deno@latest check supabase/functions/*/index.ts`.
 
 ## 3. Ce qui est fait et en ligne
 | Lot | Contenu | État |
@@ -37,14 +36,14 @@ Secrets de fonctions posés : `ALLOWED_ORIGIN` (URL de l'app), `PURGE_PHOTOS_SEC
 | 4 / 4 bis | Produits, recettes (préparations + plats du menu, sous-recettes), allergènes ● présents / ○ traces, étiquettes DLC 62 mm (AirPrint), DLC fabricant saisie à la main, tableau allergènes A4 fidèle au PDF de Cédric | ✅ |
 | 5 | Nettoyage, checklists, huiles (polaires 25 % / alerte 22 %) | ✅ |
 | 6 | Serveur capteurs (`sensor-ingest`, Shelly), moteur d'alertes, Web Push (VAPID), email Resend (inactif) | Serveur ✅ — **écrans à faire** |
-| 7 | Serveur documents (bucket `documents`, `documents_expiring`), `verify-integrity`, vue `staff_public` | Serveur ✅ — **écrans à faire** |
+| 7 | Serveur documents (bucket `documents`, `documents_expiring`), `verify-integrity`, vue `staff_public` ; écrans Documents (rappels 30 j), assistant PMS (réponses rangées dans les métadonnées du PDF `HaccpPmsAnswers`, version suivante repart du dernier PDF), mode Contrôle (période, intégrité, dossier PDF + CSV) | ✅ sur la branche, **en attente de fusion** |
 | 8 | RGPD, durcissement, guide d'installation | À faire |
 
 **Données réelles installées le 17/11** (`supabase/data/space_diner_v43.sql`, idempotent) : établissement « Space Diner », relevés 16:30 et 21:00, 8 équipements (Frigo inox 350 L ≤ 3 °C, Desserte 226 L ≤ 4 °C, Congélateur 120 L ≤ −18 °C, Friteuse, Friteuse d'appoint (nuggets), Bain-marie ≥ 63 °C, Plancha, Machine à sceller), 52 produits (porc 63 °C, poulet/nuggets 74 °C), 8 préparations, 14 plats (allergènes calculés = tableau de Cédric, vérifié par test), 9 tâches de nettoyage du classeur PMS.
 **Compte réel** : créé par Cédric (1 gérant, 2 appareils). Registre : 4 saisies d'essai du 15/11 (dont 1 `system_test` en quarantaine `invalid_payload` — **à investiguer** : probablement un payload de test refusé par le validateur).
 
 ## 4. À faire (dans l'ordre conseillé)
-1. **Écrans lot 7** : Documents (dépôt PDF/photo dans le bucket `documents`, `upsert:false` avant insertion de la fiche, rappels d'échéance), **assistant PMS** (pré-rempli avec les données de l'app + le classeur de Cédric), **mode Contrôle** (synthèse période, registres + photos, `verify-integrity`, export PDF/CSV). Tuile « Documents & PMS » encore « Bientôt ».
+1. **Lot 7** : fusionner la PR après accord de Cédric ; faire relire le PMS généré (textes types) avec son classeur.
 2. **Écrans lot 6** : abonnement Web Push (`push-config`, `push-subscribe`, service worker — iOS : PWA installée seulement), liste et prise en compte des alertes (`alert_ack`), Gestion › Capteurs (`rpc('sensor_create')`, jeton affiché une fois, guide `docs/backend-shelly.md`).
 3. **Lot 3 bis** : OCR lot/DLC (Tesseract.js), scan code-barres (@zxing/browser), recherche de lot / rappel produit (`rpc('trace_lot')`) — points d'extension dans `app/src/features/reception/extensions.ts`.
 4. **Lot 8** : RGPD (registre des traitements, export/effacement), durcissement, guide d'installation iPad.

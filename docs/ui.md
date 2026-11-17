@@ -271,3 +271,9 @@ correction d'une étape, compteurs de l'accueil), étiquettes (DLC Europe/Paris 
   première configuration. Police de l'interface : police système (SF Pro sur iOS), chiffres tabulaires pour heures/températures.
 - **Icônes** : Lucide (`lucide-react`) via `ui/icons.tsx` uniquement (épaisseur 1,75). Aucun emoji ni pictogramme Unicode.
 - **Icônes PWA** : `cd app && node scripts/generate-icons.mjs` (rend `BrandLogo` sur fond bleu nuit avec Playwright).
+
+## Documents & contrôle (`app/src/features/documents/`, `control/`, `pms/`, lot 7)
+Écran gérant ouvert par la tuile « Documents & PMS » (`DocumentsScreen.tsx`), 3 onglets ; session gérant via `management/useManagerSession.tsx`.
+- **Mode Contrôle** (`control/`) : période (aujourd'hui, 7 j, 30 j, dates), registre complet du serveur (`listRegistry`) complété par les saisies non envoyées de l'appareil, sinon appareil seul. Écarts et actions correctives, corrections, photos. Intégrité : `verify-integrity` si connecté, sinon `integrity.ts` en local. Exports : dossier PDF A4 (`pdf.ts`, photos en option, 60 max) et CSV (`;`, BOM, protégé contre les formules).
+- **Documents** : PDF ou photo (≤ 10 Mo, photo ramenée en JPEG ≤ 2400 px), envoi dans le bucket privé `documents` (`upsert:false`) puis fiche ; jamais supprimé, archivé. Rappels 30 jours avant l'échéance, liste des documents souvent demandés lors d'un contrôle.
+- **Plan (PMS)** (`pms/`) : questionnaire en 4 étapes pré-rempli (brouillon local `haccp.pms-draft.v1`), plan construit avec les données de l'app (équipements, seuils, produits, recettes, allergènes, nettoyage), PDF via `documents/report.ts`. Les réponses sont rangées dans les métadonnées du PDF (`HaccpPmsAnswers`) ; enregistré comme document `pms`, valable 1 an, l'ancienne version archivée.

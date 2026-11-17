@@ -75,6 +75,18 @@ const core = createCore({ transport: createHttpTransport({ baseUrl, anonKey }) }
   triés par nom. Serveur simulé : `DEMO_PRODUCTS` / `DEMO_RECIPES` = données initiales de la migration lot 4
   (mêmes identifiants), `upsertProduct`, `upsertRecipe`, `deactivate('products' | 'recipes', id)`.
 
+## Lot 4 bis : traces, cuisson à cœur, plats du menu
+
+- **Base locale version 4** : mêmes tables ; la migration complète les lignes existantes (`catalog.ts` :
+  `normalizeProduct` → `may_contain: []`, `cook_min_c: null` ; `normalizeRecipe` → `kind: 'preparation'`,
+  `category: null`, `ingredient_recipe_ids: []`, `may_contain: []`) puis remet `since` à `null` (sync-pull complet).
+- **Sync-pull** : produits / recettes normalisés à la réception (champs absents d'un serveur plus ancien = valeurs
+  par défaut, allergènes inconnus écartés, traces privées des allergènes présents) ; `listProducts` / `listRecipes`
+  normalisent aussi à la lecture.
+- `shelf_life_opened_hours: null` = « selon l'étiquette du fabricant » (DLC saisie à la main à l'impression).
+- Échantillon du vrai menu (`demoMenu.ts` : `MENU_PRODUCTS`, `MENU_RECIPES`, Sauce UFO → Supernova…) utilisé par la
+  démo, le mode essai et le serveur simulé de développement (catalogue de l'espace gérant simulé).
+
 ## Plan de nettoyage et checklists (lot 5)
 
 - Tables déjà présentes depuis la version 3 de la base locale : aucune migration.

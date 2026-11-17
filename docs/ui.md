@@ -185,6 +185,29 @@ trajet court) ? », « Emballages intacts ? » ; contrat `reception` inchangé (
   produits », date de mise à jour = dernière modification d'une recette ou d'un produit affiché, mention légale,
   impression A4 (PDF partagé ou `window.print` sur `#a4-print-root`, `@page A4 landscape`).
 
+## Lot 4 bis : traces, plats du menu, cuisson par produit
+- **Calcul pur** (`labels/allergens.ts`, testé dans `allergens.test.ts`) : présents = union récursive (produits +
+  préparations + ajoutés) ; « peut en contenir » = union récursive des `may_contain` moins les présents ; origine par
+  ingrédient direct ; anti-cycle (`cycles`, `wouldCreateCycle`). `allergenTable.ts` : plats du menu actifs groupés par
+  rubrique (Croq'Brioche, Dessert, Frites, Menu enfant, autres ; casse / apostrophe ignorées).
+- **Gestion › Produits** : « Allergènes présents » et « Peut en contenir (traces) » (ronds ambre), exclusifs ; « Durée de
+  vie après ouverture » avec l'option « Selon l'étiquette du fabricant » ; « Température à cœur minimale (cuisson /
+  remise en température) » (40–100 °C, raccourcis 63 / 70 / 74 °C, « Seuil générique »).
+- **Gestion › Recettes** : onglets Menu / Préparations ; type (Préparation maison / Plat du menu), rubrique (suggestions),
+  préparations utilisées (une préparation qui bouclerait est grisée), produits, allergènes ajoutés, traces propres,
+  panneau collant « Allergènes calculés » (● présents rose, ○ traces ambre, origine) ; durée de vie masquée pour un plat.
+- **Étiquettes** : « Préparation maison » ne propose que les préparations ; ouverture d'un produit « selon l'étiquette »
+  → « DLC lue sur l'emballage » (date obligatoire, heure facultative = 23:59) ; l'étiquette imprime les allergènes en
+  gras et « Traces possibles : … » dessous (traces hors payload, relues dans le catalogue à la réimpression).
+- **Tableau des allergènes** : affiche du propriétaire (fond bleu nuit, cadre rose, `BrandLogo`, titre cyan Bowlby One,
+  sous-titre jaune, ● présent / ○ peut en contenir, légende, mention remorque / boissons, « Une allergie ? »), plats du
+  menu seulement ; iPad : affiche ; iPhone : liste par plat ; PDF A4 paysage (pdf-lib, Bowlby One WOFF intégré,
+  pagination) ; impression directe = même affiche (`print-color-adjust: exact`).
+- **Cuisson à cœur** : produits du catalogue avec `cook_min_c` en pastilles (« Porc effiloché BBQ ≥ 63 °C »), saisie
+  libre possible (nom reconnu sans accents ni casse) ; seuil appliqué = `cook_min_c`, sinon générique ; payload inchangé.
+- **Démo `?demo=`** : l'espace gérant simulé reçoit `referenceSink: fakeCore.simulate` et le même catalogue : un produit /
+  une recette créés dans Gestion apparaissent aussitôt dans Étiquettes, Cuisson…
+
 ## Gestion › Nettoyage et Checklists (lot 5)
 `management/CleaningSection.tsx` (zone / équipement, fréquence, produit, mode opératoire) et `ChecklistSection.tsx` (nom,
 nature, points ordonnés : ajouter / retirer / monter / descendre, libellé, point critique) : ajout, modification,

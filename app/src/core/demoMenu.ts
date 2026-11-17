@@ -35,8 +35,8 @@ const recipe = (n: number, r: R): Recipe => ({ id: rid(n), extra_allergens: [], 
 export const SAUCE_UFO_ID = rid(1)
 export const MENU_RECIPES: Recipe[] = [
   recipe(1, { name: 'Sauce UFO', kind: 'preparation', category: null, ingredient_product_ids: [MAYO, ANCHOIS], shelf_life_hours: 72 }),
-  recipe(2, { name: 'Supernova', kind: 'menu_item', category: 'Croq’Brioche', ingredient_product_ids: [BRIOCHE, PORC, CHEDDAR], ingredient_recipe_ids: [SAUCE_UFO_ID], shelf_life_hours: null }),
-  recipe(3, { name: 'Houston', kind: 'menu_item', category: 'Croq’Brioche', ingredient_product_ids: [BRIOCHE, POULET, CHEDDAR, MAYO], shelf_life_hours: null }),
+  recipe(2, { name: 'Supernova', kind: 'menu_item', category: "Croq'Brioche", ingredient_product_ids: [BRIOCHE, PORC, CHEDDAR], ingredient_recipe_ids: [SAUCE_UFO_ID], shelf_life_hours: null }),
+  recipe(3, { name: 'Houston', kind: 'menu_item', category: "Croq'Brioche", ingredient_product_ids: [BRIOCHE, POULET, CHEDDAR, MAYO], shelf_life_hours: null }),
   recipe(4, { name: 'Comète', kind: 'menu_item', category: 'Dessert', ingredient_product_ids: [BRIOCHE, PATE], shelf_life_hours: null }),
   recipe(5, { name: 'Vénus', kind: 'menu_item', category: 'Dessert', ingredient_product_ids: [BRIOCHE, CHANTILLY], shelf_life_hours: null }),
   recipe(6, { name: 'Frites nature (avec un Croq’Brioche ou en barquette)', kind: 'menu_item', category: 'Frites', ingredient_product_ids: [FRITES], may_contain: ['gluten'], storage: 'ambient', shelf_life_hours: null }),

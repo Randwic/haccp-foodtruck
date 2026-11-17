@@ -132,7 +132,7 @@ describe('règles de saisie (espace gérant)', () => {
   })
 
   it('recette : plat du menu sans durée de vie, rubrique bornée, préparation avec durée obligatoire', () => {
-    expect(normalizeRecipeInput({ kind: 'menu_item', category: '  Croq’Brioche ', shelf_life_hours: 24 })).toMatchObject({ ok: true, value: { category: 'Croq’Brioche', shelf_life_hours: null } })
+    expect(normalizeRecipeInput({ kind: 'menu_item', category: "  Croq'Brioche ", shelf_life_hours: 24 })).toMatchObject({ ok: true, value: { category: "Croq'Brioche", shelf_life_hours: null } })
     expect(normalizeRecipeInput({ kind: 'menu_item', category: 'x'.repeat(41) })).toMatchObject({ ok: false, field: 'category' })
     expect(normalizeRecipeInput({ kind: 'preparation', shelf_life_hours: null })).toMatchObject({ ok: false, field: 'shelf_life_hours' })
   })

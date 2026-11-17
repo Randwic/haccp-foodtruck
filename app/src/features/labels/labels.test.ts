@@ -241,7 +241,7 @@ describe('PDF', () => {
     expect(doc.getPageCount()).toBe(1)
     expect(doc.getPage(0).getWidth()).toBeCloseTo(A4_LANDSCAPE[0], 1)
     expect(doc.getPage(0).getHeight()).toBeCloseTo(A4_LANDSCAPE[1], 1)
-    const many = [{ title: 'Croq’Brioche', rows: Array.from({ length: 40 }, (_, k) => ({ name: `Plat ${k}`, allergens: ['gluten' as const], traces: ['lait' as const] })) }]
+    const many = [{ title: "Croq'Brioche", rows: Array.from({ length: 40 }, (_, k) => ({ name: `Plat ${k}`, allergens: ['gluten' as const], traces: ['lait' as const] })) }]
     expect((await PDFDocument.load(await buildAllergenTablePdf({ updatedLabel: '', groups: many }, fonts, display))).getPageCount()).toBeGreaterThan(1)
   })
 

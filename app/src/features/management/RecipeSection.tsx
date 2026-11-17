@@ -7,6 +7,7 @@ import { Badge, Button, Modal, Notice, TextField } from '../../ui/components/ind
 import { IconAllergen, IconCheck, IconPlus, IconRecipe, IconWarn } from '../../ui/icons.tsx'
 import { allergenProfile, catalogOf, productTraces, wouldCreateCycle, type AllergenOrigin } from '../labels/allergens.ts'
 import { PresentDot, TraceDot } from '../labels/AllergenMarks.tsx'
+import { categoryKey, categoryOrder, OTHER_DISHES } from '../labels/allergenTable.ts'
 import { ALLERGEN_LABELS, formatShelfLife, splitShelfLife, STORAGE_LABELS } from '../labels/model.ts'
 import { AllergenChecklist, ShelfLifeField, shelfValueHours, StoragePicker, VerifyNotice, type ShelfLifeValue } from './catalogFields.tsx'
 import { ConfirmModal, SectionTitle, useManagement } from './common.tsx'
@@ -17,15 +18,6 @@ type Dialog = { kind: 'add'; recipeKind: Kind } | { kind: 'edit'; r: Recipe } | 
 
 export const KIND_LABELS: Record<Kind, string> = { preparation: 'Préparation maison', menu_item: 'Plat du menu' }
 const NO_CATEGORY = 'Sans rubrique'
-
-/** Rubriques dans l'ordre du menu (Croq'Brioche, Dessert, Frites, Menu enfant), puis les autres par ordre alphabétique. */
-export function categoryOrder(a: string, b: string): number {
-  const rank = (c: string) => {
-    const i = (MENU_CATEGORIES as readonly string[]).findIndex((m) => m.localeCompare(c, 'fr', { sensitivity: 'base' }) === 0)
-    return i < 0 ? (c === NO_CATEGORY ? 1000 : 100) : i
-  }
-  return rank(a) - rank(b) || a.localeCompare(b, 'fr')
-}
 
 /** Gestion › Recettes : préparations maison et plats du menu ; allergènes et traces calculés en direct. */
 export function RecipeSection({ onOpenAllergens }: { onOpenAllergens?: () => void }) {
@@ -59,8 +51,13 @@ export function RecipeSection({ onOpenAllergens }: { onOpenAllergens?: () => voi
   const groups = useMemo(() => {
     if (filter === 'preparation') return [{ title: 'Actives', list: active }]
     const m = new Map<string, Recipe[]>()
-    for (const r of active) m.set(r.category ?? NO_CATEGORY, [...(m.get(r.category ?? NO_CATEGORY) ?? []), r])
-    return [...m.entries()].sort(([a], [b]) => categoryOrder(a, b)).map(([title, list]) => ({ title, list }))
+    for (const r of active) {
+      const raw = r.category?.trim() || NO_CATEGORY
+      const title = [...m.keys()].find((k) => categoryKey(k) === categoryKey(raw)) ?? raw
+      m.set(title, [...(m.get(title) ?? []), r])
+    }
+    const rank = (t: string) => (t === NO_CATEGORY ? OTHER_DISHES : t)
+    return [...m.entries()].sort(([a], [b]) => categoryOrder(rank(a), rank(b))).map(([title, list]) => ({ title, list }))
   }, [filter, active])
 
   const card = (r: Recipe, actions: ReactNode, off = false) => (
@@ -418,7 +415,7 @@ function RecipeModal({
             error={errors.category}
             maxLength={40}
             autoCapitalize="sentences"
-            placeholder="Ex. : Croq’Brioche"
+            placeholder="Ex. : Croq'Brioche"
             below={
               <div role="group" aria-label="Rubriques proposées" className="mt-2.5 flex flex-wrap gap-2">
                 {[...new Set([...MENU_CATEGORIES, ...recipes.map((r) => r.category).filter((c): c is string => !!c)])].map((c) => {

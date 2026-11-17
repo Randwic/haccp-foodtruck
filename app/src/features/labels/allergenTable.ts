@@ -35,11 +35,22 @@ export interface AllergenTable {
   updatedAt: string | null
 }
 
+/** Clé de comparaison d'une rubrique : casse, accents et apostrophe typographique ignorés. */
+export function categoryKey(c: string): string {
+  return c
+    .replace(/[’‘]/g, "'")
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** Ordre des rubriques : celui du menu, puis les autres (alphabétique), « Autres plats » en dernier. */
 export function categoryOrder(a: string, b: string): number {
   const rank = (c: string) => {
     if (c === OTHER_DISHES) return 1000
-    const i = (MENU_CATEGORIES as readonly string[]).findIndex((m) => m.localeCompare(c, 'fr', { sensitivity: 'base' }) === 0)
+    const i = (MENU_CATEGORIES as readonly string[]).findIndex((m) => categoryKey(m) === categoryKey(c))
     return i < 0 ? 100 : i
   }
   return rank(a) - rank(b) || a.localeCompare(b, 'fr')
@@ -53,7 +64,9 @@ export function menuAllergenTable(recipes: readonly Recipe[], products: readonly
   const dates: string[] = []
   for (const r of dishes) {
     const p = allergenProfile(r, catalog)
-    const title = r.category?.trim() || OTHER_DISHES
+    // « Croq'Brioche » et « croq’brioche » forment une seule rubrique (premier libellé rencontré).
+    const raw = r.category?.trim() || OTHER_DISHES
+    const title = [...groups.keys()].find((k) => categoryKey(k) === categoryKey(raw)) ?? raw
     groups.set(title, [...(groups.get(title) ?? []), { name: r.name, allergens: p.present, traces: p.traces }])
     // Date de mise à jour : le plat et tout ce qu'il utilise (récursivement).
     const seen = new Set<string>()

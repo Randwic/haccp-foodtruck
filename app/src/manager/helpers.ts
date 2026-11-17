@@ -134,7 +134,7 @@ export const RECIPE_INGREDIENTS_MAX = 50
 export const RECIPE_SUBRECIPES_MAX = 20
 export const CATEGORY_MAX = 40
 /** Rubriques proposées (liste libre) pour les plats du menu, dans l'ordre du tableau des allergènes. */
-export const MENU_CATEGORIES = ['Croq’Brioche', 'Dessert', 'Frites', 'Menu enfant'] as const
+export const MENU_CATEGORIES = ["Croq'Brioche", 'Dessert', 'Frites', 'Menu enfant'] as const
 /** Température à cœur minimale acceptée pour un produit (°C, une décimale). */
 export const COOK_MIN_RANGE = { min: 40, max: 100 } as const
 
@@ -230,7 +230,7 @@ export function normalizeRecipeInput(input: Partial<RecipeInput>): Normalized<Pa
     out.kind = input.kind
   }
   if (input.category !== undefined) {
-    const c = (input.category ?? '').trim().replace(/\s+/g, ' ')
+    const c = (input.category ?? '').trim().replace(/\s+/g, ' ').replace(/[’‘]/g, "'")
     if (c.length > CATEGORY_MAX) return { ok: false, field: 'category', message: `Rubrique trop longue (${CATEGORY_MAX} caractères au plus).` }
     out.category = c || null
   }

@@ -294,7 +294,7 @@ describe('tableau des allergènes', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Tableau des allergènes/ }))
     const table = await screen.findByRole('table')
     // Rubriques dans l'ordre du menu.
-    expect(within(table).getAllByRole('columnheader').filter((h) => h.getAttribute('scope') === 'colgroup').map((h) => h.textContent)).toEqual(['CROQ’BRIOCHE', 'DESSERT', 'FRITES', 'MENU ENFANT'])
+    expect(within(table).getAllByRole('columnheader').filter((h) => h.getAttribute('scope') === 'colgroup').map((h) => h.textContent)).toEqual(["CROQ'BRIOCHE", 'DESSERT', 'FRITES', 'MENU ENFANT'])
     // Les préparations (Sauce UFO, Sauce cheddar maison) ne sont pas des plats du menu.
     expect(within(table).queryByRole('row', { name: /Sauce UFO/ })).not.toBeInTheDocument()
     expect(within(table).queryByRole('row', { name: /Sauce cheddar maison/ })).not.toBeInTheDocument()
@@ -440,12 +440,12 @@ describe('Gestion › Produits et Recettes', () => {
     await openTab('Recettes')
     // Onglet « Menu » par défaut, plats groupés par rubrique.
     expect(await screen.findByRole('button', { name: 'Modifier – Supernova' })).toBeInTheDocument()
-    expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(expect.arrayContaining(['Croq’Brioche(2)', 'Dessert(2)', 'Frites(2)', 'Menu enfant(1)']))
+    expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(expect.arrayContaining(["Croq'Brioche(2)", 'Dessert(2)', 'Frites(2)', 'Menu enfant(1)']))
     expect(screen.queryByRole('button', { name: 'Modifier – Sauce UFO' })).not.toBeInTheDocument()
     press('Ajouter un plat')
     const dialog = await screen.findByRole('dialog', { name: 'Ajouter un plat du menu' })
     fireEvent.change(within(dialog).getByLabelText('Nom du plat'), { target: { value: 'Orion' } })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Croq’Brioche' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: "Croq'Brioche" }))
     fireEvent.click(within(dialog).getByLabelText(/^Sauce UFO/))
     fireEvent.click(within(dialog).getByLabelText(/^Pain brioché/))
     const computed = within(dialog).getByRole('region', { name: 'Allergènes calculés' })
@@ -461,7 +461,7 @@ describe('Gestion › Produits et Recettes', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(manager.simulate.state().recipes.find((r) => r.name === 'Orion')).toMatchObject({
       kind: 'menu_item',
-      category: 'Croq’Brioche',
+      category: "Croq'Brioche",
       ingredient_recipe_ids: [SAUCE_UFO_ID],
       may_contain: ['soja'],
       shelf_life_hours: null,

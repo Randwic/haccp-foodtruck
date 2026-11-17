@@ -226,23 +226,34 @@ export class SupabaseRepo implements PushRepo, PullRepo, EnrollRepo, HealthRepo,
   async listProducts(since: string | null): Promise<Product[]> {
     let q = this.db
       .from('products')
-      .select('id, name, allergens, storage, shelf_life_opened_hours, shelf_life_thawed_hours, active, updated_at')
+      .select('id, name, allergens, may_contain, storage, shelf_life_opened_hours, shelf_life_thawed_hours, cook_min_c, active, updated_at')
     if (since) q = q.gte('updated_at', since)
     const { data, error } = await q.order('name')
     if (error) throw new DbError('products.list', error)
-    return (data ?? []).map((p) => ({ ...p, allergens: p.allergens ?? [], updated_at: isoReq(p.updated_at) }))
+    return (data ?? []).map((p) => ({
+      ...p,
+      allergens: p.allergens ?? [],
+      may_contain: p.may_contain ?? [],
+      cook_min_c: p.cook_min_c === null || p.cook_min_c === undefined ? null : Number(p.cook_min_c),
+      updated_at: isoReq(p.updated_at),
+    }))
   }
   async listRecipes(since: string | null): Promise<Recipe[]> {
     let q = this.db
       .from('recipes')
-      .select('id, name, ingredient_product_ids, extra_allergens, storage, shelf_life_hours, active, updated_at')
+      .select('id, name, kind, category, ingredient_product_ids, ingredient_recipe_ids, extra_allergens, may_contain, storage, shelf_life_hours, active, updated_at')
     if (since) q = q.gte('updated_at', since)
     const { data, error } = await q.order('name')
     if (error) throw new DbError('recipes.list', error)
     return (data ?? []).map((r) => ({
       ...r,
+      kind: r.kind ?? 'preparation',
+      category: r.category ?? null,
       ingredient_product_ids: r.ingredient_product_ids ?? [],
+      ingredient_recipe_ids: r.ingredient_recipe_ids ?? [],
       extra_allergens: r.extra_allergens ?? [],
+      may_contain: r.may_contain ?? [],
+      shelf_life_hours: r.shelf_life_hours ?? null,
       updated_at: isoReq(r.updated_at),
     }))
   }

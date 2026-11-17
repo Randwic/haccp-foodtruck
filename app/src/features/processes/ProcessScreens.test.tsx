@@ -179,6 +179,7 @@ describe('Cuisson & maintien', () => {
 })
 
 describe('Cuisson à cœur par produit (lot 4 bis)', () => {
+  const applied = () => screen.getByText(/Seuil appliqué/).closest('p')!
   const catalog = { products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS] }
 
   it('porc 63 °C : 65 °C conforme ; poulet / nuggets 74 °C : 70 °C hors seuil → action corrective', async () => {
@@ -189,14 +190,14 @@ describe('Cuisson à cœur par produit (lot 4 bis)', () => {
     await screen.findByRole('heading', { name: 'Cuisson à cœur' })
     const picker = screen.getByRole('radiogroup', { name: 'Produit du catalogue' })
     // Seuls les produits avec une température à cœur minimale sont proposés.
-    expect(within(picker).getAllByRole('radio').map((r) => r.textContent)).toEqual([
+    expect(within(picker).getAllByRole('radio').map((r) => r.textContent!.replace(/\s/g, ' '))).toEqual([
       'Filet de poulet pané≥ 74 °C',
       'Nuggets de poulet≥ 74 °C',
       'Porc effiloché BBQ≥ 63 °C',
       'Sauce cheddar (poche)≥ 63 °C',
     ])
     fireEvent.click(within(picker).getByRole('radio', { name: /^Porc effiloché BBQ/ }))
-    expect(screen.getByRole('status')).toHaveTextContent('Seuil appliqué : ≥ 63 °C — température à cœur minimale de « Porc effiloché BBQ »')
+    expect(applied()).toHaveTextContent('Seuil appliqué : ≥ 63 °C — température à cœur minimale de « Porc effiloché BBQ »')
     typeTemp('65')
     expect(screen.getByText('Conforme')).toBeInTheDocument()
     press('Enregistrer la mesure')
@@ -226,9 +227,9 @@ describe('Cuisson à cœur par produit (lot 4 bis)', () => {
     await screen.findByRole('heading', { name: 'Cuisson à cœur' })
     const field = screen.getByLabelText('Produit (ou autre produit, saisie libre)')
     fireEvent.change(field, { target: { value: 'nuggets DE poulet' } })
-    expect(screen.getByRole('status')).toHaveTextContent('≥ 74 °C')
+    expect(applied()).toHaveTextContent('≥ 74 °C')
     fireEvent.change(field, { target: { value: 'Saucisse de Toulouse' } })
-    expect(screen.getByRole('status')).toHaveTextContent('Seuil appliqué : ≥ 70 °C — seuil générique')
+    expect(applied()).toHaveTextContent('Seuil appliqué : ≥ 70 °C — seuil générique')
     typeTemp('71')
     press('Enregistrer la mesure')
     await screen.findByRole('heading', { name: 'Cuisson & maintien', level: 1 })

@@ -469,6 +469,20 @@ describe('Gestion › Produits et Recettes', () => {
     expect(await screen.findByRole('button', { name: 'Modifier – Orion' })).toBeInTheDocument()
   })
 
+  it('démo ?demo= : un produit créé dans Gestion apparaît aussitôt dans Étiquettes (même catalogue que le core factice)', async () => {
+    const core = createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null })
+    const manager = createMockManagerApi({ seeded: true, signedIn: true, referenceSink: core.simulate })
+    renderWithCore(core, undefined, manager)
+    await openTab('Produits')
+    press('Ajouter un produit')
+    const dialog = await screen.findByRole('dialog', { name: 'Ajouter un produit' })
+    fireEvent.change(within(dialog).getByLabelText('Nom du produit'), { target: { value: 'Sauce barbecue' } })
+    fireEvent.click(within(dialog).getByLabelText('Selon l’étiquette du fabricant'))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect((await core.listProducts()).map((p) => p.name)).toContain('Sauce barbecue')
+  })
+
   it('Réglages : hauteur des étiquettes enregistrée sur l’appareil', async () => {
     renderWithCore(createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null }), undefined, createMockManagerApi({ seeded: true, signedIn: true }))
     await openTab('Réglages')

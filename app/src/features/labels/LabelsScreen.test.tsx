@@ -289,23 +289,52 @@ describe('historique et correction', () => {
 })
 
 describe('tableau des allergènes', () => {
-  it('recettes actives × 14 allergènes, produits en option, PDF A4', async () => {
-    setup()
+  it('plats du menu seulement, groupés par rubrique (Croq’Brioche, Dessert, Frites, Menu enfant), ● présent / ○ peut en contenir, PDF A4', async () => {
+    setup({ products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS], recipes: [...DEMO_RECIPES, ...MENU_RECIPES] })
     fireEvent.click(await screen.findByRole('button', { name: /^Tableau des allergènes/ }))
     const table = await screen.findByRole('table')
-    const row = within(table).getByRole('row', { name: /Sauce cheddar maison/ })
-    expect(within(row).getByRole('img', { name: 'Contient : Céréales contenant du gluten' })).toBeInTheDocument()
-    expect(within(row).getByRole('img', { name: 'Contient : Lait' })).toBeInTheDocument()
-    expect(within(row).getAllByRole('img')).toHaveLength(2)
-    expect(within(table).queryByRole('row', { name: /Cornichons/ })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText(/Afficher aussi les produits/))
-    expect(within(table).getByRole('row', { name: /Cornichons/ })).toBeInTheDocument()
+    // Rubriques dans l'ordre du menu.
+    expect(within(table).getAllByRole('columnheader').filter((h) => h.getAttribute('scope') === 'colgroup').map((h) => h.textContent)).toEqual(['CROQ’BRIOCHE', 'DESSERT', 'FRITES', 'MENU ENFANT'])
+    // Les préparations (Sauce UFO, Sauce cheddar maison) ne sont pas des plats du menu.
+    expect(within(table).queryByRole('row', { name: /Sauce UFO/ })).not.toBeInTheDocument()
+    expect(within(table).queryByRole('row', { name: /Sauce cheddar maison/ })).not.toBeInTheDocument()
+    const supernova = within(table).getByRole('row', { name: /Supernova/ })
+    expect(within(supernova).getAllByRole('img', { name: /^Présent/ }).map((x) => x.getAttribute('aria-label'))).toEqual([
+      'Présent : Céréales contenant du gluten',
+      'Présent : Œufs',
+      'Présent : Poissons',
+      'Présent : Lait',
+      'Présent : Moutarde',
+    ])
+    expect(within(supernova).getAllByRole('img', { name: /^Peut en contenir/ }).map((x) => x.getAttribute('aria-label'))).toEqual([
+      'Peut en contenir : Céleri',
+      'Peut en contenir : Anhydride sulfureux et sulfites',
+    ])
+    const frites = within(table).getByRole('row', { name: /Frites nature/ })
+    expect(within(frites).getAllByRole('img')).toHaveLength(1)
+    expect(within(frites).getByRole('img', { name: 'Peut en contenir : Céréales contenant du gluten' })).toBeInTheDocument()
+    const poster = screen.getByRole('region', { name: 'Tableau des allergènes' })
+    expect(within(poster).getByText('présent dans la recette')).toBeInTheDocument()
+    expect(within(poster).getByText(/peut en contenir \(selon le produit du fournisseur\)/)).toBeInTheDocument()
+    expect(within(poster).getByText(/Tout est préparé dans la même remorque/)).toBeInTheDocument()
+    expect(within(poster).getByText(/Boissons : voir l’étiquette/)).toBeInTheDocument()
+    expect(within(poster).getByText(/Parle-nous-en avant de commander/)).toBeInTheDocument()
+    expect(within(poster).getByRole('img', { name: 'Space Diner' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: /^Imprimer/ })).toBeEnabled(), { timeout: 4000 })
     window.open = vi.fn(() => ({}) as Window)
     press(/^Imprimer/)
     await waitFor(() => expect(window.open).toHaveBeenCalledWith('blob:etiquette', '_blank'))
+    press('Impression directe')
+    expect(window.print).toHaveBeenCalled()
+    expect(document.getElementById('a4-print-root')).toHaveTextContent('Supernova')
     press('Accueil')
     expect(await screen.findByRole('heading', { name: 'Aujourd’hui' })).toBeInTheDocument()
+  })
+
+  it('sans plat du menu : message', async () => {
+    setup()
+    fireEvent.click(await screen.findByRole('button', { name: /^Tableau des allergènes/ }))
+    expect(await screen.findByText(/Aucun plat du menu/)).toBeInTheDocument()
   })
 })
 

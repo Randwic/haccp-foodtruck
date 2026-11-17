@@ -6,7 +6,9 @@ import type { HaccpRecord } from '../../../../shared/types.ts'
 import { validatePayload } from '../../../../shared/validation.ts'
 import { DEMO_PRODUCTS, DEMO_RECIPES } from '../../core/mockTransport.ts'
 import { buildReceptions, buildWastes } from '../reception/model.ts'
-import { loadLabelFonts } from './fonts.ts'
+import { loadDisplayFont, loadLabelFonts } from './fonts.ts'
+import { menuAllergenTable } from './allergenTable.ts'
+import { MENU_PRODUCTS, MENU_RECIPES } from '../../core/demoMenu.ts'
 import { DEFAULT_LABEL_HEIGHT_MM, layoutLabel, mmToPt } from './layout.ts'
 import {
   allergenSources,
@@ -230,21 +232,26 @@ describe('PDF', () => {
     for (const o of big.ops) if (o.kind === 'text') expect(o.x + fonts.measure(o.text, o.size, o.weight)).toBeLessThanOrEqual(big.width - mmToPt(2.9))
   })
 
-  it('tableau des allergènes A4 paysage', async () => {
+  it('tableau des allergènes A4 paysage (affiche Space Diner, ● / ○), pagination si le menu est très long', async () => {
     const fonts = await loadLabelFonts()
-    const bytes = await buildAllergenTablePdf(
-      {
-        title: 'Space Diner – Allergènes',
-        updatedLabel: 'Mis à jour le 15/11/2026',
-        legal: 'Mention légale.',
-        groups: [{ title: 'Préparations', rows: [{ name: 'Sauce cheddar maison', allergens: ['gluten', 'lait'] }] }],
-      },
-      fonts,
-    )
+    const display = await loadDisplayFont()
+    const table = menuAllergenTable([...DEMO_RECIPES, ...MENU_RECIPES], [...DEMO_PRODUCTS, ...MENU_PRODUCTS])
+    const bytes = await buildAllergenTablePdf({ updatedLabel: 'Mis à jour le 15/11/2026', groups: table.groups }, fonts, display)
     const doc = await PDFDocument.load(bytes)
     expect(doc.getPageCount()).toBe(1)
     expect(doc.getPage(0).getWidth()).toBeCloseTo(A4_LANDSCAPE[0], 1)
     expect(doc.getPage(0).getHeight()).toBeCloseTo(A4_LANDSCAPE[1], 1)
+    const many = [{ title: 'Croq’Brioche', rows: Array.from({ length: 40 }, (_, k) => ({ name: `Plat ${k}`, allergens: ['gluten' as const], traces: ['lait' as const] })) }]
+    expect((await PDFDocument.load(await buildAllergenTablePdf({ updatedLabel: '', groups: many }, fonts, display))).getPageCount()).toBeGreaterThan(1)
+  })
+
+  it('étiquette : « Traces possibles » imprimées sous les allergènes (sans les présents)', async () => {
+    const fonts = await loadLabelFonts()
+    const l = layoutLabel({ ...content, allergens: ['oeufs', 'moutarde'], traces: ['celeri', 'oeufs', 'sulfites'] }, fonts.measure, 50)
+    const texts = l.ops.filter((o) => o.kind === 'text').map((o) => (o as { text: string }).text)
+    expect(texts.join('|')).toContain('Traces possibles : Céleri, Sulfites')
+    expect(texts.join('|')).not.toContain('Traces possibles : Œufs')
+    expect(l.overflow).toBe(false)
   })
 
   it('le payload d’une étiquette est valide pour le contrat', () => {

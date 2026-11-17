@@ -27,7 +27,7 @@ export default defineConfig({
         ],
       },
       // .wasm : encodeur WebP de secours (Safari iOS) ; .ttf : polices des étiquettes (impression hors-ligne).
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff2,wasm,ttf}'] },
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2,wasm,ttf}'] },
     }),
   ],
   // L'encodeur WebAssembly charge son .wasm via import.meta.url : pas de pré-bundling.

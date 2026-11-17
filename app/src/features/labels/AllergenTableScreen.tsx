@@ -1,69 +1,46 @@
 // Tableau des allergènes pour la clientèle (information écrite obligatoire : règlement (UE) 1169/2011,
-// décret 2015-447) : recettes actives (et, au choix, produits) × 14 allergènes ; impression A4 paysage.
+// décret 2015-447). Lot 4 bis : plats du menu seulement, groupés par rubrique, ● présent (rose néon) et
+// ○ peut en contenir (jaune), au style de l'affiche du propriétaire (fond bleu nuit, cadre rose, logo, titre cyan).
+// Trois rendus : écran (même affiche, défilement horizontal sur iPhone), PDF A4 paysage (pdf-lib), impression directe.
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Product, Recipe } from '../../../../shared/payloads.ts'
+import { ALLERGENS, type Product, type Recipe } from '../../../../shared/payloads.ts'
 import { Button, Notice, useToast } from '../../ui/components/index.ts'
+import { BrandLogo } from '../../ui/brand.tsx'
 import { useCore } from '../../ui/CoreContext.tsx'
-import { IconCheck, IconPrint } from '../../ui/icons.tsx'
+import { IconPrint } from '../../ui/icons.tsx'
 import { BackButton, EmptyCard, PageTitle } from '../processes/common.tsx'
 import { DEFAULT_TIMEZONE } from '../temperatures/schedule.ts'
-import { loadLabelFonts } from './fonts.ts'
+import {
+  ALLERGEN_CALLOUT,
+  ALLERGEN_NOTICE,
+  ALLERGEN_TABLE_SUBTITLE,
+  ALLERGEN_TABLE_TITLE,
+  LEGEND_PRESENT,
+  LEGEND_TRACES,
+  menuAllergenTable,
+  type AllergenTableGroup,
+} from './allergenTable.ts'
+import { loadDisplayFont, loadLabelFonts } from './fonts.ts'
 import { printSheet } from './LabelPreview.tsx'
-import { ALLERGEN_LABELS, ALLERGENS, formatLabelDate, orderAllergens, recipeAllergens } from './model.ts'
-import { buildAllergenTablePdf, type AllergenTableGroup } from './pdf.ts'
+import { ALLERGEN_LABELS, formatLabelDate } from './model.ts'
+import { buildAllergenTablePdf, POSTER, POSTER_HEADERS } from './pdf.ts'
 import { canSharePdf, pdfFilename, sharePdf } from './printing.ts'
 
-export const ALLERGEN_TABLE_TITLE = 'Space Diner – Allergènes'
-export const ALLERGEN_LEGAL =
-  'Information sur les 14 allergènes à déclaration obligatoire (règlement (UE) n° 1169/2011, annexe II ; décret n° 2015-447 du 17 avril 2015), établie d’après nos recettes et les fiches techniques de nos fournisseurs. ' +
-  'Nos préparations sont réalisées dans une cuisine où ces allergènes sont présents : des traces ne peuvent être exclues. En cas d’allergie, adressez-vous à notre équipe avant de commander.'
-
-const SHOW_PRODUCTS_KEY = 'haccp.allergens.show_products'
-
-export interface AllergenRows {
-  groups: AllergenTableGroup[]
-  /** Dernière modification d'une recette ou d'un produit affiché (ISO), ou null. */
-  updatedAt: string | null
-}
-
-/** Lignes du tableau : recettes actives (allergènes calculés), puis produits actifs si demandé. Pur. */
-export function allergenRows(recipes: readonly Recipe[], products: readonly Product[], withProducts: boolean): AllergenRows {
-  const active = recipes.filter((r) => r.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
-  const shownProducts = withProducts ? products.filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name, 'fr')) : []
-  const used = new Set(active.flatMap((r) => r.ingredient_product_ids))
-  const dates = [
-    ...active.map((r) => r.updated_at),
-    ...products.filter((p) => used.has(p.id)).map((p) => p.updated_at),
-    ...shownProducts.map((p) => p.updated_at),
-  ].sort()
-  return {
-    groups: [
-      { title: 'Nos préparations', rows: active.map((r) => ({ name: r.name, allergens: recipeAllergens(r, products) })) },
-      { title: 'Produits', rows: shownProducts.map((p) => ({ name: p.name, allergens: orderAllergens(p.allergens) })) },
-    ].filter((g) => g.rows.length > 0),
-    updatedAt: dates[dates.length - 1] ?? null,
-  }
-}
+export { ALLERGEN_TABLE_TITLE }
 
 export function AllergenTableScreen({ onBack, backLabel = 'Retour' }: { onBack: () => void; backLabel?: string }) {
   const core = useCore()
   const toast = useToast()
   const [refs, setRefs] = useState<{ products: Product[]; recipes: Recipe[]; tz: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [withProducts, setWithProducts] = useState(() => {
-    try {
-      return localStorage.getItem(SHOW_PRODUCTS_KEY) === '1'
-    } catch {
-      return false
-    }
-  })
   const [pdf, setPdf] = useState<{ bytes: Uint8Array; key: string } | null>(null)
 
   useEffect(() => {
     let alive = true
+    // Désactivés compris : un plat actif peut utiliser un produit / une préparation désactivés (allergènes gardés).
     const load = () =>
-      Promise.all([core.listProducts({ includeInactive: true }), core.listRecipes(), core.getEstablishment()]).then(
+      Promise.all([core.listProducts({ includeInactive: true }), core.listRecipes({ includeInactive: true }), core.getEstablishment()]).then(
         ([products, recipes, e]) => alive && setRefs({ products, recipes, tz: e?.timezone || DEFAULT_TIMEZONE }),
         (e: unknown) => alive && setError(e instanceof Error ? e.message : String(e)),
       )
@@ -75,16 +52,17 @@ export function AllergenTableScreen({ onBack, backLabel = 'Retour' }: { onBack: 
     }
   }, [core])
 
-  const rows = useMemo(() => (refs ? allergenRows(refs.recipes, refs.products, withProducts) : null), [refs, withProducts])
-  const updatedLabel = rows?.updatedAt ? `Mis à jour le ${formatLabelDate(rows.updatedAt, refs!.tz)}` : ''
-  const key = rows ? JSON.stringify([rows, updatedLabel]) : ''
+  const table = useMemo(() => (refs ? menuAllergenTable(refs.recipes, refs.products) : null), [refs])
+  const updatedLabel = table?.updatedAt ? `Mis à jour le ${formatLabelDate(table.updatedAt, refs!.tz)}` : ''
+  const key = table ? JSON.stringify([table.groups, updatedLabel]) : ''
+  const empty = !table || table.groups.length === 0
 
   // PDF prêt avant le toucher (partage iOS).
   useEffect(() => {
-    if (!rows || rows.groups.length === 0) return
+    if (!table || table.groups.length === 0) return
     let alive = true
-    loadLabelFonts()
-      .then((fonts) => buildAllergenTablePdf({ title: ALLERGEN_TABLE_TITLE, groups: rows.groups, updatedLabel, legal: ALLERGEN_LEGAL }, fonts))
+    Promise.all([loadLabelFonts(), loadDisplayFont()])
+      .then(([fonts, display]) => buildAllergenTablePdf({ groups: table.groups, updatedLabel }, fonts, display))
       .then(
         (bytes) => alive && setPdf({ bytes, key }),
         () => {},
@@ -92,22 +70,13 @@ export function AllergenTableScreen({ onBack, backLabel = 'Retour' }: { onBack: 
     return () => {
       alive = false
     }
-  }, [rows, updatedLabel, key])
+  }, [table, updatedLabel, key])
   const ready = pdf && pdf.key === key ? pdf.bytes : null
 
-  const toggleProducts = () => {
-    const v = !withProducts
-    setWithProducts(v)
-    try {
-      localStorage.setItem(SHOW_PRODUCTS_KEY, v ? '1' : '0')
-    } catch {
-      /* sans importance */
-    }
-  }
   const share = async () => {
     if (!ready) return
     try {
-      await sharePdf(ready, pdfFilename('allergenes', 'space-diner'), ALLERGEN_TABLE_TITLE)
+      await sharePdf(ready, pdfFilename('allergenes', 'space-diner'), `Space Diner – ${ALLERGEN_TABLE_TITLE}`)
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error')
     }
@@ -118,59 +87,93 @@ export function AllergenTableScreen({ onBack, backLabel = 'Retour' }: { onBack: 
       <BackButton label={backLabel} onClick={onBack} />
       <PageTitle
         title="Tableau des allergènes"
-        subtitle="Information écrite pour la clientèle, à afficher près du point de vente (format A4)."
+        subtitle="Affiche pour la clientèle (plats du menu), à poser près du point de vente — A4 paysage."
         actions={
           <>
-            <Button variant="secondary" onClick={() => printSheet('a4')} disabled={!rows || rows.groups.length === 0}>
+            <Button variant="secondary" onClick={() => printSheet('a4')} disabled={empty}>
               Impression directe
             </Button>
             <Button onClick={share} disabled={!ready} icon={<IconPrint size={20} />}>
-              {!ready && rows && rows.groups.length > 0 ? 'Préparation du PDF…' : canSharePdf() ? 'Imprimer / Partager (A4)' : 'Imprimer (PDF A4)'}
+              {!ready && !empty ? 'Préparation du PDF…' : canSharePdf() ? 'Imprimer / Partager (A4)' : 'Imprimer (PDF A4)'}
             </Button>
           </>
         }
       />
       {error && <Notice>Lecture impossible : {error}</Notice>}
-      {!rows && !error && <p className="text-[17px] text-fg-muted">Chargement…</p>}
-      {rows && (
+      {!table && !error && <p className="text-[17px] text-fg-muted">Chargement…</p>}
+      {table && (
         <>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <label className="flex min-h-12 cursor-pointer items-center gap-3 text-[16px] font-medium text-fg">
-              <input type="checkbox" checked={withProducts} onChange={toggleProducts} className="h-6 w-6 accent-[var(--accent)]" />
-              Afficher aussi les produits (vendus tels quels ou en supplément)
-            </label>
-            {updatedLabel && <p className="text-[15px] font-semibold text-fg-muted">{updatedLabel}</p>}
-          </div>
-          {rows.groups.length === 0 ? (
-            <EmptyCard>Aucune recette active. Le gérant les ajoute dans Gestion › Recettes.</EmptyCard>
+          {table.groups.length === 0 ? (
+            <EmptyCard>Aucun plat du menu. Le gérant les ajoute dans Gestion › Recettes › Menu.</EmptyCard>
           ) : (
-            <AllergenGrid groups={rows.groups} />
+            <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+              <AllergenPoster groups={table.groups} updatedLabel={updatedLabel} />
+            </div>
           )}
-          <p className="mt-4 max-w-4xl text-[14px] leading-relaxed text-fg-subtle">{ALLERGEN_LEGAL}</p>
-          <p className="mt-2 max-w-4xl text-[14px] font-medium text-fg-muted">
-            Allergènes calculés à partir des fiches Produits et Recettes : à vérifier sur vos fiches fournisseurs et votre PMS avant affichage.
+          <p className="mt-4 max-w-4xl text-[14px] font-medium text-fg-muted">
+            Allergènes calculés à partir des fiches Produits et Recettes (préparations comprises) : à vérifier sur vos fiches fournisseurs et votre PMS avant affichage.
           </p>
-          {rows.groups.length > 0 && <A4PrintSheet groups={rows.groups} updatedLabel={updatedLabel} />}
+          {table.groups.length > 0 && <A4PrintSheet groups={table.groups} updatedLabel={updatedLabel} />}
         </>
       )}
     </main>
   )
 }
 
-/** Grille lisible : plats en lignes, 14 allergènes en colonnes, coches nettes (icône + texte accessible). */
-function AllergenGrid({ groups }: { groups: AllergenTableGroup[] }) {
+const display = { fontFamily: "'Bowlby One', system-ui, sans-serif", fontWeight: 400 } as const
+
+function Present({ size = 10 }: { size?: number }) {
+  return <span aria-hidden="true" style={{ display: 'inline-block', width: size, height: size, borderRadius: '50%', background: POSTER.pink }} />
+}
+function Trace({ size = 10 }: { size?: number }) {
+  return <span aria-hidden="true" style={{ display: 'inline-block', width: size, height: size, borderRadius: '50%', border: `1.5px solid ${POSTER.yellow}`, boxSizing: 'border-box' }} />
+}
+
+/**
+ * L'affiche, identique à l'écran et à l'impression directe (couleurs fixes de la charte, quel que soit le thème).
+ * Tableau accessible : en-têtes de colonnes et de lignes, chaque case porte « Présent » / « Peut en contenir ».
+ */
+export function AllergenPoster({ groups, updatedLabel, print = false }: { groups: AllergenTableGroup[]; updatedLabel: string; print?: boolean }) {
+  const cell = 'px-0 text-center align-middle'
   return (
-    <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-card">
-      <table className="w-full min-w-[62rem] table-fixed border-collapse text-left">
-        <caption className="sr-only">Allergènes présents par plat</caption>
+    <section
+      aria-label="Tableau des allergènes"
+      className={`relative min-w-[60rem] ${print ? '' : 'rounded-2xl shadow-card'}`}
+      style={{ color: POSTER.white, background: POSTER.navy, border: `5px solid ${POSTER.pink}`, padding: print ? '9mm 11mm 7mm' : '26px 34px 22px', printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+    >
+      <header className="flex items-center gap-6">
+        <BrandLogo size={print ? 86 : 96} title="Space Diner" />
+        <div className="min-w-0 flex-1">
+          <h2 style={{ ...display, color: POSTER.cyan, fontSize: print ? 34 : 38, lineHeight: 1.05, letterSpacing: '0.01em' }}>{ALLERGEN_TABLE_TITLE.toUpperCase()}</h2>
+          <p className="mt-1 font-bold" style={{ color: POSTER.yellow, fontSize: print ? 14 : 16 }}>
+            {ALLERGEN_TABLE_SUBTITLE}
+          </p>
+        </div>
+        {updatedLabel && (
+          <p className="self-start text-[12px]" style={{ color: POSTER.chrome }}>
+            {updatedLabel}
+          </p>
+        )}
+      </header>
+
+      <table className="mt-4 w-full table-fixed border-collapse">
+        <caption className="sr-only">Allergènes par plat du menu : présent ou peut en contenir</caption>
+        <colgroup>
+          <col style={{ width: '31%' }} />
+          {ALLERGENS.map((a, i) => (
+            <col key={a} style={{ background: i % 2 === 1 ? POSTER.band : 'transparent' }} />
+          ))}
+        </colgroup>
         <thead>
-          <tr className="bg-sunken">
-            <th scope="col" className="sticky left-0 z-10 w-48 bg-sunken px-4 py-3 align-bottom text-[14px] font-semibold text-fg">
-              Plat / préparation
+          <tr>
+            <th scope="col" className="sr-only">
+              Plat
             </th>
             {ALLERGENS.map((a) => (
-              <th key={a} scope="col" className="border-l border-line px-1 py-3 text-center align-bottom text-[11.5px] leading-tight font-semibold break-words text-fg-muted">
-                {ALLERGEN_LABELS[a]}
+              <th key={a} scope="col" className="h-[92px] px-0 pb-2 align-bottom" aria-label={ALLERGEN_LABELS[a]}>
+                <span className="mx-auto block text-[12.5px] leading-none font-bold whitespace-nowrap" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                  {POSTER_HEADERS[a]}
+                </span>
               </th>
             ))}
           </tr>
@@ -178,26 +181,29 @@ function AllergenGrid({ groups }: { groups: AllergenTableGroup[] }) {
         {groups.map((g) => (
           <tbody key={g.title}>
             <tr>
-              <th colSpan={ALLERGENS.length + 1} scope="colgroup" className="bg-surface px-4 pt-4 pb-1.5 text-[13px] font-semibold tracking-[0.06em] text-fg-subtle uppercase">
-                {g.title}
+              <th colSpan={ALLERGENS.length + 1} scope="colgroup" className="pt-3 pb-1 text-left" style={{ background: POSTER.navy, borderBottom: `1.5px solid ${POSTER.cyan}` }}>
+                <span style={{ ...display, color: POSTER.cyan, fontSize: 15, letterSpacing: '0.02em' }}>{g.title.toUpperCase()}</span>
               </th>
             </tr>
             {g.rows.map((r) => (
-              <tr key={r.name} className="border-t border-line even:bg-canvas/40">
-                <th scope="row" className="sticky left-0 z-10 bg-surface px-4 py-3 text-[16px] font-semibold text-fg">
+              <tr key={r.name} style={{ borderBottom: `1px solid ${POSTER.rule}` }}>
+                <th scope="row" className="py-2 pr-3 pl-2 text-left text-[15px] leading-snug font-bold">
                   {r.name}
                 </th>
                 {ALLERGENS.map((a) => {
-                  const has = r.allergens.includes(a)
+                  const present = r.allergens.includes(a)
+                  const trace = !present && r.traces.includes(a)
                   return (
-                    <td key={a} className="border-l border-line px-1 py-2 text-center">
-                      {has ? (
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-fg text-canvas" role="img" aria-label={`Contient : ${ALLERGEN_LABELS[a]}`}>
-                          <IconCheck size={18} strokeWidth={3} />
+                    <td key={a} className={cell}>
+                      {present ? (
+                        <span role="img" aria-label={`Présent : ${ALLERGEN_LABELS[a]}`} className="inline-flex">
+                          <Present />
                         </span>
-                      ) : (
-                        <span className="sr-only">Non</span>
-                      )}
+                      ) : trace ? (
+                        <span role="img" aria-label={`Peut en contenir : ${ALLERGEN_LABELS[a]}`} className="inline-flex">
+                          <Trace />
+                        </span>
+                      ) : null}
                     </td>
                   )
                 })}
@@ -206,54 +212,40 @@ function AllergenGrid({ groups }: { groups: AllergenTableGroup[] }) {
           </tbody>
         ))}
       </table>
-    </div>
+
+      <footer className="mt-4 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+        <div className="max-w-[40rem] text-[13px] leading-relaxed">
+          <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className="inline-flex items-center gap-1.5">
+              <Present /> {LEGEND_PRESENT}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Trace /> {LEGEND_TRACES}
+            </span>
+          </p>
+          {ALLERGEN_NOTICE.map((t) => (
+            <p key={t} className="mt-1">
+              {t}
+            </p>
+          ))}
+        </div>
+        <p className="text-right" style={{ ...display, color: POSTER.yellow, fontSize: 17, lineHeight: 1.35 }}>
+          {ALLERGEN_CALLOUT[0]}
+          <br />
+          {ALLERGEN_CALLOUT[1]}
+        </p>
+      </footer>
+    </section>
   )
 }
 
-/** Vue d'impression directe A4 paysage (noir et blanc). */
+/** Vue d'impression directe A4 paysage : la même affiche, couleurs imprimées (print-color-adjust). */
 function A4PrintSheet({ groups, updatedLabel }: { groups: AllergenTableGroup[]; updatedLabel: string }) {
   if (typeof document === 'undefined') return null
-  const cell = { border: '0.5pt solid #999', padding: '4pt 2pt', textAlign: 'center' as const }
   return createPortal(
-    <div id="a4-print-root" aria-hidden="true" style={{ fontFamily: 'system-ui, sans-serif', color: '#000', padding: '10mm' }}>
+    <div id="a4-print-root" aria-hidden="true" style={{ width: '297mm', height: '210mm', overflow: 'hidden', background: POSTER.navy }}>
       <style>{'@page { size: A4 landscape; margin: 0 }'}</style>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h1 style={{ fontSize: '22pt', fontWeight: 900, margin: 0 }}>{ALLERGEN_TABLE_TITLE}</h1>
-        <p style={{ fontSize: '10pt', fontWeight: 700, margin: 0 }}>{updatedLabel}</p>
-      </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '6mm', fontSize: '9pt' }}>
-        <thead>
-          <tr>
-            <th style={{ ...cell, textAlign: 'left', width: '50mm', background: '#000', color: '#fff' }}>Plat / préparation</th>
-            {ALLERGENS.map((a) => (
-              <th key={a} style={{ ...cell, background: '#000', color: '#fff', fontSize: '7pt' }}>
-                {ALLERGEN_LABELS[a]}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {groups.flatMap((g) => [
-            <tr key={g.title}>
-              <td colSpan={ALLERGENS.length + 1} style={{ padding: '6pt 2pt 2pt', fontSize: '8pt', fontWeight: 700, textTransform: 'uppercase' }}>
-                {g.title}
-              </td>
-            </tr>,
-            ...g.rows.map((r) => (
-              <tr key={`${g.title}-${r.name}`}>
-                <td style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: '10pt' }}>{r.name}</td>
-                {ALLERGENS.map((a) => (
-                  <td key={a} style={{ ...cell, fontSize: '13pt', fontWeight: 900 }}>
-                    {r.allergens.includes(a) ? 'X' : ''}
-                  </td>
-                ))}
-              </tr>
-            )),
-          ])}
-        </tbody>
-      </table>
-      <p style={{ fontSize: '8pt', marginTop: '6mm', color: '#333' }}>{ALLERGEN_LEGAL}</p>
-      <p style={{ fontSize: '8pt', fontWeight: 700 }}>X = allergène présent dans le plat.</p>
+      <AllergenPoster groups={groups} updatedLabel={updatedLabel} print />
     </div>,
     document.body,
   )

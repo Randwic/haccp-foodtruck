@@ -5,6 +5,8 @@
 import regularUrl from './fonts/Inter-Regular.ttf?url'
 import boldUrl from './fonts/Inter-Bold.ttf?url'
 import blackUrl from './fonts/Inter-Black.ttf?url'
+// Police de marque (titres du tableau des allergènes) : Bowlby One (SIL OFL 1.1), WOFF lu par fontkit.
+import displayUrl from '@fontsource/bowlby-one/files/bowlby-one-latin-400-normal.woff?url'
 
 export type FontWeight = 'regular' | 'bold' | 'black'
 export const FONT_WEIGHTS: readonly FontWeight[] = ['regular', 'bold', 'black']
@@ -66,4 +68,30 @@ export function loadLabelFonts(): Promise<LabelFonts> {
     throw e
   })
   return cache
+}
+
+// ---------- Police de marque (Bowlby One) : tableau des allergènes ----------
+
+export type DisplayFontLoader = () => Promise<Uint8Array>
+const fetchDisplay: DisplayFontLoader = async () => {
+  const res = await fetch(displayUrl)
+  if (!res.ok) throw new Error(`Police introuvable (${res.status})`)
+  return new Uint8Array(await res.arrayBuffer())
+}
+let displayLoader: DisplayFontLoader = fetchDisplay
+let displayCache: Promise<Uint8Array> | null = null
+
+/** Remplace le chargement de la police de marque (tests : lecture sur disque). */
+export function setDisplayFontLoader(l: DisplayFontLoader | null): void {
+  displayLoader = l ?? fetchDisplay
+  displayCache = null
+}
+
+/** Octets de Bowlby One (WOFF), chargés une fois. */
+export function loadDisplayFont(): Promise<Uint8Array> {
+  displayCache ??= displayLoader().catch((e: unknown) => {
+    displayCache = null
+    throw e
+  })
+  return displayCache
 }

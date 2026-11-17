@@ -1,8 +1,8 @@
 // Espace gérant : création du compte, connexion, enrôlement de l'appareil et paramétrage
 // (équipements, seuils, équipe, réglages). L'interface ne dépend que de cette interface ;
 // implémentations : Supabase (./supabaseManager.ts) et mémoire (./mockManager.ts).
-import type { DeviceEnrollResponse, Equipment, EquipmentKind, RecordType, StaffMember, StaffRole, Threshold } from '../../../shared/types.ts'
-import type { Allergen, Checklist, ChecklistItem, CleaningFrequency, CleaningTask, Product, Recipe, StorageMode, Supplier } from '../../../shared/payloads.ts'
+import type { DeviceEnrollResponse, Equipment, EquipmentKind, HaccpRecord, RecordType, StaffMember, StaffRole, Threshold } from '../../../shared/types.ts'
+import type { Allergen, Checklist, ChecklistItem, CleaningFrequency, CleaningTask, DocumentCategory, DocumentRef, IntegrityReport, Product, Recipe, StorageMode, Supplier } from '../../../shared/payloads.ts'
 
 export interface BootstrapStatus {
   needs_bootstrap: boolean
@@ -96,6 +96,32 @@ export interface ChecklistInput {
   name: string
   kind: Checklist['kind']
   items: ChecklistItem[]
+}
+
+/** Lot 7 : fiche d'un document (le fichier, lui, ne change jamais : nouvelle version = nouvelle fiche). */
+export interface DocumentInput {
+  title: string
+  category: DocumentCategory
+  /** AAAA-MM-JJ ou null. */
+  issued_on: string | null
+  /** AAAA-MM-JJ ou null : échéance (rappel avant expiration). */
+  valid_until: string | null
+  notes: string | null
+}
+
+/** Lot 7 : enregistrement du registre lu sur le serveur (tous appareils). */
+export interface RegistryRecord extends HaccpRecord {
+  server_time: string
+  clock_suspect: boolean
+  /** Non nul : contenu refusé par le serveur, stocké en quarantaine (hors registre affiché). */
+  quarantine_reason: string | null
+}
+
+/** Lot 7 : appareil enrôlé (nom affiché dans le registre). */
+export interface ManagedDevice {
+  id: string
+  name: string
+  revoked_at: string | null
 }
 
 export type ManagerErrorCode =
@@ -203,4 +229,26 @@ export interface ManagerApi {
    * absente de l'appareil (prise sur un autre appareil, ou copie locale libérée).
    */
   downloadPhoto(path: string): Promise<Blob>
+
+  // Lot 7 : documents (table `documents` + bucket privé `documents`, gérant seulement ; jamais supprimés : active=false)
+  listDocuments(): Promise<DocumentRef[]> // actifs ET archivés, du plus récent au plus ancien
+  /**
+   * Dépose le fichier (PDF, JPEG, PNG ou WebP, ≤ 10 Mo) sous un nom neuf `<uuid>.<ext>` sans jamais écraser
+   * (upsert: false), PUIS crée la fiche. Si la fiche est refusée, le fichier déposé reste orphelin (inoffensif).
+   */
+  addDocument(file: Blob, input: DocumentInput): Promise<DocumentRef>
+  /** Modifie la fiche (titre, catégorie, dates, notes) ou l'archive (active=false). Le fichier ne change jamais. */
+  updateDocument(id: string, patch: Partial<DocumentInput> & { active?: boolean }): Promise<DocumentRef>
+  downloadDocument(doc: Pick<DocumentRef, 'file_path' | 'mime_type'>): Promise<Blob>
+
+  // Lot 7 : mode Contrôle
+  /**
+   * Registre du serveur (tous appareils) : au moins les enregistrements dont `device_time` est dans [from, to],
+   * les corrections et actions correctives postérieures (elles peuvent viser un enregistrement de la période)
+   * et les originaux visés par ces corrections. Quarantaine comprise (`quarantine_reason` non nul).
+   */
+  listRegistry(range: { from: string; to: string }): Promise<RegistryRecord[]>
+  listDevices(): Promise<ManagedDevice[]>
+  /** Vérification de la chaîne de hachage de tout le registre (Edge Function `verify-integrity`, journalisée). */
+  verifyIntegrity(): Promise<IntegrityReport>
 }

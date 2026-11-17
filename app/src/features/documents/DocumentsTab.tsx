@@ -15,6 +15,7 @@ import {
   CATEGORY_HINTS,
   CATEGORY_LABELS,
   downloadName,
+  EXPIRY_WARNING_DAYS,
   expiringDocuments,
   expiryLabel,
   expiryState,
@@ -73,7 +74,7 @@ export function DocumentsTab({ timeZone, refreshKey = 0, onChanged }: { timeZone
           Documents
         </h2>
         <p className="max-w-2xl text-[17px] text-fg-muted">
-          Rangez ici les papiers à présenter lors d’un contrôle : PDF ou photo. L’application vous prévient {30} jours avant chaque échéance.
+          Rangez ici les papiers à présenter lors d’un contrôle : PDF ou photo. L’application vous prévient {EXPIRY_WARNING_DAYS} jours avant chaque échéance.
         </p>
         <Button onClick={() => setDialog({ kind: 'add' })} icon={<IconPlus size={20} />}>
           Ajouter un document

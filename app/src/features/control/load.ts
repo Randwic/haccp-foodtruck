@@ -91,7 +91,8 @@ export async function loadControlData(core: CoreApi, manager: ManagerApi | null,
   if (deviceInfo && !devices.some((d) => d.id === deviceInfo.device_id)) devices.push({ id: deviceInfo.device_id, name: deviceInfo.name, revoked_at: null })
 
   const names = <T extends { id: string }>(list: readonly T[], label: (x: T) => string) => new Map(list.map((x) => [x.id, label(x)]))
-  const staffNames = names(staff, (s) => s.display_name)
+  // Équipe du serveur, complétée par celle de l'appareil (noms toujours disponibles hors-ligne).
+  const staffNames = names([...(await core.listStaff().catch(() => [])), ...staff], (s) => s.display_name)
   const deviceNames = names(devices, (d) => d.name)
   const equipmentNames = names(equipment, (e) => e.name)
   const supplierNames = names(suppliers, (s) => s.name)

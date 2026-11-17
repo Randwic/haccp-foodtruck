@@ -197,8 +197,10 @@ export function PmsTab({ manager, timeZone, onSaved }: { manager: ManagerApi | n
               aria-current={step === i ? 'step' : undefined}
               className={`flex min-h-12 w-full items-center justify-center gap-1.5 rounded-lg px-1 text-center text-[13px] leading-tight font-semibold sm:text-[15px] ${step === i ? 'bg-elevated text-fg shadow-card' : 'text-fg-muted active:bg-pressed'}`}
             >
-              <span className="hidden tabular-nums sm:inline">{i + 1}.</span>
-              {title}
+              <span>
+                <span className="hidden tabular-nums sm:inline">{i + 1}. </span>
+                {title}
+              </span>
             </button>
           </li>
         ))}

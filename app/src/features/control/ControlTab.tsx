@@ -228,7 +228,7 @@ export function ControlTab({ manager, timeZone, onSignIn }: { manager: ManagerAp
               {!integrity && 'Faites d’abord « Vérifier » pour y joindre la preuve d’intégrité.'}
             </p>
             <label className="mt-3 flex min-h-12 items-center gap-3 text-[16px] text-fg">
-              <input type="checkbox" checked={withPhotos} onChange={(e) => setWithPhotos(e.target.checked)} className="h-6 w-6 accent-[var(--color-accent)]" />
+              <input type="checkbox" checked={withPhotos} onChange={(e) => setWithPhotos(e.target.checked)} className="h-6 w-6 accent-[var(--accent)]" />
               Joindre les photos ({Math.min(report.totals.photos, MAX_PDF_PHOTOS)}
               {report.totals.photos > MAX_PDF_PHOTOS ? ` sur ${report.totals.photos}` : ''})
             </label>

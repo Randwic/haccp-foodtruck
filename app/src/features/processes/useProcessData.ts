@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Product } from '../../../../shared/payloads.ts'
 import type { Equipment, HaccpRecord, StaffMember, Threshold } from '../../../../shared/types.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { useNow } from '../../ui/hooks/useNow.ts'
@@ -23,13 +24,16 @@ export interface ProcessData {
   reheating: TimedBatch[]
   thawing: ThawBatch[]
   spot: SpotEntry[]
+  /** Lot 4 bis : catalogue actif (température à cœur minimale par produit pour la cuisson). */
+  products: Product[]
   rules: { cooling: TimedRule; reheating: TimedRule; hot_holding: SpotRule; cooking_check: SpotRule }
 }
 
-export function buildProcessData(input: Omit<ProcessData, 'cooling' | 'reheating' | 'thawing' | 'spot' | 'rules'>): ProcessData {
+export function buildProcessData(input: Omit<ProcessData, 'cooling' | 'reheating' | 'thawing' | 'spot' | 'rules' | 'products'> & { products?: Product[] }): ProcessData {
   const { records, thresholds } = input
   return {
     ...input,
+    products: input.products ?? [],
     cooling: buildTimedBatches(records, 'cooling'),
     reheating: buildTimedBatches(records, 'reheating'),
     thawing: buildThawBatches(records),
@@ -52,7 +56,8 @@ export function useProcessData() {
   const reload = useCallback(async () => {
     try {
       const since = new Date(Date.now() - LOAD_WINDOW_MS).toISOString()
-      const [equipment, thresholds, settings, establishment, staff, ...lists] = await Promise.all([
+      const [products, equipment, thresholds, settings, establishment, staff, ...lists] = await Promise.all([
+        core.listProducts(),
         core.listEquipment(),
         core.listThresholds(),
         core.getSettings(),
@@ -60,7 +65,7 @@ export function useProcessData() {
         core.listStaff(),
         ...PROCESS_RECORD_TYPES.map((type) => core.listRecords({ type, since })),
       ])
-      setData(buildProcessData({ equipment, thresholds, timeZone: establishment?.timezone || DEFAULT_TIMEZONE, thawDlcDays: settings?.thaw_dlc_days ?? DEFAULT_THAW_DLC_DAYS, staff, records: lists.flat() }))
+      setData(buildProcessData({ equipment, thresholds, timeZone: establishment?.timezone || DEFAULT_TIMEZONE, thawDlcDays: settings?.thaw_dlc_days ?? DEFAULT_THAW_DLC_DAYS, staff, records: lists.flat(), products }))
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

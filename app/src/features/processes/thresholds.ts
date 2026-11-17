@@ -1,7 +1,7 @@
 // Seuils des procédés (refroidissement, remise en température, maintien au chaud, cuisson à cœur).
 // Source : seuil générique (equipment_id null) du check_type, sinon DEFAULT_PROCESS_THRESHOLDS
 // (shared/payloads.ts). Pour cooling / reheating, la durée maximale est dans `tolerance_minutes`.
-import { DEFAULT_PROCESS_THRESHOLDS } from '../../../../shared/payloads.ts'
+import { DEFAULT_PROCESS_THRESHOLDS, type Product } from '../../../../shared/payloads.ts'
 import type { RecordType, Threshold } from '../../../../shared/types.ts'
 import type { TemperatureThreshold } from '../../ui/temperature.ts'
 
@@ -62,4 +62,41 @@ export function spotRule(kind: SpotKind, thresholds: readonly Threshold[]): Spot
   const t = generic(thresholds, kind)
   if (t && (t.min_c !== null || t.max_c !== null)) return { kind, threshold: { min_c: t.min_c, max_c: t.max_c }, isDefault: false }
   return { kind, threshold: { min_c: DEFAULT_PROCESS_THRESHOLDS[kind].min_c, max_c: null }, isDefault: true }
+}
+
+// ---------- Lot 4 bis : cuisson à cœur par produit ----------
+
+const key = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+
+/** Produits du catalogue proposés pour la cuisson à cœur : actifs, avec une température minimale, triés par nom. */
+export function cookableProducts(products: readonly Product[]): Product[] {
+  return products.filter((p) => p.active && p.cook_min_c !== null).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+}
+
+/** Produit du catalogue désigné par ce libellé (même nom, sans tenir compte des accents ni de la casse). */
+export function catalogProductNamed(products: readonly Product[], name: string): Product | null {
+  const k = key(name)
+  if (!k) return null
+  return products.find((p) => p.cook_min_c !== null && key(p.name) === k) ?? null
+}
+
+export interface CookingRule extends SpotRule {
+  /** Produit du catalogue dont vient le seuil (cook_min_c), sinon null (seuil générique). */
+  product: Product | null
+}
+
+/**
+ * Seuil de la cuisson à cœur pour un produit : `cook_min_c` du produit du catalogue (ex. porc 63 °C,
+ * poulet / nuggets 74 °C) ; sinon le seuil générique `cooking_check` (défaut 70 °C).
+ */
+export function cookingRuleFor(productName: string, products: readonly Product[], generic: SpotRule): CookingRule {
+  const product = catalogProductNamed(products, productName)
+  if (product) return { kind: 'cooking_check', threshold: { min_c: product.cook_min_c, max_c: null }, isDefault: false, product }
+  return { ...generic, product: null }
 }

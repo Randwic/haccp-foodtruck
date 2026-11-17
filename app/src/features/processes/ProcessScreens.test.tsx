@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEMO_EQUIPMENT } from '../../core/mockTransport.ts'
+import { DEMO_EQUIPMENT, DEMO_PRODUCTS } from '../../core/mockTransport.ts'
+import { MENU_PRODUCTS } from '../../core/demoMenu.ts'
 import { createFakeCore, type FakeCoreOptions, type FakeRecordSeed } from '../../ui/fakeCore.ts'
 import { renderWithCore } from '../../ui/testUtils.tsx'
 
@@ -174,6 +175,64 @@ describe('Cuisson & maintien', () => {
     expect(hot.payload).toEqual({ product: 'Chili', value_c: 68, source: 'manual', in_range: true })
     press('Accueil')
     expect(await screen.findByRole('button', { name: 'Cuisson & maintien : 2 mesures aujourd’hui' })).toBeInTheDocument()
+  })
+})
+
+describe('Cuisson à cœur par produit (lot 4 bis)', () => {
+  const catalog = { products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS] }
+
+  it('porc 63 °C : 65 °C conforme ; poulet / nuggets 74 °C : 70 °C hors seuil → action corrective', async () => {
+    const core = setup(catalog)
+    await openTile(/^Cuisson & maintien :/, 'Cuisson & maintien')
+    expect(screen.getByText(/Seuil selon le produit \(sinon ≥ 70 °C\)/)).toBeInTheDocument()
+    press('Nouvelle mesure — Cuisson à cœur')
+    await screen.findByRole('heading', { name: 'Cuisson à cœur' })
+    const picker = screen.getByRole('radiogroup', { name: 'Produit du catalogue' })
+    // Seuls les produits avec une température à cœur minimale sont proposés.
+    expect(within(picker).getAllByRole('radio').map((r) => r.textContent)).toEqual([
+      'Filet de poulet pané≥ 74 °C',
+      'Nuggets de poulet≥ 74 °C',
+      'Porc effiloché BBQ≥ 63 °C',
+      'Sauce cheddar (poche)≥ 63 °C',
+    ])
+    fireEvent.click(within(picker).getByRole('radio', { name: /^Porc effiloché BBQ/ }))
+    expect(screen.getByRole('status')).toHaveTextContent('Seuil appliqué : ≥ 63 °C — température à cœur minimale de « Porc effiloché BBQ »')
+    typeTemp('65')
+    expect(screen.getByText('Conforme')).toBeInTheDocument()
+    press('Enregistrer la mesure')
+    await screen.findByRole('heading', { name: 'Cuisson & maintien', level: 1 })
+
+    press('Nouvelle mesure — Cuisson à cœur')
+    fireEvent.click(within(await screen.findByRole('radiogroup', { name: 'Produit du catalogue' })).getByRole('radio', { name: /^Nuggets de poulet/ }))
+    typeTemp('70')
+    expect(screen.getByText('Hors seuil')).toBeInTheDocument()
+    press('Enregistrer la mesure')
+    await screen.findByRole('heading', { name: 'Action corrective obligatoire' })
+    expect(screen.getByText(/seuil ≥ 74 °C/)).toBeInTheDocument()
+
+    const records = await core.listRecords({ type: 'cooking_check' })
+    expect(records.map((r) => r.payload)).toEqual(
+      expect.arrayContaining([
+        { product: 'Porc effiloché BBQ', value_c: 65, source: 'manual', in_range: true },
+        { product: 'Nuggets de poulet', value_c: 70, source: 'manual', in_range: false },
+      ]),
+    )
+  })
+
+  it('saisie libre : nom du catalogue reconnu (accents / casse), sinon seuil générique', async () => {
+    const core = setup(catalog)
+    await openTile(/^Cuisson & maintien :/, 'Cuisson & maintien')
+    press('Nouvelle mesure — Cuisson à cœur')
+    await screen.findByRole('heading', { name: 'Cuisson à cœur' })
+    const field = screen.getByLabelText('Produit (ou autre produit, saisie libre)')
+    fireEvent.change(field, { target: { value: 'nuggets DE poulet' } })
+    expect(screen.getByRole('status')).toHaveTextContent('≥ 74 °C')
+    fireEvent.change(field, { target: { value: 'Saucisse de Toulouse' } })
+    expect(screen.getByRole('status')).toHaveTextContent('Seuil appliqué : ≥ 70 °C — seuil générique')
+    typeTemp('71')
+    press('Enregistrer la mesure')
+    await screen.findByRole('heading', { name: 'Cuisson & maintien', level: 1 })
+    expect((await core.listRecords({ type: 'cooking_check' }))[0].payload).toEqual({ product: 'Saucisse de Toulouse', value_c: 71, source: 'manual', in_range: true })
   })
 })
 

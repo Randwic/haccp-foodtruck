@@ -4,7 +4,7 @@ import type { HotHoldingPayload } from '../../../../shared/payloads.ts'
 import type { HaccpRecord } from '../../../../shared/types.ts'
 import { Button, Notice, TemperatureInput, useToast } from '../../ui/components/index.ts'
 import { formatTime } from '../../ui/format.ts'
-import { IconCheck, IconCooking, IconEdit, IconError, IconFlame, IconHistory, IconPlus } from '../../ui/icons.tsx'
+import { IconCheck, IconCooking, IconEdit, IconError, IconFlame, IconHistory, IconPlus, IconTemperature } from '../../ui/icons.tsx'
 import { describeThreshold, formatTemperature, isInRange } from '../../ui/temperature.ts'
 import { CorrectiveActionFlow } from '../corrective-action/CorrectiveActionFlow.tsx'
 import { dayLabel, whenLabel } from '../temperatures/format.ts'
@@ -30,7 +30,7 @@ import {
 } from './common.tsx'
 import { TemperatureCorrection } from './CorrectionForms.tsx'
 import { recentProducts, type SpotEntry } from './entries.ts'
-import type { SpotKind } from './thresholds.ts'
+import { catalogProductNamed, cookableProducts, cookingRuleFor, type SpotKind, type SpotRule } from './thresholds.ts'
 import { PROCESS_HISTORY_DAYS, useProcessStatus, type ProcessData } from './useProcessData.ts'
 
 const SPOT_LABELS: Record<SpotKind, { title: string; short: string; hint: string; defaults: readonly string[] }> = {
@@ -38,7 +38,7 @@ const SPOT_LABELS: Record<SpotKind, { title: string; short: string; hint: string
     title: 'Cuisson à cœur',
     short: 'Cuisson',
     hint: 'Sonde au centre de la pièce la plus épaisse, en fin de cuisson.',
-    defaults: ['Steak haché', 'Volaille', 'Saucisse'],
+    defaults: ['Steak haché', 'Saucisse'],
   },
   hot_holding: {
     title: 'Maintien au chaud',
@@ -46,6 +46,11 @@ const SPOT_LABELS: Record<SpotKind, { title: string; short: string; hint: string
     hint: 'Sonde au cœur du produit dans le bac, la vitrine ou le bain-marie.',
     defaults: ['Chili con carne', 'Sauce', 'Frites'],
   },
+}
+
+/** Seuil en vigueur : cuisson → celui du produit du catalogue (cook_min_c) s'il existe ; maintien → générique. */
+function ruleFor(data: ProcessData, kind: SpotKind, product: string): SpotRule {
+  return kind === 'cooking_check' ? cookingRuleFor(product, data.products, data.rules.cooking_check) : data.rules[kind]
 }
 
 function SpotIcon({ kind, size = 22 }: { kind: SpotKind; size?: number }) {
@@ -75,7 +80,7 @@ export function CookingScreen({ onBack }: { onBack: () => void }) {
           detail={
             <>
               <span className="font-semibold text-danger tabular-nums">{formatTemperature(view.value_c)}</span>
-              {entry ? ` ${whenLabel(entry.time, now, data.timeZone)}` : ''} · seuil {describeThreshold(data.rules[kind].threshold)}
+              {entry ? ` ${whenLabel(entry.time, now, data.timeZone)}` : ''} · seuil {describeThreshold(ruleFor(data, kind, entry?.payload.product ?? '').threshold)}
             </>
           }
           onDone={async () => {
@@ -161,6 +166,7 @@ function SpotList({ data, now, onEntry, onHistory, onCorrectiveAction }: { data:
   const today = data.spot.filter((e) => Date.parse(e.time) >= todayStart)
   const missing = data.spot.filter((e) => e.missingAction)
   const anyDefault = data.rules.cooking_check.isDefault || data.rules.hot_holding.isDefault
+  const cookable = cookableProducts(data.products)
 
   return (
     <>
@@ -207,7 +213,10 @@ function SpotList({ data, now, onEntry, onHistory, onCorrectiveAction }: { data:
                 <div className="min-w-0 flex-1">
                   <h2 className="text-[20px] leading-snug font-semibold text-fg">{SPOT_LABELS[kind].title}</h2>
                   <p className="text-[15px] text-fg-muted">
-                    Seuil {describeThreshold(data.rules[kind].threshold)} · {n === 0 ? 'aucune mesure aujourd’hui' : plural(n, 'mesure aujourd’hui', 'mesures aujourd’hui')}
+                    {kind === 'cooking_check' && cookable.length > 0
+                      ? `Seuil selon le produit (sinon ${describeThreshold(data.rules[kind].threshold)})`
+                      : `Seuil ${describeThreshold(data.rules[kind].threshold)}`}{' '}
+                    · {n === 0 ? 'aucune mesure aujourd’hui' : plural(n, 'mesure aujourd’hui', 'mesures aujourd’hui')}
                   </p>
                 </div>
               </div>
@@ -247,8 +256,11 @@ function SpotEntryForm({ kind, data, onSaved }: { kind: SpotKind; data: ProcessD
   const toast = useToast()
   const { save, busy, error } = useRecordSaver()
   const labels = SPOT_LABELS[kind]
-  const rule = data.rules[kind]
   const [product, setProduct] = useState('')
+  // Cuisson : seuil du produit du catalogue (cook_min_c), sinon seuil générique.
+  const rule = ruleFor(data, kind, product)
+  const catalog = kind === 'cooking_check' ? cookableProducts(data.products) : []
+  const fromCatalog = kind === 'cooking_check' ? catalogProductNamed(data.products, product) : null
   const [value, setValue] = useState<number | null>(null)
   const [equipmentId, setEquipmentId] = useState<string | null>(null)
   const holders = kind === 'hot_holding' ? data.equipment.filter((e) => e.active && e.kind === 'hot_holding') : []
@@ -283,9 +295,39 @@ function SpotEntryForm({ kind, data, onSaved }: { kind: SpotKind; data: ProcessD
               </p>
             </div>
           </div>
+          {catalog.length > 0 && (
+            <div role="radiogroup" aria-label="Produit du catalogue" className="mt-6">
+              <p className="mb-2 text-[15px] font-semibold text-fg">Produit du catalogue</p>
+              <div className="flex flex-wrap gap-2">
+                {catalog.map((p) => {
+                  const on = fromCatalog?.id === p.id
+                  return (
+                    <button key={p.id} type="button" role="radio" aria-checked={on} className={chipClass(on)} onClick={() => setProduct(p.name)}>
+                      {p.name}
+                      <span className="ml-1.5 font-normal tabular-nums opacity-80">≥ {formatTemperature(p.cook_min_c!)}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           <div className="mt-6">
-            <ProductField value={product} onChange={setProduct} suggestions={suggestions} />
+            <ProductField
+              label={catalog.length > 0 ? 'Produit (ou autre produit, saisie libre)' : 'Produit'}
+              value={product}
+              onChange={setProduct}
+              suggestions={suggestions.filter((x) => !catalog.some((p) => p.name === x))}
+            />
           </div>
+          {kind === 'cooking_check' && product.trim() && (
+            <p role="status" className="mt-4 flex items-start gap-2 rounded-xl border border-line bg-sunken px-4 py-3 text-[15px] leading-snug text-fg">
+              <IconTemperature size={20} className="mt-px shrink-0 text-accent" />
+              <span>
+                Seuil appliqué : <span className="font-semibold tabular-nums">{describeThreshold(rule.threshold)}</span>
+                {fromCatalog ? ` — température à cœur minimale de « ${fromCatalog.name} »` : ` — seuil générique${rule.isDefault ? ' (par défaut, à confirmer selon votre PMS)' : ''}`}
+              </span>
+            </p>
+          )}
           {holders.length > 0 && (
             <div role="group" aria-label="Équipement (facultatif)" className="mt-5">
               <p className="mb-2 text-[15px] font-semibold text-fg">Équipement (facultatif)</p>
@@ -319,7 +361,7 @@ function SpotEntryForm({ kind, data, onSaved }: { kind: SpotKind; data: ProcessD
 
 function SpotCorrection({ entry, data, now, onSaved, onCancel }: { entry: SpotEntry; data: ProcessData; now: Date; onSaved: (rec: HaccpRecord, r: HotHoldingPayload) => void; onCancel: () => void }) {
   const author = useAuthorName(data.staff)
-  const rule = data.rules[entry.kind]
+  const rule = ruleFor(data, entry.kind, entry.payload.product)
   return (
     <TemperatureCorrection<HotHoldingPayload>
       type={entry.kind}

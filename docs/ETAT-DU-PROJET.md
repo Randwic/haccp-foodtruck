@@ -4,6 +4,12 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
+## 0. EN COURS (session du 17/11/2026 soir) — à reprendre si la session a été coupée
+Branche `claude/project-thread-rnufx5` (poussée sur GitHub à chaque commit). Lot 7, écrans :
+- FAIT : `ManagerApi` (documents, `listRegistry`, `listDevices`, `verifyIntegrity`) Supabase + simulé ; `features/documents/` (report.ts = moteur PDF A4, model.ts, files.ts, DocumentsTab.tsx) ; `features/control/` (model.ts synthèse, load.ts, csv.ts, pdf.ts, integrity.ts, control.test.ts — 11 tests OK) ; `management/useManagerSession.tsx` (session gérant réutilisable).
+- RESTE : `ControlTab.tsx` (écran période + synthèse + intégrité + boutons PDF/CSV) ; assistant PMS (`features/pms/` : questionnaire, contenu pré-rempli, PDF avec réponses stockées dans les métadonnées du PDF via `Report.setInfoEntry` / `readInfoEntry`, enregistré comme document catégorie `pms`) ; écran « Documents & PMS » à 3 onglets + tuile d'accueil (gérant) + vue dans AppShell ; démo (`main.ts` : documents/registrySource/devices pour le gestionnaire simulé) ; tests d'écran ; captures ; docs (ui.md) ; PR.
+- Cédric veut des sauvegardes automatiques et fréquentes (commit + push après chaque étape).
+
 ## 1. Infrastructure (tout gratuit)
 | Élément | Où | Détail |
 |---|---|---|

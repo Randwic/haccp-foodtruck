@@ -320,6 +320,11 @@ describe('tableau des allergènes', () => {
     expect(within(poster).getByText(/Boissons : voir l’étiquette/)).toBeInTheDocument()
     expect(within(poster).getByText(/Parle-nous-en avant de commander/)).toBeInTheDocument()
     expect(within(poster).getByRole('img', { name: 'Space Diner' })).toBeInTheDocument()
+    // Version iPhone : un bloc par plat, présents puis traces en toutes lettres.
+    const phone = screen.getByRole('region', { name: 'Allergènes par plat (liste)' })
+    const nova = within(phone).getByText('Supernova').closest('li')!
+    expect(nova).toHaveTextContent('Présents : Gluten, Œufs, Poissons, Lait, Moutarde')
+    expect(nova).toHaveTextContent('Peut en contenir : Céleri, Sulfites')
     await waitFor(() => expect(screen.getByRole('button', { name: /^Imprimer/ })).toBeEnabled(), { timeout: 4000 })
     window.open = vi.fn(() => ({}) as Window)
     press(/^Imprimer/)

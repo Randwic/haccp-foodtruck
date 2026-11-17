@@ -4,7 +4,7 @@
 // Trois rendus : écran (même affiche, défilement horizontal sur iPhone), PDF A4 paysage (pdf-lib), impression directe.
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ALLERGENS, type Product, type Recipe } from '../../../../shared/payloads.ts'
+import { ALLERGENS, type Allergen, type Product, type Recipe } from '../../../../shared/payloads.ts'
 import { Button, Notice, useToast } from '../../ui/components/index.ts'
 import { BrandLogo } from '../../ui/brand.tsx'
 import { useCore } from '../../ui/CoreContext.tsx'
@@ -106,9 +106,13 @@ export function AllergenTableScreen({ onBack, backLabel = 'Retour' }: { onBack: 
           {table.groups.length === 0 ? (
             <EmptyCard>Aucun plat du menu. Le gérant les ajoute dans Gestion › Recettes › Menu.</EmptyCard>
           ) : (
-            <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
-              <AllergenPoster groups={table.groups} updatedLabel={updatedLabel} />
-            </div>
+            <>
+              {/* iPhone : liste lisible sans défilement horizontal ; l'affiche complète reste dans le PDF. */}
+              <AllergenPhoneList groups={table.groups} updatedLabel={updatedLabel} />
+              <div className="hidden overflow-x-auto pb-2 sm:block">
+                <AllergenPoster groups={table.groups} updatedLabel={updatedLabel} />
+              </div>
+            </>
           )}
           <p className="mt-4 max-w-4xl text-[14px] font-medium text-fg-muted">
             Allergènes calculés à partir des fiches Produits et Recettes (préparations comprises) : à vérifier sur vos fiches fournisseurs et votre PMS avant affichage.
@@ -171,8 +175,10 @@ export function AllergenPoster({ groups, updatedLabel, print = false }: { groups
             </th>
             {ALLERGENS.map((a) => (
               <th key={a} scope="col" className="h-[92px] px-0 pb-2 align-bottom" aria-label={ALLERGEN_LABELS[a]}>
-                <span className="mx-auto block text-[12.5px] leading-none font-bold whitespace-nowrap" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
-                  {POSTER_HEADERS[a]}
+                <span className="flex justify-center">
+                  <span className="text-[12.5px] leading-none font-bold whitespace-nowrap" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                    {POSTER_HEADERS[a]}
+                  </span>
                 </span>
               </th>
             ))}
@@ -181,7 +187,7 @@ export function AllergenPoster({ groups, updatedLabel, print = false }: { groups
         {groups.map((g) => (
           <tbody key={g.title}>
             <tr>
-              <th colSpan={ALLERGENS.length + 1} scope="colgroup" className="pt-3 pb-1 text-left" style={{ background: POSTER.navy, borderBottom: `1.5px solid ${POSTER.cyan}` }}>
+              <th colSpan={ALLERGENS.length + 1} scope="colgroup" className="pt-3 pb-1 text-left" style={{ borderBottom: `1.5px solid ${POSTER.cyan}` }}>
                 <span style={{ ...display, color: POSTER.cyan, fontSize: 15, letterSpacing: '0.02em' }}>{g.title.toUpperCase()}</span>
               </th>
             </tr>
@@ -213,8 +219,8 @@ export function AllergenPoster({ groups, updatedLabel, print = false }: { groups
         ))}
       </table>
 
-      <footer className="mt-4 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
-        <div className="max-w-[40rem] text-[13px] leading-relaxed">
+      <footer className="mt-4 flex items-end justify-between gap-8">
+        <div className="min-w-0 flex-1 text-[13px] leading-relaxed">
           <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="inline-flex items-center gap-1.5">
               <Present /> {LEGEND_PRESENT}
@@ -229,12 +235,84 @@ export function AllergenPoster({ groups, updatedLabel, print = false }: { groups
             </p>
           ))}
         </div>
-        <p className="text-right" style={{ ...display, color: POSTER.yellow, fontSize: 17, lineHeight: 1.35 }}>
+        <p className="shrink-0 text-right" style={{ ...display, color: POSTER.yellow, fontSize: 17, lineHeight: 1.35 }}>
           {ALLERGEN_CALLOUT[0]}
           <br />
           {ALLERGEN_CALLOUT[1]}
         </p>
       </footer>
+    </section>
+  )
+}
+
+/** Version téléphone : un bloc par plat, ● présents puis ○ traces en toutes lettres. */
+function AllergenPhoneList({ groups, updatedLabel }: { groups: AllergenTableGroup[]; updatedLabel: string }) {
+  const names = (list: readonly Allergen[]) => list.map((a) => POSTER_HEADERS[a]).join(', ')
+  return (
+    <section aria-label="Allergènes par plat (liste)" className="-mx-1 rounded-2xl p-4 sm:hidden" style={{ color: POSTER.white, background: POSTER.navy, border: `4px solid ${POSTER.pink}` }}>
+      <div className="flex items-center gap-3">
+        <BrandLogo size={56} title={null} />
+        <div>
+          <h2 style={{ ...display, color: POSTER.cyan, fontSize: 26, lineHeight: 1.05 }}>{ALLERGEN_TABLE_TITLE.toUpperCase()}</h2>
+          <p className="mt-0.5 text-[14px] font-bold" style={{ color: POSTER.yellow }}>
+            {ALLERGEN_TABLE_SUBTITLE}
+          </p>
+        </div>
+      </div>
+      {groups.map((g) => (
+        <div key={g.title} className="mt-4">
+          <h3 className="pb-1" style={{ ...display, color: POSTER.cyan, fontSize: 15, borderBottom: `1.5px solid ${POSTER.cyan}` }}>
+            {g.title.toUpperCase()}
+          </h3>
+          <ul>
+            {g.rows.map((r) => (
+              <li key={r.name} className="py-2.5" style={{ borderBottom: `1px solid ${POSTER.rule}` }}>
+                <p className="text-[16px] leading-snug font-bold">{r.name}</p>
+                {r.allergens.length > 0 && (
+                  <p className="mt-1 flex items-baseline gap-2 text-[15px] leading-snug">
+                    <span className="relative top-[1px]">
+                      <Present />
+                    </span>
+                    <span>
+                      <span className="sr-only">Présents : </span>
+                      {names(r.allergens)}
+                    </span>
+                  </p>
+                )}
+                {r.traces.length > 0 && (
+                  <p className="mt-0.5 flex items-baseline gap-2 text-[15px] leading-snug" style={{ color: POSTER.chrome }}>
+                    <span className="relative top-[1px]">
+                      <Trace />
+                    </span>
+                    <span>
+                      <span className="sr-only">Peut en contenir : </span>
+                      {names(r.traces)}
+                    </span>
+                  </p>
+                )}
+                {r.allergens.length === 0 && r.traces.length === 0 && <p className="mt-1 text-[15px]">Aucun allergène déclaré</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <div className="mt-4 space-y-1 text-[13px] leading-relaxed">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="inline-flex items-center gap-1.5">
+            <Present /> {LEGEND_PRESENT}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Trace /> {LEGEND_TRACES}
+          </span>
+        </p>
+        {ALLERGEN_NOTICE.map((t) => (
+          <p key={t}>{t}</p>
+        ))}
+        {updatedLabel && <p style={{ color: POSTER.chrome }}>{updatedLabel}</p>}
+      </div>
+      <p className="mt-3" style={{ ...display, color: POSTER.yellow, fontSize: 16, lineHeight: 1.35 }}>
+        {ALLERGEN_CALLOUT[0]} {ALLERGEN_CALLOUT[1]}
+      </p>
     </section>
   )
 }

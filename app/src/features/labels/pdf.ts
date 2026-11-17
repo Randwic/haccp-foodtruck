@@ -81,7 +81,7 @@ export async function buildAllergenTablePdf(input: AllergenTableInput, fonts: La
   const colW = (W - 2 * m - nameW) / ALLERGENS.length
   const top = (yy: number) => H - yy
   const headH = 64
-  const groupH = 24
+  const groupH = 30
   const footerH = 74
   const tableTop = 104
 
@@ -120,6 +120,12 @@ export async function buildAllergenTablePdf(input: AllergenTableInput, fonts: La
     page.drawText('DINER', { x: ox + 100 * s - dinerW / 2, y: top(oy + 129 * s), size: dn, font: display, color: c.white })
   }
 
+  // Bandes verticales une colonne sur deux (lisibilité), dessinées tranche par tranche jusqu'à la dernière ligne.
+  const bands = (y0: number, h: number) =>
+    ALLERGENS.forEach((_, i) => {
+      if (i % 2 === 1) page.drawRectangle({ x: m + nameW + i * colW, y: top(y0 + h), width: colW, height: h, color: c.band })
+    })
+
   const dot = (cx: number, cy: number, kind: 'present' | 'trace') => {
     if (kind === 'present') page.drawCircle({ x: cx, y: top(cy), size: 3.3, color: c.pink })
     else page.drawCircle({ x: cx, y: top(cy), size: 2.9, borderColor: c.yellow, borderWidth: 0.95 })
@@ -138,11 +144,6 @@ export async function buildAllergenTablePdf(input: AllergenTableInput, fonts: La
       const uw = measure(input.updatedLabel, 8.5, 'regular')
       page.drawText(input.updatedLabel, { x: W - m - uw, y: top(42), size: 8.5, font: font.regular, color: c.chrome })
     }
-    // Bandes verticales une colonne sur deux (lisibilité), de l'en-tête au bas du tableau.
-    const bodyBottom = H - footerH - 10
-    ALLERGENS.forEach((_, i) => {
-      if (i % 2 === 1) page.drawRectangle({ x: m + nameW + i * colW, y: top(bodyBottom), width: colW, height: bodyBottom - tableTop - headH, color: c.band })
-    })
     // En-têtes verticaux (lecture de bas en haut).
     ALLERGENS.forEach((a, i) => {
       const label = POSTER_HEADERS[a]
@@ -156,13 +157,15 @@ export async function buildAllergenTablePdf(input: AllergenTableInput, fonts: La
   input.groups.forEach((g, gi) => {
     if (!g.rows.length) return
     if (y + groupH + rowH > H - footerH - 10) newPage(false)
-    page.drawText(g.title.toUpperCase(), { x: m + 2, y: top(y + 15), size: 10.5, font: display, color: c.cyan })
+    bands(y, groupH)
+    page.drawText(g.title.toUpperCase(), { x: m + 2, y: top(y + 21), size: 10.5, font: display, color: c.cyan })
     page.drawRectangle({ x: m, y: top(y + groupH - 1), width: W - 2 * m, height: 1.1, color: c.cyan })
     y += groupH
     g.rows.forEach((r, ri) => {
       const nl = nameLines[gi][ri]
       const h = Math.max(rowH, nl.length * 11.5 + 6)
       if (y + h > H - footerH - 10) newPage(false)
+      bands(y, h)
       nl.forEach((t, k) => page.drawText(t, { x: m + 8, y: top(y + (h - nl.length * 11.5) / 2 + 8.6 + k * 11.5), size: 10, font: font.bold, color: c.white }))
       ALLERGENS.forEach((a, i) => {
         const cx = m + nameW + i * colW + colW / 2
@@ -172,7 +175,6 @@ export async function buildAllergenTablePdf(input: AllergenTableInput, fonts: La
       page.drawRectangle({ x: m, y: top(y + h), width: W - 2 * m, height: 0.7, color: c.rule })
       y += h
     })
-    y += 6
   })
 
   // Pied : légende, mention, appel à parler de ses allergies.

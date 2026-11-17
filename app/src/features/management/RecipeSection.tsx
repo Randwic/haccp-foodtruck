@@ -251,7 +251,7 @@ function OriginList({ items, mark, empty }: { items: AllergenOrigin[]; mark: Rea
   return (
     <ul className="mt-1 space-y-1">
       {items.map((s) => (
-        <li key={s.allergen} className="flex items-baseline gap-2 text-[16px] text-fg">
+        <li key={s.allergen} className="flex items-baseline gap-2 text-[15px] leading-snug text-fg sm:text-[16px]">
           <span className="relative top-[1px] flex w-3 justify-center">{mark}</span>
           <span>
             <span className="font-bold">{ALLERGEN_LABELS[s.allergen]}</span>
@@ -266,7 +266,7 @@ function OriginList({ items, mark, empty }: { items: AllergenOrigin[]; mark: Rea
 /** Panneau collant : allergènes présents (●) et traces (○) calculés en direct, avec leur origine. */
 export function ComputedAllergens({ present, traces, cycles }: { present: AllergenOrigin[]; traces: AllergenOrigin[]; cycles: string[] }) {
   return (
-    <section aria-live="polite" aria-labelledby="computed-title" className="sticky bottom-0 z-10 -mx-1 max-h-[45vh] overflow-y-auto rounded-2xl border-2 border-accent bg-surface p-4 shadow-pop">
+    <section aria-live="polite" aria-labelledby="computed-title" className="sticky bottom-0 z-10 -mx-1 max-h-[30vh] overflow-y-auto rounded-2xl border-2 border-accent bg-surface p-3 shadow-pop sm:max-h-[45vh] sm:p-4">
       <h3 id="computed-title" className="flex items-center gap-2 text-[15px] font-semibold text-fg">
         <IconAllergen size={18} className="text-accent" />
         Allergènes calculés

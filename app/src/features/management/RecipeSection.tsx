@@ -526,7 +526,7 @@ function RecipeModal({
         <AllergenChecklist
           tone="traces"
           legend="Peut en contenir (traces) — propres à la recette"
-          hint="Ex. : friteuse commune avec les nuggets → gluten. Les traces des ingrédients sont reprises automatiquement."
+          hint="Ex. : plan de travail ou friteuse partagés avec un produit qui contient l’allergène. Les traces des ingrédients sont reprises automatiquement."
           value={mayContain}
           onChange={setMayContain}
           locked={ingredientTraces}

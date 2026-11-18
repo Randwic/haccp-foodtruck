@@ -39,7 +39,7 @@ export const MENU_RECIPES: Recipe[] = [
   recipe(3, { name: 'Houston', kind: 'menu_item', category: "Croq'Brioche", ingredient_product_ids: [BRIOCHE, POULET, CHEDDAR, MAYO], shelf_life_hours: null }),
   recipe(4, { name: 'Comète', kind: 'menu_item', category: 'Dessert', ingredient_product_ids: [BRIOCHE, PATE], shelf_life_hours: null }),
   recipe(5, { name: 'Vénus', kind: 'menu_item', category: 'Dessert', ingredient_product_ids: [BRIOCHE, CHANTILLY], shelf_life_hours: null }),
-  recipe(6, { name: 'Frites nature (avec un Croq’Brioche ou en barquette)', kind: 'menu_item', category: 'Frites', ingredient_product_ids: [FRITES], may_contain: ['gluten'], storage: 'ambient', shelf_life_hours: null }),
-  recipe(7, { name: 'Frites Roswell (supplément ou barquette)', kind: 'menu_item', category: 'Frites', ingredient_product_ids: [FRITES, SAUCE_CHEDDAR], may_contain: ['gluten'], storage: 'ambient', shelf_life_hours: null }),
+  recipe(6, { name: 'Frites nature (avec un Croq’Brioche ou en barquette)', kind: 'menu_item', category: 'Frites', ingredient_product_ids: [FRITES], storage: 'ambient', shelf_life_hours: null }),
+  recipe(7, { name: 'Frites Roswell (supplément ou barquette)', kind: 'menu_item', category: 'Frites', ingredient_product_ids: [FRITES, SAUCE_CHEDDAR], storage: 'ambient', shelf_life_hours: null }),
   recipe(8, { name: 'Menu enfant (nuggets, frites, ketchup, compote)', kind: 'menu_item', category: 'Menu enfant', ingredient_product_ids: [NUGGETS, FRITES, KETCHUP, COMPOTE], storage: 'ambient', shelf_life_hours: null }),
 ]

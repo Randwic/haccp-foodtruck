@@ -89,10 +89,10 @@ insert into expected values
   ('Pluton',       '{gluten,oeufs,lait,fruits_a_coque}',    '{soja}'),
   ('Vénus',        '{gluten,oeufs,lait}',                   '{}'),
   -- FRITES ET MENU ENFANT
-  ('Frites nature',               '{}',       '{gluten}'),
-  ('Barquette de frites nature',  '{}',       '{gluten}'),
-  ('Frites Roswell',              '{lait}',   '{gluten,sulfites}'),
-  ('Barquette de frites Roswell', '{lait}',   '{gluten,sulfites}'),
+  ('Frites nature',               '{}',       '{}'),
+  ('Barquette de frites nature',  '{}',       '{}'),
+  ('Frites Roswell',              '{lait}',   '{sulfites}'),
+  ('Barquette de frites Roswell', '{lait}',   '{sulfites}'),
   ('Petit Martien',               '{gluten}', '{oeufs,lait,celeri,moutarde}');
 
 do $$

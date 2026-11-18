@@ -239,8 +239,8 @@ end $$;
 -- 5. Plats du menu (kind 'menu_item', shelf_life_hours null, storage sans objet : 'ambient',
 --    servis tout de suite). Allergènes calculés = tableau des allergènes (vérifié par
 --    supabase/tests/sql/96c_space_diner_v43.sql).
---    Seule trace propre à un plat : gluten sur les frites (friteuse commune aux frites et
---    aux nuggets, mention du tableau des allergènes).
+--    Aucune trace propre aux plats : les nuggets (panés) cuisent dans une friteuse d'appoint
+--    séparée, donc pas de trace de gluten sur les frites (confirmé par Cédric le 18/11/2026).
 -- ---------------------------------------------------------------------------
 with v (id, name, category, products, preparations, may) as (values
   ('5d000000-0000-4000-8000-000000000701'::uuid, 'Supernova', 'Croq''Brioche',
@@ -272,15 +272,15 @@ with v (id, name, category, products, preparations, may) as (values
      array['Pain brioché', 'Mascarpone', 'Crème de citron (lemon curd)', 'Galettes bretonnes', 'Meringues', 'Sucre glace'],
      array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000710', 'Frites nature', 'Frites',
-     array['Frites fraîches précuites', 'Sel fin', 'Huile de friture'], array[]::text[], '{gluten}'),
+     array['Frites fraîches précuites', 'Sel fin', 'Huile de friture'], array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000711', 'Frites Roswell', 'Frites',
      array['Frites fraîches précuites', 'Sel fin', 'Huile de friture', 'Sauce cheddar (achetée)', 'Bacon croustillant (Sol y Tapas Crispy)'],
-     array[]::text[], '{gluten}'),
+     array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000712', 'Barquette de frites nature', 'Frites',
-     array['Frites fraîches précuites', 'Sel fin', 'Huile de friture'], array[]::text[], '{gluten}'),
+     array['Frites fraîches précuites', 'Sel fin', 'Huile de friture'], array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000713', 'Barquette de frites Roswell', 'Frites',
      array['Frites fraîches précuites', 'Sel fin', 'Huile de friture', 'Sauce cheddar (achetée)', 'Bacon croustillant (Sol y Tapas Crispy)'],
-     array[]::text[], '{gluten}'),
+     array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000714', 'Petit Martien', 'Menu enfant',
      array['Nuggets de poulet surgelés', 'Frites fraîches précuites', 'Sel fin', 'Huile de friture', 'Ketchup tomato Colona', 'Compote gourde'],
      array[]::text[], '{}')

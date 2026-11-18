@@ -314,9 +314,12 @@ describe('tableau des allergènes', () => {
       'Peut en contenir : Céleri',
       'Peut en contenir : Anhydride sulfureux et sulfites',
     ])
+    // Frites : friteuse séparée des nuggets, donc aucune trace de gluten.
     const frites = within(table).getByRole('row', { name: /Frites nature/ })
-    expect(within(frites).getAllByRole('img')).toHaveLength(1)
-    expect(within(frites).getByRole('img', { name: 'Peut en contenir : Céréales contenant du gluten' })).toBeInTheDocument()
+    expect(within(frites).queryAllByRole('img')).toHaveLength(0)
+    const roswell = within(table).getByRole('row', { name: /Frites Roswell/ })
+    expect(within(roswell).getAllByRole('img')).toHaveLength(2)
+    expect(within(roswell).getByRole('img', { name: 'Peut en contenir : Anhydride sulfureux et sulfites' })).toBeInTheDocument()
     const poster = screen.getByRole('region', { name: 'Tableau des allergènes' })
     expect(within(poster).getByText('présent dans la recette')).toBeInTheDocument()
     expect(within(poster).getByText(/peut en contenir \(selon le produit du fournisseur\)/)).toBeInTheDocument()

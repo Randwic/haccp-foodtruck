@@ -12,7 +12,7 @@ export const LEGEND_PRESENT = 'présent dans la recette'
 export const LEGEND_TRACES = 'peut en contenir (selon le produit du fournisseur)'
 /** Mention du propriétaire (tableau Space Diner). */
 export const ALLERGEN_NOTICE = [
-  'Tout est préparé dans la même remorque, avec une friteuse commune aux frites et aux nuggets : des traces d’autres allergènes sont possibles.',
+  'Tout est préparé dans la même remorque, avec une plancha commune : des traces d’autres allergènes sont possibles. Les nuggets cuisent dans une friteuse séparée des frites.',
   'Boissons : voir l’étiquette de chaque canette ou bouteille.',
 ] as const
 export const ALLERGEN_CALLOUT = ['Une allergie ?', 'Parle-nous-en avant de commander.'] as const

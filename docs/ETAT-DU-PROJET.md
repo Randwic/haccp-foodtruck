@@ -4,7 +4,13 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
-## 0. Dernière session (18/11/2026 nuit) : lot 3 bis « Achats » + corrections techniques
+## 0 bis. Suite du 18/11/2026 (~03 h UTC) : clé publishable + fonctions
+- Fonctions Supabase **redéployées** (`deploy-supabase.sh … functions`, environnement « haccp-foodtruck » avec accès à api.supabase.com). Migrations : toutes déjà appliquées (16), rien relancé côté base, données réelles intactes.
+- `LABEL_TRACES_IN_REGISTRY = true` (traces imprimées enregistrées dans le registre).
+- Clé `sb_publishable_…` lue via l'API de gestion et posée dans `app/.env.production` (`VITE_SUPABASE_PUBLISHABLE_KEY`, l'ancienne clé anon reste en secours). Vérifié : `health` et `bootstrap-status` répondent avec la nouvelle clé seule.
+- Branche `claude/project-thread-71o4c2` : la fusion met l'app en ligne (accord de Cédric). Après fusion : vérifier sync, photos, enrôlement, connexion gérant sur l'iPad.
+
+## 0. Session précédente (18/11/2026 nuit) : lot 3 bis « Achats » + corrections techniques
 Branche `claude/project-thread-s0d29q` (poussée, **pas fusionnée** : la fusion met en ligne, accord de Cédric requis). Le lot 7 était déjà fusionné dans `main`.
 - **Lecture de l'étiquette** (`app/src/features/reception/scan/`) : à chaque photo d'étiquette, code-barres (ZXing) + texte (Tesseract, français, `parseLabel.ts`) lus **sur l'appareil** ; lot, DLC/DDM, code-barres pré-remplis dans les champs vides, bandeau « à vérifier ». Fichiers OCR copiés au build sous `/ocr/` (plugin `ocrAssets` de `vite.config.ts`, ≈ 4 Mo moteur + 0,7 Mo langue), cache `haccp-ocr` à la 1re utilisation, préchargés en arrière-plan à l'ouverture de la saisie. Testé dans Chromium : étiquette générée lue en ≈ 1 s.
 - **Scan du code-barres** (`BarcodeScanner.tsx`) : caméra en direct, repli photo. EAN/UPC → GTIN ; GS1-128 / DataMatrix / QR Digital Link → GTIN + lot (AI 10) + DLC (AI 17) ou DDM (AI 15). Un GTIN déjà reçu redonne le nom et la conservation (`productsByGtin`).

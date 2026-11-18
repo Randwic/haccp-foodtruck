@@ -34,9 +34,9 @@ import type { LabelData } from './useLabelData.ts'
 /**
  * Enregistrer les traces imprimées (`may_contain`) dans le registre. À passer à true SEULEMENT après avoir
  * redéployé les fonctions Supabase (nouveau validateur) : sinon le serveur met l'étiquette en quarantaine.
- * Mis en ligne le 18/11/2026 sans accès à Supabase depuis la session : désactivé en attendant.
+ * Fonctions redéployées le 18/11/2026 (validateur à jour) : activé.
  */
-export const LABEL_TRACES_IN_REGISTRY = false
+export const LABEL_TRACES_IN_REGISTRY = true
 
 /** Ce que le parcours a choisi à l'étape 1. */
 export interface LabelDraft {

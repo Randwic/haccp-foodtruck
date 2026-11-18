@@ -70,6 +70,14 @@ export function makeCheckPayload(input: { thermometer: string; method: Thermomet
   return p
 }
 
+/** « 21,5 » / « 21.5 » / « -0,3 » → nombre à une décimale, ou null. */
+export function parseReference(text: string): number | null {
+  const t = text.trim().replace(',', '.').replace('−', '-')
+  if (!/^-?\d{1,3}(\.\d)?$/.test(t)) return null
+  const v = Number(t)
+  return v >= LIMITS.thermometerReferenceMinC && v <= LIMITS.thermometerReferenceMaxC ? v : null
+}
+
 // ---------- Lecture des payloads ----------
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)

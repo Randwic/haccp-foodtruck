@@ -19,6 +19,7 @@ import {
   formatDeviation,
   formatTolerance,
   makeCheckPayload,
+  parseReference,
   type ThermometerCheckEntry,
   type ThermometerMethod,
   type ThermometerRules,
@@ -26,14 +27,6 @@ import {
 
 const METHOD_ICONS = { ice_water: IconSnowflake, boiling_water: IconFlame, reference: IconTemperature } as const
 const round1 = (v: number) => Math.round(v * 10) / 10
-
-/** « 21,5 » / « 21.5 » / « -0,3 » → nombre à une décimale, ou null. */
-export function parseReference(text: string): number | null {
-  const t = text.trim().replace(',', '.').replace('−', '-')
-  if (!/^-?\d{1,3}(\.\d)?$/.test(t)) return null
-  const v = Number(t)
-  return v >= LIMITS.thermometerReferenceMinC && v <= LIMITS.thermometerReferenceMaxC ? v : null
-}
 
 export function ThermometerCheckForm(props: {
   rules: ThermometerRules
@@ -184,6 +177,9 @@ export function ThermometerCheckForm(props: {
               )}
             </p>
           </div>
+          <div className="mt-6">
+            <TextArea label="Commentaire (facultatif)" hint="Réglage fait, pile changée…" value={comment} onChange={setComment} maxLength={LIMITS.thermometerCommentMax} rows={2} />
+          </div>
           {c && (
             <div className="mt-6 space-y-5">
               <ReasonField value={reason} onChange={setReason} quick={['Erreur de frappe', 'Mauvais thermomètre choisi']} />
@@ -200,7 +196,6 @@ export function ThermometerCheckForm(props: {
               Valeur hors des bornes possibles ({LIMITS.thermometerMeasuredMinC} à {LIMITS.thermometerMeasuredMaxC} °C).
             </Notice>
           )}
-          <TextArea label="Commentaire (facultatif)" hint="Réglage fait, pile changée…" value={comment} onChange={setComment} maxLength={LIMITS.thermometerCommentMax} rows={2} />
           <ErrorNotice error={error} />
           <StickyActions>
             <Button size="lg" block onClick={submit} disabled={!canSave} icon={<IconCheck size={22} strokeWidth={2.25} />}>

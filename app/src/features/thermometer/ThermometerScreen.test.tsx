@@ -6,8 +6,7 @@ import { createMockManagerApi } from '../../manager/mockManager.ts'
 import { createFakeCore, type FakeCoreOptions, type FakeRecordSeed } from '../../ui/fakeCore.ts'
 import { renderWithCore } from '../../ui/testUtils.tsx'
 import { buildControlReport } from '../control/model.ts'
-import { buildThermometerChecks, dueLabel, makeCheckPayload, thermometerKey, thermometerRules, thermometerStatuses } from './model.ts'
-import { parseReference } from './ThermometerForm.tsx'
+import { buildThermometerChecks, dueLabel, makeCheckPayload, parseReference, thermometerKey, thermometerRules, thermometerStatuses } from './model.ts'
 
 const NOW = '2026-11-15T09:00:00.000Z' // dimanche 10:00 à Paris
 const TZ = 'Europe/Paris'

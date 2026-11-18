@@ -427,7 +427,7 @@ describe('Gestion › Produits et Recettes', () => {
     fireEvent.change(within(dialog).getByLabelText('Nom du produit'), { target: { value: 'Mayonnaise' } })
     fireEvent.click(within(dialog).getAllByLabelText(/^Œufs/)[0])
     fireEvent.click(within(dialog).getAllByLabelText(/^Moutarde/)[0])
-    fireEvent.click(within(dialog).getByRole('button', { name: '24 h' }))
+    fireEvent.click(within(dialog).getAllByRole('button', { name: '24 h' })[0])
     expect(within(dialog).getByText('Soit 24 h.')).toBeInTheDocument()
     expect(within(dialog).getByText(/à vérifier sur vos fiches fournisseurs/)).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
@@ -473,6 +473,28 @@ describe('Gestion › Produits et Recettes', () => {
     expect(card).toHaveTextContent('Après ouverture : selon l’étiquette du fabricant')
     expect(card).toHaveTextContent('traces possibles : Œufs, Céleri')
     expect(card).toHaveTextContent('Cuisson à cœur : ≥ 74 °C')
+  })
+
+  it('produit « selon l’étiquette » : la durée après ouverture se saisit directement (case décochée toute seule)', async () => {
+    const manager = createMockManagerApi({ seeded: true, signedIn: true })
+    renderWithCore(createFakeCore({ enrolled: true, unlockedStaffId: 'staff-gerant', autoSyncDelayMs: null }), undefined, manager)
+    await openTab('Produits')
+    press('Ajouter un produit')
+    const dialog = await screen.findByRole('dialog', { name: 'Ajouter un produit' })
+    fireEvent.change(within(dialog).getByLabelText('Nom du produit'), { target: { value: 'Crème liquide' } })
+    const manufacturer = within(dialog).getByLabelText('Selon l’étiquette du fabricant')
+    fireEvent.click(manufacturer)
+    expect(manufacturer).toBeChecked()
+    // Les champs restent visibles : toucher « 2 jours » choisit la durée et décoche la case.
+    fireEvent.click(within(dialog).getAllByRole('button', { name: '2 jours' })[0])
+    expect(manufacturer).not.toBeChecked()
+    expect(within(dialog).getByText('Soit 2 jours.')).toBeInTheDocument()
+    fireEvent.click(manufacturer)
+    fireEvent.change(within(dialog).getByLabelText('Durée de vie après ouverture — nombre'), { target: { value: '3' } })
+    expect(manufacturer).not.toBeChecked()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(manager.simulate.state().products.find((x) => x.name === 'Crème liquide')).toMatchObject({ shelf_life_opened_hours: 72, shelf_life_thawed_hours: null })
   })
 
   it('préparation : ingrédients + allergènes supplémentaires, allergènes calculés en direct', async () => {

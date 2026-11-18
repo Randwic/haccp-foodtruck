@@ -1,7 +1,7 @@
 // Interface publique du « core » (hors-ligne, registre, synchro, PIN) utilisée par l'interface.
 // FIGÉE : l'équipe UI code contre ces signatures, l'équipe core les implémente dans ./index.ts.
 import type { HaccpRecord, RecordType, StaffMember, Equipment, Threshold, Settings, Establishment } from '../../../shared/types.ts'
-import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Alert, Checklist, CleaningTask, Product, PushSubscribeRequest, Recipe, Supplier } from '../../../shared/payloads.ts'
 
 export interface DeviceInfo {
   device_id: string
@@ -88,6 +88,14 @@ export interface CoreApi {
   listCleaningTasks(opts?: { includeInactive?: boolean }): Promise<CleaningTask[]>
   /** Lot 5 : checklists (ouverture, fermeture, nuisibles…) reçues par sync-pull, triées par nom ; même règle. */
   listChecklists(opts?: { includeInactive?: boolean }): Promise<Checklist[]>
+
+  // Alertes (lot 6) — ajouts facultatifs (absents d'anciens cores et du core factice des tests).
+  /** Alertes calculées par le serveur et reçues par sync-pull, encore ouvertes (non résolues), les plus récentes d'abord. */
+  listAlerts?(): Promise<Alert[]>
+  /** Clé publique VAPID du serveur pour s'abonner aux notifications, ou null si le serveur ne les envoie pas. */
+  getPushPublicKey?(): Promise<string | null>
+  /** Enregistre l'abonnement Web Push de cet appareil sur le serveur (push-subscribe). */
+  subscribePush?(subscription: PushSubscribeRequest): Promise<void>
 
   // Photos (lot 3) — stockées sur l'appareil puis envoyées par la synchro.
   /**

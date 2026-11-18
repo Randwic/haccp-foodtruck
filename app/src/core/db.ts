@@ -13,7 +13,7 @@ import type {
   StaffMember,
   Threshold,
 } from '../../../shared/types.ts'
-import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Alert, Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 import { normalizeProduct, normalizeRecipe } from './catalog.ts'
 
 /** Appareil enrôlé (une seule ligne, clé 'self'). Le jeton ne sort jamais du core. */
@@ -116,6 +116,8 @@ export class CoreDb extends Dexie {
   recipes!: Table<Recipe, string>
   cleaning_tasks!: Table<CleaningTask, string>
   checklists!: Table<Checklist, string>
+  // Version 5 (lot 6) : alertes calculées par le serveur (copie locale, remplacée à chaque sync-pull).
+  alerts!: Table<Alert, string>
 
   constructor(name: string) {
     super(name)
@@ -162,6 +164,13 @@ export class CoreDb extends Dexie {
         await tx.table('recipes').toCollection().modify((r: Recipe, ref: { value: Recipe }) => {
           ref.value = normalizeRecipe(r)
         })
+        await tx.table('meta').put({ key: 'since', value: null })
+      })
+    // Lot 6 : ajout de la table des alertes. `since` remis à zéro pour que le prochain sync-pull rapporte
+    // aussi les alertes déjà résolues ou prises en compte. Aucun enregistrement du registre n'est touché.
+    this.version(5)
+      .stores({ alerts: '&id, opened_at' })
+      .upgrade(async (tx) => {
         await tx.table('meta').put({ key: 'since', value: null })
       })
     // Garde-fou : toute tentative de réécriture ou de suppression d'un enregistrement échoue,

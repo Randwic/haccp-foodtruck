@@ -1,6 +1,7 @@
 // Transport : seul point de contact entre le core et le serveur.
 import { publicKeyHeaders } from './supabaseKey.ts'
 import type { SyncPullResponse, SyncPushRequest, SyncPushResponse } from '../../../shared/types.ts'
+import type { PushSubscribeRequest } from '../../../shared/payloads.ts'
 
 export interface DeviceAuth {
   device_token: string
@@ -25,6 +26,10 @@ export interface Transport {
    * sans lui, les photos restent « en attente » sur l'appareil.
    */
   uploadPhoto?(path: string, bytes: Uint8Array, auth: DeviceAuth): Promise<PhotoUploadOutcome>
+  /** Lot 6 (facultatif) : push-config, clé publique VAPID du serveur. */
+  getPushConfig?(): Promise<{ enabled: boolean; vapid_public_key: string | null }>
+  /** Lot 6 (facultatif) : push-subscribe, abonnement Web Push de l'appareil. */
+  subscribePush?(subscription: PushSubscribeRequest, auth: DeviceAuth): Promise<void>
 }
 
 /**
@@ -79,7 +84,7 @@ export function createHttpTransport(opts: HttpTransportOptions): Transport {
         signal: controller.signal,
         headers: {
           ...publicKeyHeaders(opts.anonKey),
-          'x-device-token': auth.device_token,
+          ...(auth.device_token ? { 'x-device-token': auth.device_token } : {}),
           ...(init.body ? { 'Content-Type': 'application/json' } : {}),
         },
       })
@@ -153,6 +158,10 @@ export function createHttpTransport(opts: HttpTransportOptions): Transport {
 
   return {
     uploadPhoto,
+    getPushConfig: () => call<{ enabled: boolean; vapid_public_key: string | null }>('push-config', { method: 'GET' }, { device_token: '' }),
+    subscribePush: async (subscription, auth) => {
+      await call<unknown>('push-subscribe', { method: 'POST', body: JSON.stringify({ endpoint: subscription.endpoint, keys: subscription.keys }) }, auth)
+    },
     push: (req, auth) => call<SyncPushResponse>('sync-push', { method: 'POST', body: JSON.stringify(req) }, auth),
     pull: (since, auth) =>
       call<SyncPullResponse>(`sync-pull?since=${encodeURIComponent(since ?? '')}`, { method: 'GET' }, auth),

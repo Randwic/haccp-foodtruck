@@ -14,7 +14,7 @@ import {
   type Threshold,
 } from '../../../shared/types.ts'
 import { normalizeProduct, normalizeProducts, normalizeRecipe, normalizeRecipes } from './catalog.ts'
-import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Checklist, type CleaningTask, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
+import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Alert, type Checklist, type CleaningTask, type Product, type PushSubscribeRequest, type Recipe, type Supplier } from '../../../shared/payloads.ts'
 import { referencedPhotoPaths } from '../../../shared/validation.ts'
 import type { CoreApi, DeviceInfo, PhotoStatus, SyncStatus, UnlockResult } from './api.ts'
 import { CoreDb, type DeviceRow, type PhotoRow, type RecordSyncRow, type StoredRecord } from './db.ts'
@@ -86,6 +86,10 @@ export interface Core extends CoreApi {
   whenSyncIdle(): Promise<void>
   /** Arrête minuteries et écouteurs, ferme la base. */
   dispose(): Promise<void>
+  // Lot 6 : toujours présents dans le vrai core (facultatifs dans CoreApi pour les anciens cores).
+  listAlerts(): Promise<Alert[]>
+  getPushPublicKey(): Promise<string | null>
+  subscribePush(subscription: PushSubscribeRequest): Promise<void>
 }
 
 // Registre des instances, pour la fonction module `notifyActivity()`.
@@ -250,7 +254,7 @@ export function createCore(options: CoreOptions): Core {
   }
 
   async function applyPull(resp: SyncPullResponse): Promise<void> {
-    const refTables = [db.staff, db.equipment, db.thresholds, db.suppliers, db.products, db.recipes, db.cleaning_tasks, db.checklists, db.meta]
+    const refTables = [db.staff, db.equipment, db.thresholds, db.suppliers, db.products, db.recipes, db.cleaning_tasks, db.checklists, db.alerts, db.meta]
     await db.transaction('rw', refTables, async () => {
       if (resp.staff.length) await db.staff.bulkPut(resp.staff)
       if (resp.equipment.length) await db.equipment.bulkPut(resp.equipment)
@@ -266,6 +270,9 @@ export function createCore(options: CoreOptions): Core {
       if (Array.isArray(resp.recipes)) await put(db.recipes, normalizeRecipes(resp.recipes))
       await put(db.cleaning_tasks, resp.cleaning_tasks)
       await put(db.checklists, resp.checklists)
+      // Lot 6 : alertes ouvertes et celles modifiées depuis `since` (résolues / prises en compte) ; absentes
+      // d'un serveur plus ancien. Copie locale seulement : l'alerte fait foi sur le serveur.
+      await put(db.alerts, resp.alerts)
       // Tables dont une référence désactivée est gardée (nom des anciens enregistrements) mais inactive.
       const keepInactive: Record<string, Table<{ active: boolean }, string>> = {
         staff: db.staff,
@@ -687,6 +694,24 @@ export function createCore(options: CoreOptions): Core {
     async listChecklists(opts?: { includeInactive?: boolean }): Promise<Checklist[]> {
       const all = await db.checklists.toArray()
       return all.filter((c) => opts?.includeInactive || c.active).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    },
+
+    async listAlerts(): Promise<Alert[]> {
+      const all = await db.alerts.toArray()
+      return all.filter((a) => a.resolved_at === null).sort((a, b) => b.opened_at.localeCompare(a.opened_at))
+    },
+
+    async getPushPublicKey(): Promise<string | null> {
+      if (!transport.getPushConfig) return null
+      const cfg = await transport.getPushConfig()
+      return cfg.enabled ? cfg.vapid_public_key : null
+    },
+
+    async subscribePush(subscription: PushSubscribeRequest): Promise<void> {
+      const device = await db.device.get('self')
+      if (!device) throw new CoreError('not_enrolled', 'Appareil non enrôlé')
+      if (!transport.subscribePush) throw new CoreError('invalid_input', 'Notifications non disponibles')
+      await transport.subscribePush(subscription, { device_token: device.device_token })
     },
 
     async addPhoto(image: Blob) {

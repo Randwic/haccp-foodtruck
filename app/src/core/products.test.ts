@@ -94,7 +94,7 @@ describe('produits et recettes (sync-pull)', () => {
 
     const db = new CoreDb(dbName)
     await db.open()
-    expect(db.verno).toBe(4)
+    expect(db.verno).toBe(5) // v4 puis v5 (lot 6, alertes) appliquées à la suite
     expect(await db.getMeta('since', 'absent')).toBeNull()
     expect(await db.products.count()).toBe(0)
     db.close()
@@ -131,7 +131,7 @@ describe('produits et recettes (sync-pull)', () => {
 
     const db = new CoreDb(dbName)
     await db.open()
-    expect(db.verno).toBe(4)
+    expect(db.verno).toBe(5) // v4 puis v5 (lot 6, alertes) appliquées à la suite
     expect(await db.getMeta('since', 'absent')).toBeNull()
     expect(await db.products.get('p1')).toMatchObject({ may_contain: [], cook_min_c: null, shelf_life_opened_hours: 48 })
     expect(await db.recipes.get('r1')).toMatchObject({ kind: 'preparation', category: null, ingredient_recipe_ids: [], may_contain: [], shelf_life_hours: 72 })

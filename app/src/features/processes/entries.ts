@@ -5,6 +5,7 @@
 // - Les étapes d'un même `batch_id` forment un lot (refroidissement, remise en température, décongélation).
 import type { CookingCheckPayload, CoolingPayload, HotHoldingPayload, MeasureSource, ProcessStep, ThawingPayload } from '../../../../shared/payloads.ts'
 import type { HaccpRecord, RecordType } from '../../../../shared/types.ts'
+import { withoutTestMarked } from '../../../../shared/testMarks.ts'
 import { asCorrectiveAction } from '../temperatures/readings.ts'
 import type { SpotKind, TimedKind } from './thresholds.ts'
 
@@ -69,7 +70,7 @@ const chronological = (a: HaccpRecord, b: HaccpRecord) => a.device_time.localeCo
  * `parse` rejette les payloads inexploitables (ignorés, jamais affichés à moitié).
  */
 export function buildEntries<P>(records: readonly HaccpRecord[], types: readonly RecordType[], parse: (p: unknown) => P | null): Entry<P>[] {
-  const sorted = [...records].sort(chronological)
+  const sorted = withoutTestMarked(records).sort(chronological)
   const entries = new Map<string, Entry<P>>()
   const rootOf = new Map<string, string>()
 

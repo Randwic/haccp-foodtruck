@@ -2,6 +2,7 @@
 // l'intégrité du registre et produire le dossier PDF / le tableau CSV à remettre à l'inspecteur.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { IntegrityReport } from '../../../../shared/payloads.ts'
+import { chainHead } from '../../../../shared/testMarks.ts'
 import { errorText, type ManagerApi } from '../../manager/api.ts'
 import { Badge, Button, Notice, TextField, useToast } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
@@ -67,6 +68,24 @@ export function ControlTab({ manager, timeZone, onSignIn }: { manager: ManagerAp
     () => (data && range ? buildControlReport({ records: data.records, pendingIds: data.pendingIds, from: range.from, to: range.to, refs: data.refs }) : null),
     [data, range],
   )
+
+  /** « Saisie de test » : correction qui garde la valeur et marque la saisie ; rien n'est effacé du registre. */
+  const markTest = async (row: ControlRow, reason: string): Promise<boolean> => {
+    const head = data ? chainHead(data.records, row.id) : null
+    if (!head) {
+      toast('Saisie introuvable dans le registre chargé', 'error')
+      return false
+    }
+    try {
+      await core.addRecord('correction', { reason: reason.trim(), replacement: head.payload, test: true }, { supersedes_id: head.id })
+      toast('Saisie marquée « test » : elle reste au registre mais n’est plus reprise dans le dossier', 'ok')
+      await load()
+      return true
+    } catch (e) {
+      toast(errorText(e), 'error')
+      return false
+    }
+  }
 
   const verify = async () => {
     if (!data) return
@@ -261,7 +280,7 @@ export function ControlTab({ manager, timeZone, onSignIn }: { manager: ManagerAp
             ) : (
               <ul className="space-y-3">
                 {report.nonConformities.map((r) => (
-                  <RowCard key={r.id} row={r} timeZone={timeZone} module={report.modules.find((m) => m.module === r.module)?.short} />
+                  <RowCard key={r.id} row={r} timeZone={timeZone} module={report.modules.find((m) => m.module === r.module)?.short} onMarkTest={TEST_MARKABLE.has(r.module) ? markTest : undefined} />
                 ))}
               </ul>
             )}
@@ -309,7 +328,7 @@ export function ControlTab({ manager, timeZone, onSignIn }: { manager: ManagerAp
                     {open === m.module && (
                       <ul className="space-y-3 bg-sunken p-3 sm:p-4">
                         {[...m.rows].reverse().map((r) => (
-                          <RowCard key={r.id} row={r} timeZone={timeZone} />
+                          <RowCard key={r.id} row={r} timeZone={timeZone} onMarkTest={TEST_MARKABLE.has(r.module) ? markTest : undefined} />
                         ))}
                       </ul>
                     )}
@@ -319,7 +338,7 @@ export function ControlTab({ manager, timeZone, onSignIn }: { manager: ManagerAp
             {report.totals.entries === 0 && <p className="mt-3 text-[17px] text-fg-muted">Aucune saisie sur la période.</p>}
             {(report.tests > 0 || report.quarantined > 0) && (
               <p className="mt-3 text-[15px] text-fg-subtle">
-                {[report.tests ? `${report.tests} test(s) d’enregistrement` : '', report.quarantined ? `${report.quarantined} saisie(s) refusée(s) par le serveur` : ''].filter(Boolean).join(' et ')} non repris dans le dossier.
+                {[report.tests ? `${report.tests} saisie(s) de test` : '', report.quarantined ? `${report.quarantined} saisie(s) refusée(s) par le serveur` : ''].filter(Boolean).join(' et ')} non repris dans le dossier.
               </p>
             )}
           </div>
@@ -339,7 +358,31 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ok
   )
 }
 
-function RowCard({ row: r, timeZone, module }: { row: ControlRow; timeZone: string; module?: string }) {
+/** Modules dont une ligne = une saisie (les lots chronométrés regroupent plusieurs saisies). */
+const TEST_MARKABLE = new Set<ControlRow['module']>(['temperatures', 'reception', 'cooking', 'labels', 'waste', 'cleaning', 'checklists', 'oil'])
+const DEFAULT_TEST_REASON = 'Saisie de test (mise en route de l’application)'
+
+function RowCard({
+  row: r,
+  timeZone,
+  module,
+  onMarkTest,
+}: {
+  row: ControlRow
+  timeZone: string
+  module?: string
+  onMarkTest?: (row: ControlRow, reason: string) => Promise<boolean>
+}) {
+  const [asking, setAsking] = useState(false)
+  const [reason, setReason] = useState(DEFAULT_TEST_REASON)
+  const [saving, setSaving] = useState(false)
+  const confirm = async () => {
+    if (!onMarkTest || !reason.trim()) return
+    setSaving(true)
+    const done = await onMarkTest(r, reason)
+    setSaving(false)
+    if (done) setAsking(false)
+  }
   return (
     <li className={`rounded-2xl border bg-surface p-4 ${r.missingAction ? 'border-danger/55' : r.status === 'ko' ? 'border-warn/55' : 'border-line'}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -388,6 +431,29 @@ function RowCard({ row: r, timeZone, module }: { row: ControlRow; timeZone: stri
           <PhotoGallery paths={r.photos} label={r.subject} />
         </div>
       )}
+      {onMarkTest &&
+        (asking ? (
+          <div className="mt-3 rounded-xl border border-line bg-sunken p-3">
+            <p className="mb-2 text-[15px] text-fg">
+              La saisie reste dans le registre (rien n’est effacé), mais elle ne sera plus reprise dans les écrans ni dans le dossier de contrôle.
+            </p>
+            <TextField label="Motif" value={reason} onChange={setReason} maxLength={200} />
+            <div className="mt-3 flex flex-wrap gap-3">
+              <Button onClick={() => void confirm()} disabled={saving || !reason.trim()}>
+                {saving ? 'Enregistrement…' : 'Confirmer : saisie de test'}
+              </Button>
+              <Button variant="ghost" onClick={() => setAsking(false)} disabled={saving}>
+                Annuler
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2">
+            <Button variant="ghost" onClick={() => setAsking(true)}>
+              Marquer comme saisie de test
+            </Button>
+          </div>
+        ))}
     </li>
   )
 }

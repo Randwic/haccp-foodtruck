@@ -723,6 +723,8 @@ function validateCorrection(payload: Record<string, unknown>, ctx: PayloadContex
   const e = checkObject(payload, {
     reason: { check: str({ max: LIMITS.reasonMax, nonEmpty: true }) },
     replacement: { check: (v, name) => (isPlainObject(v) ? null : `${name} : objet attendu`) },
+    // « Saisie de test » : la saisie reste au registre mais est écartée des écrans et du dossier.
+    test: { check: boolField, optional: true },
   })
   if (e) return fail(e)
   const target = ctx.supersededType

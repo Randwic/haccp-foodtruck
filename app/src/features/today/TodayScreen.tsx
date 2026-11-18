@@ -234,8 +234,14 @@ function oilLines(s: OilSummary | null, statuses: readonly VatStatus[]): StatusL
 }
 
 /** Tuile Thermomètres : actions manquantes, sonde hors tolérance, vérification en retard ou proche. */
-function thermometerLines(s: ThermometerSummary | null, statuses: readonly ThermometerStatus[]): StatusLine[] | null {
+function thermometerLines(s: ThermometerSummary | null, statuses: readonly ThermometerStatus[], pause?: OpeningPause | null): StatusLine[] | null {
   if (!s) return null
+  if (pause) {
+    // Pas encore ouvert : seuls les résultats réels restent signalés (hors tolérance, action manquante).
+    const lines = missingLine(s.missingActions)
+    for (const t of statuses) if (t.out && t.missingActions.length === 0) lines.push({ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: `${t.name} hors tolérance` })
+    return [...lines, pauseLine(pause)]
+  }
   if (s.thermometers === 0) return [{ tone: 'warn', icon: <IconDue size={17} className="shrink-0" />, text: 'Aucune vérification enregistrée' }]
   const lines = missingLine(s.missingActions)
   for (const t of statuses) {
@@ -305,7 +311,7 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
   const { summary: oilSummary, statuses: vatStatuses } = useOilStatus(60_000)
   const oil = oilLines(oilSummary, vatStatuses)
   const { summary: thermoSummary, statuses: thermoStatuses } = useThermometerStatus(60_000)
-  const thermometer = thermometerLines(thermoSummary, thermoStatuses)
+  const thermometer = thermometerLines(thermoSummary, thermoStatuses, pause)
   const { summary: labelSummary } = useLabelStatus(60_000)
   const labels = labelLines(labelSummary)
   const { summary } = useTemperatureStatus()

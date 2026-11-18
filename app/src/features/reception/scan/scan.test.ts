@@ -72,3 +72,22 @@ describe('texte d’étiquette (OCR)', () => {
     expect(parseLabelText('Ingrédients : farine, eau, sel', { today })).toBeNull()
   })
 })
+
+describe('étiquettes réelles (jet d’encre, relief)', () => {
+  it('date espacée et lot sans mot-clé sur la ligne suivante', () => {
+    expect(parseLabelText("À consommer jusqu'au :\n27 11 26 07:31\n22982629304", { today })).toEqual({ dlc: '2026-11-27', lot: '22982629304' })
+  })
+  it('lot collé à la date, heure à la ligne', () => {
+    expect(parseLabelText('MG26298R99A 27/11/26\n11:38', { today })).toEqual({ dlc: '2026-11-27', lot: 'MG26298R99A' })
+  })
+  it('« J07/12 » : jour et mois sans année', () => {
+    expect(parseLabelText('J07/12 17:06\nP7', { today })).toEqual({ dlc: '2026-12-07' })
+    expect(parseLabelText('J05/01', { today })).toEqual({ dlc: '2027-01-05' })
+  })
+  it('année mal lue en points (« 2826 »)', () => {
+    expect(parseLabelText("A CONS. JUSQU'AU 28/11/2826\nL:2326C 14:32", { today })).toEqual({ dlc: '2026-11-28', lot: 'L2326C' })
+  })
+  it('pas de lot inventé sans date', () => {
+    expect(parseLabelText('ABC123456 bonjour', { today })).toBeNull()
+  })
+})

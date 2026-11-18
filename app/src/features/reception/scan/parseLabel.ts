@@ -38,6 +38,8 @@ interface DateHit {
 
 function isoOf(y: number, m: number, day: number | null): string | null {
   if (y < 100) y += 2000
+  // Impression en points : le 0 de « 2026 » est souvent lu 8 ou 6 (« 2826 »). Siècle remis à 20.
+  if (y >= 2100 && y <= 2999) y = 2000 + (y % 100)
   if (y < 2000 || y > 2099 || m < 1 || m > 12) return null
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
   const dd = day ?? last
@@ -67,10 +69,22 @@ function datesIn(line: string): DateHit[] {
       taken.push([m.index!, m.index! + m[0].length])
     }
   }
+  // Jet d'encre : « 27 11 26 » (espaces seuls, deux chiffres par groupe).
+  const spaced = new RegExp(`(?<![0-9:])(${d}{2}) {1,3}(${d}{2}) {1,3}(${d}{4}|${d}{2})(?![0-9:])`, 'g')
+  for (const m of line.matchAll(spaced)) {
+    const iso = isoOf(Number(fixDigits(m[3])), Number(fixDigits(m[2])), Number(fixDigits(m[1])))
+    if (iso && free(m.index!, m.index! + m[0].length)) {
+      out.push({ iso, index: m.index!, monthOnly: false })
+      taken.push([m.index!, m.index! + m[0].length])
+    }
+  }
   const monthYear = new RegExp(`(?<![0-9./-])(${d}{1,2}) ?[./-] ?(${d}{4})(?![0-9./-])`, 'g')
   for (const m of line.matchAll(monthYear)) {
     const iso = isoOf(Number(fixDigits(m[2])), Number(fixDigits(m[1])), null)
-    if (iso && free(m.index!, m.index! + m[0].length)) out.push({ iso, index: m.index!, monthOnly: true })
+    if (iso && free(m.index!, m.index! + m[0].length)) {
+      out.push({ iso, index: m.index!, monthOnly: true })
+      taken.push([m.index!, m.index! + m[0].length])
+    }
   }
   return out.sort((a, b) => a.index - b.index)
 }
@@ -114,6 +128,39 @@ function gtinIn(text: string): string | null {
   return null
 }
 
+/**
+ * Lot sans mot-clé, imprimé à côté de la date (jet d'encre : « MG26298R99A 27/11/26 », ou la ligne
+ * « 22982629304 » sous « 27 11 26 07:31 ») : le plus long code de 6 à 20 caractères contenant au moins
+ * 3 chiffres, sur la ligne de la date ou juste à côté, hors date, heure et code-barres.
+ */
+function lotNearDates(lines: string[], dateLines: number[]): string | null {
+  let best: string | null = null
+  const near = new Set(dateLines.flatMap((i) => [i - 1, i, i + 1]).filter((i) => i >= 0 && i < lines.length))
+  for (const i of near) {
+    const f = fold(lines[i]).replace(/(?<![0-9])\d{1,2} ?[./ -] ?\d{1,2} ?[./ -] ?\d{2,4}(?![0-9])/g, ' ').replace(/\d{1,2}[:H]\d{2}/g, ' ')
+    for (const tok of f.split(/[^A-Z0-9]+/)) {
+      if (tok.length < 6 || tok.length > 20 || (tok.match(/\d/g) ?? []).length < 3) continue
+      if (/^\d+$/.test(tok) && normalizeGtin(tok)) continue // code-barres imprimé
+      if (!best || tok.length > best.length) best = tok
+    }
+  }
+  return best
+}
+
+/** « J07/12 », « DLC 07/12 » : jour et mois sans année, la prochaine occurrence (tolérance 30 jours). */
+function dayMonthDate(text: string, today: string | undefined): string | null {
+  if (!today) return null
+  const m = /(?:(?:^|[^A-Z])J|JUSQU'?AU|\bDLC|\bDDM)\s*[:.]?\s*(\d{2})[/.](\d{2})(?![0-9]|[/.]\d)/.exec(fold(text))
+  if (!m) return null
+  const y = Number(today.slice(0, 4))
+  const limit = new Date(Date.parse(today) - 30 * 86_400_000).toISOString().slice(0, 10)
+  for (const year of [y, y + 1]) {
+    const iso = isoOf(year, Number(m[2]), Number(m[1]))
+    if (iso && iso >= limit) return iso
+  }
+  return null
+}
+
 export interface ParseOptions {
   /** Date du jour (AAAA-MM-JJ) : écarte les dates invraisemblables (plus de 2 ans avant, plus de 10 ans après). */
   today?: string
@@ -129,9 +176,11 @@ export function parseLabelText(text: string, opts: ParseOptions = {}): LabelRead
     return iso >= `${y - 2}${opts.today.slice(4)}` && iso <= `${y + 10}${opts.today.slice(4)}`
   }
   const unlabeled: string[] = []
+  const dateLines: number[] = []
   lines.forEach((line, i) => {
     for (const hit of datesIn(line)) {
       if (!plausible(hit.iso)) continue
+      dateLines.push(i)
       let kind = kindBefore(line.slice(0, hit.index))
       // Mot-clé seul sur la ligne précédente (« À consommer jusqu'au : » puis la date à la ligne).
       if (kind === null && i > 0 && datesIn(lines[i - 1]).length === 0) kind = kindBefore(lines[i - 1])
@@ -146,6 +195,14 @@ export function parseLabelText(text: string, opts: ParseOptions = {}): LabelRead
   })
   // Une seule date sans mot-clé, dans le futur : très probablement la date limite (à vérifier).
   if (!r.dlc && !r.ddm && unlabeled.length === 1 && (!opts.today || unlabeled[0] >= opts.today)) r.dlc = unlabeled[0]
+  if (!r.dlc && !r.ddm) {
+    const dm = dayMonthDate(text, opts.today)
+    if (dm) r.dlc = dm
+  }
+  if (!r.lot && (r.dlc || r.ddm)) {
+    const lot = lotNearDates(lines, dateLines)
+    if (lot) r.lot = lot
+  }
   if (r.dlc && r.ddm) delete r.ddm // une étiquette porte l'une ou l'autre ; la DLC prime (plus stricte)
   const g = gtinIn(text)
   if (g) r.gtin = g

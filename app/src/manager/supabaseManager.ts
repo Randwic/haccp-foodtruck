@@ -17,6 +17,7 @@ import {
   normalizeSupplierInput,
   oilSettingsError,
   thermometerSettingsError,
+  openingDateError,
 } from './helpers.ts'
 
 export interface SupabaseManagerOptions {
@@ -263,10 +264,11 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
           oil_polar_warn: number | string | null
           thermometer_tolerance_c?: number | string | null
           thermometer_check_days?: number | null
+          opening_date?: string | null
         }>(
           sb
             .from('settings')
-            .select('auto_lock_minutes, daily_check_times, missed_slot_carry_over, thaw_dlc_days, oil_polar_max, oil_polar_warn, thermometer_tolerance_c, thermometer_check_days')
+            .select('auto_lock_minutes, daily_check_times, missed_slot_carry_over, thaw_dlc_days, oil_polar_max, oil_polar_warn, thermometer_tolerance_c, thermometer_check_days, opening_date')
             .eq('id', 1)
             .single(),
         ),
@@ -284,6 +286,7 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
         oil_polar_warn: s.oil_polar_warn === null || s.oil_polar_warn === undefined ? 22 : Number(s.oil_polar_warn),
         thermometer_tolerance_c: s.thermometer_tolerance_c === null || s.thermometer_tolerance_c === undefined ? 1 : Number(s.thermometer_tolerance_c),
         thermometer_check_days: s.thermometer_check_days ?? 30,
+        opening_date: s.opening_date ?? null,
       }
     },
     async saveSettings(patch) {
@@ -310,6 +313,11 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
         if (e) throw new ManagerError('validation', e, 400)
         if (patch.thermometer_tolerance_c !== undefined) settingsPatch.thermometer_tolerance_c = patch.thermometer_tolerance_c
         if (patch.thermometer_check_days !== undefined) settingsPatch.thermometer_check_days = patch.thermometer_check_days
+      }
+      if (patch.opening_date !== undefined) {
+        const e = openingDateError(patch.opening_date)
+        if (e) throw new ManagerError('validation', e, 400)
+        settingsPatch.opening_date = patch.opening_date
       }
       if (Object.keys(settingsPatch).length > 0) {
         await run(sb.from('settings').update(settingsPatch).eq('id', 1).select('id').single())

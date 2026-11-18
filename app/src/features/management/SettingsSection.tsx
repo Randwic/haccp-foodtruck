@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText } from '../../manager/api.ts'
-import { oilSettingsError, thermometerSettingsError } from '../../manager/helpers.ts'
+import { oilSettingsError, openingDateError, thermometerSettingsError } from '../../manager/helpers.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
 import { formatNumber } from '../../ui/numberPad.ts'
 import { Button, Notice, TextField } from '../../ui/components/index.ts'
@@ -32,6 +32,13 @@ function nextFreeTime(times: string[]): string {
 }
 
 /** Gestion › Réglages : nom de l'établissement, heures de relevé, verrouillage automatique, déconnexion gérant. */
+/** Proposition par défaut quand on active « Pas encore ouvert » : le 1er du mois, dans 3 mois. */
+function defaultOpeningDate(): string {
+  const d = new Date()
+  const t = new Date(d.getFullYear(), d.getMonth() + 3, 1)
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-01`
+}
+
 export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
   const manager = useManager()
   const { run } = useManagement()
@@ -44,6 +51,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
   const [oilWarn, setOilWarn] = useState(22)
   const [thermoTol, setThermoTol] = useState(1)
   const [thermoDays, setThermoDays] = useState(30)
+  /** Jour d'ouverture « AAAA-MM-JJ », null = déjà ouvert. */
+  const [openingDate, setOpeningDate] = useState<string | null>(null)
   const [timesError, setTimesError] = useState<string>()
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -66,6 +75,7 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
         setOilWarn(s.oil_polar_warn)
         setThermoTol(s.thermometer_tolerance_c)
         setThermoDays(s.thermometer_check_days)
+        setOpeningDate(s.opening_date ?? null)
         setLoaded(true)
       },
       (e) => alive && setLoadError(errorText(e)),
@@ -86,6 +96,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
     if (oilError) return setError(oilError)
     const thermoError = thermometerSettingsError({ thermometer_tolerance_c: thermoTol, thermometer_check_days: thermoDays })
     if (thermoError) return setError(thermoError)
+    const openingError = openingDateError(openingDate)
+    if (openingError) return setError(openingError)
     setBusy(true)
     setError(null)
     try {
@@ -100,6 +112,7 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
             oil_polar_warn: oilWarn,
             thermometer_tolerance_c: thermoTol,
             thermometer_check_days: thermoDays,
+            opening_date: openingDate,
           }),
         'Réglages enregistrés',
       )
@@ -112,6 +125,7 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
       setOilWarn(s.oil_polar_warn)
       setThermoTol(s.thermometer_tolerance_c)
       setThermoDays(s.thermometer_check_days)
+      setOpeningDate(s.opening_date ?? null)
     } catch (err) {
       setError(errorText(err))
     } finally {
@@ -145,6 +159,51 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
       </h2>
       <form onSubmit={submit} noValidate className="space-y-8 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <TextField label="Nom de l’établissement" hint="Affiché en haut de l’écran et sur les registres." value={name} onChange={(v) => { setName(v); setNameError(undefined) }} error={nameError} autoCapitalize="words" />
+        <div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p id="opening-label" className="mb-1.5 text-[15px] font-semibold text-fg">
+                Pas encore ouvert
+              </p>
+              <p id="opening-hint" className="text-[15px] text-fg-muted">
+                {openingDate
+                  ? 'Jusqu’à la date d’ouverture, les alertes et les rappels (relevés, nettoyage, checklists) sont en pause, sans notification. Vous pouvez faire des saisies d’essai.'
+                  : 'Désactivé : l’établissement est ouvert, alertes et rappels actifs.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={openingDate !== null}
+              aria-labelledby="opening-label"
+              aria-describedby="opening-hint"
+              onClick={() => setOpeningDate((v) => (v === null ? defaultOpeningDate() : null))}
+              className={`relative mt-1 h-10 w-[4.25rem] shrink-0 rounded-full border transition-colors ${openingDate !== null ? 'border-accent bg-accent' : 'border-line-strong bg-sunken'}`}
+            >
+              <span
+                aria-hidden="true"
+                className={`absolute top-1 left-1 h-[1.875rem] w-[1.875rem] rounded-full shadow-card transition-transform ${openingDate !== null ? 'translate-x-7 bg-on-accent' : 'bg-fg-subtle'}`}
+              />
+            </button>
+          </div>
+          {openingDate !== null && (
+            <label className="mt-3 flex flex-wrap items-center gap-3">
+              <span className="text-[15px] text-fg">Date d’ouverture</span>
+              <input
+                type="date"
+                required
+                value={openingDate}
+                min="2020-01-01"
+                max="2100-12-31"
+                onChange={(e) => {
+                  setOpeningDate(e.target.value || defaultOpeningDate())
+                  setError(null)
+                }}
+                className="min-h-12 rounded-xl border border-line-strong bg-elevated px-3 text-[18px] font-semibold text-fg shadow-card"
+              />
+            </label>
+          )}
+        </div>
         <div>
           <p id="check-times-label" className="mb-1.5 text-[15px] font-semibold text-fg">
             Heures des relevés de températures

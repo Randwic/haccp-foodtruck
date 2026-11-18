@@ -19,7 +19,24 @@ export interface BootstrapInput {
 }
 
 /** Membre de l'équipe vu par le gérant (sans le PIN haché). */
-export type ManagedStaff = Pick<StaffMember, 'id' | 'display_name' | 'role' | 'active' | 'updated_at'>
+export type ManagedStaff = Pick<StaffMember, 'id' | 'display_name' | 'role' | 'active' | 'updated_at'> & {
+  /** Lot 8 (RGPD) : date d'ajout. */
+  created_at?: string
+  /** Lot 8 : date de désactivation (départ), tenue par le serveur. */
+  deactivated_at?: string | null
+  /** Lot 8 : date de remise de la note d'information (AAAA-MM-JJ). */
+  privacy_notice_on?: string | null
+  /** Lot 8 : données personnelles effacées (nom remplacé par « Ancien équipier n° N »). Définitif. */
+  forgotten_at?: string | null
+}
+
+/** Lot 8 : ligne du journal d'audit d'une fiche de l'équipe (secrets masqués par le serveur). */
+export interface StaffAuditEntry {
+  at: string
+  action: string // INSERT | UPDATE | DELETE | RGPD_FORGET
+  old: Record<string, unknown> | null
+  new: Record<string, unknown> | null
+}
 
 export interface ThresholdInput {
   equipment_id: string
@@ -197,7 +214,16 @@ export interface ManagerApi {
   // Équipe
   listStaff(): Promise<ManagedStaff[]> // actifs ET désactivés
   addStaff(input: { display_name: string; role: StaffRole; pin_salt: string; pin_hash: string }): Promise<ManagedStaff>
-  updateStaff(id: string, patch: { display_name?: string; active?: boolean; pin_salt?: string; pin_hash?: string }): Promise<ManagedStaff>
+  updateStaff(id: string, patch: { display_name?: string; active?: boolean; pin_salt?: string; pin_hash?: string; privacy_notice_on?: string | null }): Promise<ManagedStaff>
+  /**
+   * Lot 8 (RGPD) : efface les données personnelles d'un ancien équipier désactivé (RPC `staff_forget`) :
+   * nom remplacé par « Ancien équipier n° N », PIN inutilisable, nom retiré du journal. Ses saisies restent.
+   */
+  forgetStaff(id: string): Promise<ManagedStaff>
+  /** Lot 8 : toutes les saisies du registre signées par ce membre (droit d'accès), quarantaine comprise. */
+  listStaffRecords(staffId: string): Promise<RegistryRecord[]>
+  /** Lot 8 : historique de la fiche (création, PIN changé, désactivation…), du plus ancien au plus récent. */
+  listStaffAudit(staffId: string): Promise<StaffAuditEntry[]>
 
   // Réglages
   getSettings(): Promise<ManagerSettings>

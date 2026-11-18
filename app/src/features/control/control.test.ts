@@ -1,3 +1,5 @@
+import { chainHead, withoutTestMarked } from '../../../../shared/testMarks.ts'
+import { validatePayload } from '../../../../shared/validation.ts'
 // Mode Contrôle (lot 7) : synthèse du registre, période, CSV, PDF, intégrité, chargement serveur + appareil.
 import { PDFDocument } from 'pdf-lib'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -106,6 +108,36 @@ describe('synthèse du registre', () => {
     expect(report.quarantined).toBe(1)
     expect(report.tests).toBe(1)
     expect(report.modules[0].rows[0]).toMatchObject({ subject: 'Frigo', detail: '2 °C (saisie)', status: 'ok', author: 'Cédric' })
+  })
+
+  it('saisie marquée « test » (même après une correction) : écartée du dossier avec son action, listée à part', () => {
+    const refs: ControlRefs = {
+      timeZone: TZ,
+      staffName: () => 'Cédric',
+      deviceName: () => 'iPad',
+      equipmentName: () => 'Frigo',
+      supplierName: () => 'Metro',
+      cleaningTaskName: () => 'Plan de travail',
+      checklist: () => undefined,
+    }
+    const base = { author_id: 'a', device_id: 'd', prev_hash: GENESIS_HASH, hash: GENESIS_HASH, supersedes_id: null }
+    const bad = { equipment_id: 'e', value_c: 9, source: 'manual', in_range: false }
+    const records = [
+      { ...base, id: '1', type: 'temperature_check' as const, payload: bad, device_seq: 1, device_time: '2026-11-15T10:00:00.000Z' },
+      { ...base, id: '2', type: 'corrective_action' as const, payload: { related_record_id: '1', action: 'adjusted' }, device_seq: 2, device_time: '2026-11-15T10:01:00.000Z' },
+      { ...base, id: '3', type: 'correction' as const, supersedes_id: '1', payload: { reason: 'Erreur', replacement: { ...bad, value_c: 8 } }, device_seq: 3, device_time: '2026-11-15T10:02:00.000Z' },
+      { ...base, id: '4', type: 'correction' as const, supersedes_id: '3', payload: { reason: 'Essai', replacement: { ...bad, value_c: 8 }, test: true }, device_seq: 4, device_time: '2026-11-18T04:00:00.000Z' },
+      { ...base, id: '5', type: 'temperature_check' as const, payload: { ...bad, value_c: 2, in_range: true }, device_seq: 5, device_time: '2026-11-15T10:03:00.000Z' },
+    ]
+    const report = buildControlReport({ records, ...periodRange('7d', NOW, TZ), refs })
+    expect(report.totals.entries).toBe(1)
+    expect(report.totals.nonConform).toBe(0)
+    expect(report.tests).toBe(1)
+    expect(report.testEntries).toEqual([{ time: '2026-11-15T10:00:00.000Z', what: 'Relevé de température', author: 'Cédric', reason: 'Essai' }])
+    expect(chainHead(records, '1')).toMatchObject({ id: '4', type: 'temperature_check', payload: { value_c: 8 } })
+    expect(withoutTestMarked(records).map((r) => r.id)).toEqual(['5'])
+    expect(validatePayload('correction', { reason: 'Essai', replacement: { ...bad, equipment_id: '6f1c2a4e-0000-4000-8000-000000000201' }, test: true }, { supersededType: 'temperature_check' }).ok).toBe(true)
+    expect(validatePayload('correction', { reason: 'Essai', replacement: { ...bad, equipment_id: '6f1c2a4e-0000-4000-8000-000000000201' }, test: 'oui' }, { supersededType: 'temperature_check' }).ok).toBe(false)
   })
 })
 

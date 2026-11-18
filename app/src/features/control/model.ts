@@ -5,6 +5,7 @@
 // décongélation) sont regroupés en une ligne.
 import type { Checklist, CorrectiveActionPayload, ReceptionPayload } from '../../../../shared/payloads.ts'
 import type { HaccpRecord, RecordType } from '../../../../shared/types.ts'
+import { testMarkedRoots, withoutTestMarked } from '../../../../shared/testMarks.ts'
 import { formatTemperature } from '../../ui/temperature.ts'
 import { CHECKLIST_KIND_LABELS, asChecklistDone, asCleaningDone, itemLabel } from '../cleaning/model.ts'
 import { correctiveActionLabel } from '../corrective-action/actions.ts'
@@ -100,8 +101,10 @@ export interface ControlReport {
   totals: { entries: number; nonConform: number; withAction: number; missingActions: number; corrected: number; pending: number; clockSuspect: number; photos: number }
   /** Saisies refusées par le serveur (quarantaine) sur la période. */
   quarantined: number
-  /** Saisies d'essai (« Test d'enregistrement ») sur la période, non reprises dans le dossier. */
+  /** Saisies d'essai (« Test d'enregistrement » et saisies marquées « test ») sur la période, non reprises dans le dossier. */
   tests: number
+  /** Saisies marquées « test » (conservées au registre, non reprises) : quand, quoi, par qui, motif. */
+  testEntries: { time: string; what: string; author: string; reason: string }[]
 }
 
 export interface ControlRefs {
@@ -199,7 +202,10 @@ export function buildControlReport(input: ControlInput): ControlReport {
   const to = input.to.toISOString()
   const inPeriod = (iso: string) => iso >= from && iso <= to
   const meta = new Map(input.records.map((r) => [r.id, r]))
-  const records = input.records.filter((r) => !r.quarantine_reason)
+  // Saisies marquées « test » : écartées du dossier (et de leur chaîne), comptées avec les essais.
+  const valid = input.records.filter((r) => !r.quarantine_reason)
+  const testRoots = testMarkedRoots(valid)
+  const records = withoutTestMarked(valid)
   const pending = input.pendingIds ?? new Set<string>()
   const tz = refs.timeZone
 
@@ -461,6 +467,14 @@ export function buildControlReport(input: ControlInput): ControlReport {
     }
   })
   const ko = rows.filter((r) => r.status === 'ko')
+  const testEntries = valid
+    .filter((r) => testRoots.has(r.id) && r.type !== 'system_test' && inPeriod(r.device_time))
+    .sort((x, y) => x.device_time.localeCompare(y.device_time))
+    .map((r) => {
+      const mark = valid.find((c) => c.type === 'correction' && (c.payload as Record<string, unknown>).test === true && rootOfChain(valid, c.id) === r.id)
+      const reason = mark && typeof mark.payload.reason === 'string' ? mark.payload.reason : ''
+      return { time: r.device_time, what: TEST_TYPE_LABELS[r.type] ?? r.type, author: refs.staffName(r.author_id), reason }
+    })
   const countIn = (type: RecordType) => input.records.filter((r) => r.type === type && inPeriod(r.device_time)).length
   return {
     from,
@@ -478,7 +492,8 @@ export function buildControlReport(input: ControlInput): ControlReport {
       photos: rows.reduce((s, r) => s + r.photos.length, 0),
     },
     quarantined: input.records.filter((r) => r.quarantine_reason && inPeriod(r.device_time)).length,
-    tests: countIn('system_test'),
+    tests: countIn('system_test') + testEntries.length,
+    testEntries,
   }
 }
 
@@ -524,4 +539,32 @@ export function followUpText(r: ControlRow, timeZone: string): string {
     ...r.corrections.map((c) => `Corrigé le ${formatDayTime(c.time, timeZone)} par ${c.author} (motif : ${c.reason || 'non précisé'}) ; avant : ${c.before}`),
   ]
   return parts.join('\n')
+}
+
+/** Libellé court du type d'une saisie (liste des saisies de test). */
+const TEST_TYPE_LABELS: Partial<Record<RecordType, string>> = {
+  temperature_check: 'Relevé de température',
+  cooling: 'Refroidissement',
+  reheating: 'Remise en température',
+  cooking_check: 'Cuisson à cœur',
+  hot_holding: 'Maintien au chaud',
+  thawing: 'Décongélation',
+  oil_check: 'Contrôle de l’huile',
+  oil_change: 'Changement d’huile',
+  reception: 'Achat / réception',
+  label_printed: 'Étiquette',
+  waste: 'Produit jeté',
+  cleaning_done: 'Nettoyage',
+  checklist_done: 'Checklist',
+  corrective_action: 'Action corrective',
+}
+
+function rootOfChain(records: readonly HaccpRecord[], id: string): string {
+  let cur = id
+  for (let i = 0; i < 1000; i++) {
+    const r = records.find((x) => x.id === cur)
+    if (!r || r.type !== 'correction' || !r.supersedes_id) return cur
+    cur = r.supersedes_id
+  }
+  return cur
 }

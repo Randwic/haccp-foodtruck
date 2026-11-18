@@ -101,7 +101,7 @@ export function DocumentsTab({ timeZone, refreshKey = 0, onChanged }: { timeZone
               <ul className="mt-3 divide-y divide-line">
                 {missing.map((m) => (
                   <li key={m.category} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 basis-48">
                       <p className="font-semibold text-fg">{m.title}</p>
                       <p className="text-[15px] text-fg-muted">{m.why}</p>
                     </div>

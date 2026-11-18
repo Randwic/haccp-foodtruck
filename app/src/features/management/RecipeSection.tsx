@@ -4,11 +4,11 @@ import { errorText } from '../../manager/api.ts'
 import { MENU_CATEGORIES, normalizeRecipeInput } from '../../manager/helpers.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button, Modal, Notice, TextField } from '../../ui/components/index.ts'
-import { IconAllergen, IconCheck, IconPlus, IconRecipe, IconWarn } from '../../ui/icons.tsx'
+import { IconAllergen, IconCheck, IconChevronDown, IconChevronUp, IconPlus, IconRecipe, IconWarn } from '../../ui/icons.tsx'
 import { allergenProfile, catalogOf, productTraces, wouldCreateCycle, type AllergenOrigin } from '../labels/allergens.ts'
 import { PresentDot, TraceDot } from '../labels/AllergenMarks.tsx'
 import { categoryKey, categoryOrder, OTHER_DISHES } from '../labels/allergenTable.ts'
-import { ALLERGEN_LABELS, formatShelfLife, splitShelfLife, STORAGE_LABELS } from '../labels/model.ts'
+import { ALLERGEN_LABELS, ALLERGEN_SHORT, formatShelfLife, splitShelfLife, STORAGE_LABELS } from '../labels/model.ts'
 import { AllergenChecklist, ShelfLifeField, shelfValueHours, StoragePicker, VerifyNotice, type ShelfLifeValue } from './catalogFields.tsx'
 import { ConfirmModal, SectionTitle, useManagement } from './common.tsx'
 import { AllergenList } from './ProductSection.tsx'
@@ -263,28 +263,61 @@ function OriginList({ items, mark, empty }: { items: AllergenOrigin[]; mark: Rea
   )
 }
 
-/** Panneau collant : allergènes présents (●) et traces (○) calculés en direct, avec leur origine. */
+/**
+ * Bandeau collant en bas de la fiche : une seule ligne (résumé) pour ne pas cacher la liste des ingrédients
+ * quand on fait défiler sur téléphone ; « Voir le détail » déplie l'origine de chaque allergène.
+ */
 export function ComputedAllergens({ present, traces, cycles }: { present: AllergenOrigin[]; traces: AllergenOrigin[]; cycles: string[] }) {
+  const [open, setOpen] = useState(false)
+  const summary = present.length ? present.map((s) => ALLERGEN_SHORT[s.allergen]).join(', ') : 'Aucun allergène'
+  const traceSummary = traces.length ? `traces : ${traces.map((s) => ALLERGEN_SHORT[s.allergen]).join(', ')}` : null
   return (
-    <section aria-live="polite" aria-labelledby="computed-title" className="sticky bottom-0 z-10 -mx-1 max-h-[30vh] overflow-y-auto rounded-2xl border-2 border-accent bg-surface p-3 shadow-pop sm:max-h-[45vh] sm:p-4">
-      <h3 id="computed-title" className="flex items-center gap-2 text-[15px] font-semibold text-fg">
-        <IconAllergen size={18} className="text-accent" />
-        Allergènes calculés
-      </h3>
-      <p className="mt-2 flex items-center gap-2 text-[13px] font-semibold tracking-[0.04em] text-fg-subtle uppercase">
-        <PresentDot size={10} /> Présents
-      </p>
-      <OriginList items={present} mark={<PresentDot size={10} />} empty="Aucun allergène déclaré" />
-      <p className="mt-3 flex items-center gap-2 text-[13px] font-semibold tracking-[0.04em] text-fg-subtle uppercase">
-        <TraceDot size={10} /> Peut en contenir (traces)
-      </p>
-      <OriginList items={traces} mark={<TraceDot size={10} />} empty="Aucune trace signalée" />
-      {cycles.length > 0 && (
-        <p className="mt-3 flex items-start gap-1.5 text-[15px] font-medium text-danger">
-          <IconWarn size={18} className="mt-0.5 shrink-0" />
-          Boucle ignorée : {cycles.join(', ')} se contient elle-même.
+    <section
+      aria-live="polite"
+      aria-labelledby="computed-title"
+      className={`sticky bottom-0 z-10 -mx-1 rounded-2xl border-2 border-accent bg-surface shadow-pop ${open ? 'max-h-[45vh] overflow-y-auto' : ''}`}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="computed-detail"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex w-full min-h-12 items-center gap-2 px-3 py-2 text-left active:bg-pressed sm:px-4 ${open ? 'sticky top-0 z-10 rounded-t-2xl bg-surface' : 'rounded-2xl'}`}
+      >
+        <IconAllergen size={18} className="shrink-0 text-accent" />
+        <span className="min-w-0 flex-1 leading-snug">
+          <span id="computed-title" className="block text-[15px] font-semibold text-fg">
+            Allergènes calculés
+          </span>
+          {!open && (
+            <span className="block truncate text-[13px] text-fg-muted">
+              <span className="font-semibold text-fg">{summary}</span>
+              {traceSummary && <span> · {traceSummary}</span>}
+            </span>
+          )}
+        </span>
+        {cycles.length > 0 && !open && <IconWarn size={18} className="shrink-0 text-danger" />}
+        <span className="flex shrink-0 items-center gap-1 text-[13px] font-semibold text-accent">
+          {open ? 'Réduire' : 'Détail'}
+          {open ? <IconChevronDown size={18} /> : <IconChevronUp size={18} />}
+        </span>
+      </button>
+      <div id="computed-detail" hidden={!open} className="px-3 pb-3 sm:px-4 sm:pb-4">
+        <p className="flex items-center gap-2 text-[13px] font-semibold tracking-[0.04em] text-fg-subtle uppercase">
+          <PresentDot size={10} /> Présents
         </p>
-      )}
+        <OriginList items={present} mark={<PresentDot size={10} />} empty="Aucun allergène déclaré" />
+        <p className="mt-3 flex items-center gap-2 text-[13px] font-semibold tracking-[0.04em] text-fg-subtle uppercase">
+          <TraceDot size={10} /> Peut en contenir (traces)
+        </p>
+        <OriginList items={traces} mark={<TraceDot size={10} />} empty="Aucune trace signalée" />
+        {cycles.length > 0 && (
+          <p className="mt-3 flex items-start gap-1.5 text-[15px] font-medium text-danger">
+            <IconWarn size={18} className="mt-0.5 shrink-0" />
+            Boucle ignorée : {cycles.join(', ')} se contient elle-même.
+          </p>
+        )}
+      </div>
     </section>
   )
 }

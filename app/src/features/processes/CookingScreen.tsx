@@ -237,7 +237,7 @@ function SpotList({ data, now, onEntry, onHistory, onCorrectiveAction }: { data:
             {today.map((e) => (
               <li key={e.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-5">
                 <span className="w-14 shrink-0 text-[16px] font-semibold text-fg tabular-nums">{formatTime(e.time, tz)}</span>
-                <span className="min-w-0 flex-1 text-[16px] text-fg">
+                <span className="min-w-0 flex-1 basis-48 text-[16px] text-fg">
                   <span className="font-semibold">{e.payload.product}</span>
                   <span className="text-fg-muted"> · {SPOT_LABELS[e.kind].short}</span>
                 </span>

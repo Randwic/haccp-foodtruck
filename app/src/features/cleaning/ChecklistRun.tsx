@@ -134,7 +134,7 @@ export function ChecklistRun(props: {
 
       <div className="sticky bottom-0 z-10 -mx-4 mt-5 bg-canvas/95 px-4 pt-3 pb-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-          <p className="min-w-0 flex-1 text-[16px] text-fg" aria-live="polite">
+          <p className="min-w-0 flex-1 basis-48 text-[16px] text-fg" aria-live="polite">
             <span className="font-semibold tabular-nums">
               {items.length - unanswered.length}/{items.length}
             </span>{' '}

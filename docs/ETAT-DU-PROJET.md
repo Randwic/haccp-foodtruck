@@ -4,15 +4,11 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
-## 0 septies. Lot 8 RGPD + frites (18/11/2026 ~07 h UTC), même branche `claude/project-thread-slew47` (PR n°9)
-- **Frites** : Cédric confirme la friteuse d'appoint séparée pour les nuggets → plus de trace de gluten propre aux 4 plats de frites (`space_diner_v43.sql`, démo, texte du tableau des allergènes et du PMS). Les Frites Roswell gardent un ○ gluten venant de la **sauce cheddar (achetée)** (trace supposée, à vérifier). **Serveur pas encore modifié** (écriture refusée sans accord explicite) : `update public.recipes set may_contain = array_remove(may_contain,'gluten') where id in ('5d…0710','5d…0711','5d…0712','5d…0713')` ou Gestion › Recettes.
-- **Bug corrigé** : `space_diner_v43.sql` échouait en le relançant (24 h du pain brioché mises dans la colonne `cook_min_c`). Tests SQL : 849 OK (`bash supabase/tests/run.sh` marche dans la session : PostgreSQL 16 installé).
-- **RGPD** :
-  - Migration `20261118000100_lot8_rgpd.sql` : `staff.forgotten_at`, RPC `staff_forget(id)` (gérant, membre désactivé ; nom → « Ancien membre XXXX », PIN aléatoire), garde : un membre effacé ne peut plus être réactivé/renommé. Test `99b_lot8_rgpd.sql`. Le journal d'audit garde l'ancien nom (append-only), c'est écrit dans le registre.
-  - Gestion › Équipe : « Exporter ses données » (CSV : identité + toutes ses saisies, `staffExport.ts`, en deux temps pour la feuille de partage iOS), « Effacer son nom » (membre désactivé). `ControlRow.authorId` ajouté.
-  - Documents & contrôle › onglet **RGPD** (`features/rgpd/`) : registre des traitements (art. 30) et note d'information de l'équipe (signature), PDF ; identité reprise des réponses de l'assistant PMS (`pms/saved.ts`, partagé avec `PmsTab`), durée = `settings.retention_years`.
-- **Mise en ligne** : d'abord `bash scripts/deploy-supabase.sh tnikuszcrmsmlictktsj db` (nouvelle migration ; seed idempotent), puis fusion de la PR. Pas de changement des fonctions.
-- Reste RGPD : sauvegardes GitHub non chiffrées au repos (dépôt privé) ; à envisager.
+## 0 septies. Frites + fusion RGPD (18/11/2026 ~07 h UTC), branche `claude/project-thread-slew47` (PR n°9)
+- **Frites** : Cédric confirme la friteuse d'appoint séparée pour les nuggets → plus de trace de gluten propre aux 4 plats de frites (`space_diner_v43.sql`, démo, textes du tableau des allergènes et du PMS). Frites Roswell : ○ gluten venant de la **sauce cheddar (achetée)** (supposé). **Serveur pas encore modifié** (accord requis) : `update public.recipes set may_contain = array_remove(may_contain,'gluten') where id in ('5d000000-0000-4000-8000-000000000710','…711','…712','…713')`, ou Gestion › Recettes.
+- **RGPD** : deux fils l'avaient fait en parallèle. Gardée : la version de la branche `claude/project-thread-i0ninf` (PR n°10 fermée, voir sa section) — plus complète (date de départ, note remise, nom retiré du journal d'audit, effacement automatique nocturne, copie PDF). Ma version (onglet Documents › RGPD, export CSV) a été retirée pour éviter les doublons.
+- Tests SQL lançables dans la session (`bash supabase/tests/run.sh`, PostgreSQL 16 installé).
+- **Mise en ligne** : `bash scripts/deploy-supabase.sh tnikuszcrmsmlictktsj db` (migration lot 8), puis fusion de la PR n°9.
 
 ## 0 sexies. Petits bugs d'affichage (18/11/2026 ~06 h UTC), branche `claude/project-thread-slew47`
 Signalé par Cédric (capture iPhone) : dans Recettes › Modifier, le panneau « Allergènes calculés » (collant en bas, 30 % de l'écran) cachait la liste des ingrédients.
@@ -21,6 +17,12 @@ Signalé par Cédric (capture iPhone) : dans Recettes › Modifier, le panneau �
 - Champ produit sans catalogue : exemple « chili, bolognaise » remplacé par « Nom du produit ».
 - Audit fait sur iPhone (390 px, clair et sombre, mode démo) : tous les écrans d'accueil, Gestion (8 onglets + fenêtres Modifier), formulaires de saisie. Aucun débordement horizontal, aucune erreur dans la console. `tsc` OK, 799 tests OK, `deno check` OK, build OK. `oxlint` : 0 erreur, 53 avertissements de style React (pas de bug).
 - Mise en ligne : seulement l'app (fusion de la PR), aucune fonction Supabase ni SQL.
+## 0 sexies. RGPD de l'équipe (18/11/2026 ~06 h UTC), branche `claude/project-thread-i0ninf`
+- Migration `20261118000100_lot8_rgpd.sql` : `staff.deactivated_at` (trigger), `privacy_notice_on`, `forgotten_at` ; `staff_forget(id)` (gérant, équipier désactivé seulement) = pseudonyme « Ancien équipier n° N », PIN inutilisable, nom retiré de `audit_log` (seule exception à l'insertion seule, testée) ; `forget_former_staff()` chaque nuit 03:37 UTC (désactivé > 30 j et plus aucune saisie conservée). Tests SQL `99b` (879 assertions au total, OK).
+- App : Gestion › Équipe › encart « Données personnelles (RGPD) » (note d'information PDF, registre des traitements PDF) + bouton « Données personnelles » par personne (note à son nom, « remise aujourd'hui », copie PDF de ses données, effacement). `features/privacy/`.
+- Réparé au passage : `space_diner_v43.sql` mettait 24 (durée pain décongelé) dans `cook_min_c` → test 96c en échec.
+- **Mise en ligne** : d'abord `deploy-supabase.sh … db` (la migration ; l'app lit les nouvelles colonnes), puis fusion. Aucune fonction Edge modifiée.
+- Reste à faire : rotation des sauvegardes (l'historique Git de haccp-sauvegardes garde tout), retrait des documents d'un ancien salarié, lien « Vos données » sur l'écran de verrouillage.
 
 ## 0 bis. Lecture d'étiquette fiable (18/11/2026 ~05 h UTC), branche `claude/project-thread-ks86le`
 Cédric : « Rien de lisible » sur de vraies étiquettes bien lisibles (DLC/lot en **jet d'encre à points**, en **relief** sur couvercle, photo **de côté**). Tesseract ne lit pas ça. **Exigence de Cédric : lecture sur l'iPad, sans abonnement, sans Internet, sans option à choisir** (lecture par Claude/serveur refusée).

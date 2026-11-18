@@ -4,7 +4,7 @@ import { publicKeyHeaders } from '../core/supabaseKey.ts'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { DeviceEnrollResponse, Equipment, Threshold } from '../../../shared/types.ts'
 import { DOCUMENT_BUCKET, PHOTO_BUCKET, type Checklist, type CleaningTask, type DocumentRef, type IntegrityReport, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
-import { ManagerError, MESSAGES, type ManagedDevice, type ManagedStaff, type ManagerApi, type ManagerSettings, type RegistryRecord } from './api.ts'
+import { ManagerError, MESSAGES, type ManagedDevice, type ManagedStaff, type ManagerApi, type ManagerSettings, type RegistryRecord, type StaffAuditEntry } from './api.ts'
 import {
   documentFileError,
   documentMime,
@@ -30,7 +30,7 @@ export interface SupabaseManagerOptions {
 
 const EQUIPMENT_COLS = 'id,name,kind,active,updated_at'
 const THRESHOLD_COLS = 'id,equipment_id,check_type,min_c,max_c,tolerance_minutes,updated_at'
-const STAFF_COLS = 'id,display_name,role,active,updated_at'
+const STAFF_COLS = 'id,display_name,role,active,updated_at,created_at,deactivated_at,privacy_notice_on,forgotten_at'
 const SUPPLIER_COLS = 'id,name,phone,email,active,updated_at'
 const PRODUCT_COLS = 'id,name,allergens,storage,shelf_life_opened_hours,shelf_life_thawed_hours,may_contain,cook_min_c,active,updated_at'
 const RECIPE_COLS = 'id,name,kind,category,ingredient_product_ids,ingredient_recipe_ids,extra_allergens,may_contain,storage,shelf_life_hours,active,updated_at'
@@ -491,6 +491,24 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
         }
       }
       return [...out.values()].sort((a, b) => a.device_time.localeCompare(b.device_time) || a.id.localeCompare(b.id))
+    },
+    async forgetStaff(id) {
+      await run<unknown>(sb.rpc('staff_forget', { p_staff_id: id }))
+      return run<ManagedStaff>(sb.from('staff').select(STAFF_COLS).eq('id', id).single())
+    },
+    async listStaffRecords(staffId) {
+      const out: RegistryRecord[] = []
+      for (let offset = 0; ; offset += REGISTRY_PAGE) {
+        const rows = await run<RegistryRecord[]>(
+          (sb.from('records').select(RECORD_COLS).eq('author_id', staffId) as unknown as RegistryQuery).order('device_time').order('id').range(offset, offset + REGISTRY_PAGE - 1),
+        )
+        for (const r of rows) out.push(toRegistryRecord(r))
+        if (rows.length < REGISTRY_PAGE) break
+      }
+      return out
+    },
+    async listStaffAudit(staffId) {
+      return run<StaffAuditEntry[]>(sb.from('audit_log').select('at,action,old,new').eq('table_name', 'staff').eq('row_id', staffId).order('at').order('id'))
     },
     async listDevices() {
       return run<ManagedDevice[]>(sb.from('devices').select('id,name,revoked_at').order('name'))

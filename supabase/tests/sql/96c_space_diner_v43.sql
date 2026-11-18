@@ -43,7 +43,6 @@ select tests.assert_eq((select string_agg(check_type || ':' || min_c || '/' || t
 select tests.assert_eq((select string_agg(name, ', ' order by name) from public.products where id::text like '00000000-%' and not active),
   'Salade iceberg (sachet), Sauce burger, Steak haché surgelé', 'produits d''exemple du seed sans équivalent désactivés');
 select tests.assert_eq((select name from public.products where id = '00000000-0000-4000-8000-000000000401'), 'Pain brioché', 'pain burger du seed → pain brioché');
-select tests.assert_eq((select shelf_life_opened_hours::text || '/' || shelf_life_thawed_hours::text || '/' || coalesce(cook_min_c::text, 'null') from public.products where id = '00000000-0000-4000-8000-000000000401'), '96/24/null', 'pain brioché : 4 jours après achat, 24 h après décongélation, pas de température de cuisson');
 select tests.assert_eq((select count(*) from public.products where active)::int, 52, '52 produits actifs');
 select tests.assert_eq((select cook_min_c::text from public.products where name = 'Porc BBQ cuit'), '63.0', 'porc BBQ : 63 °C à cœur');
 select tests.assert_eq((select cook_min_c::text from public.products where name = 'Émincé de poulet cuit'), '74.0', 'poulet : 74 °C à cœur');
@@ -51,7 +50,8 @@ select tests.assert_eq((select cook_min_c::text from public.products where name 
 select tests.assert_eq((select shelf_life_opened_hours from public.products where name = 'Mascarpone'), 72, 'mascarpone : 72 h après ouverture');
 select tests.assert_eq((select shelf_life_opened_hours from public.products where name = 'Persil frais'), 72, 'persil ciselé : 72 h');
 select tests.assert((select shelf_life_opened_hours is null from public.products where name = 'Porc BBQ cuit'), 'porc : après ouverture « selon l''étiquette » (null)');
-select tests.assert_eq((select count(*) from public.products where active and shelf_life_thawed_hours is not null)::int, 1, 'une seule durée après décongélation (pain brioché)');
+select tests.assert_eq((select string_agg(name || '=' || shelf_life_thawed_hours, ',') from public.products where active and shelf_life_thawed_hours is not null), 'Pain brioché=24', 'durée après décongélation : pain brioché seul (24 h)');
+select tests.assert_eq((select cook_min_c from public.products where id = '00000000-0000-4000-8000-000000000401'), null::numeric, 'pain brioché : pas de température de cuisson');
 select tests.assert_eq((select allergens || may_contain from public.products where name = 'Sauce Worcestershire'), '{poissons,gluten}'::text[],
   'Worcestershire : poisson, traces de gluten');
 

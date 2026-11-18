@@ -21,7 +21,7 @@ import type { Checklist, CleaningTask, DocumentRef, Product, Recipe, Supplier } 
 import { verifyChains } from '../features/control/integrity.ts'
 import { normalizeProduct, normalizeRecipe } from '../core/catalog.ts'
 import { wouldCreateCycle } from '../features/labels/allergens.ts'
-import { ManagerError, MESSAGES, type ManagedDevice, type ManagedStaff, type ManagerApi, type ManagerErrorCode, type ManagerSettings, type RegistryRecord } from './api.ts'
+import { ManagerError, MESSAGES, type ManagedDevice, type ManagedStaff, type ManagerApi, type ManagerErrorCode, type ManagerSettings, type RegistryRecord, type StaffAuditEntry } from './api.ts'
 import {
   documentFileError,
   documentMime,
@@ -79,6 +79,9 @@ export interface ReferenceSink {
   upsertChecklist(c: Checklist): void
 }
 
+/** Fiche de l'équipe du serveur simulé, avec les champs RGPD (lot 8). */
+type MockStaff = StaffMember & { created_at?: string; deactivated_at?: string | null; privacy_notice_on?: string | null; forgotten_at?: string | null }
+
 interface MockState {
   bootstrapped: boolean
   account: { email: string; password: string } | null
@@ -90,7 +93,7 @@ interface MockState {
   thaw_dlc_days: number
   oil_polar_max: number
   oil_polar_warn: number
-  staff: StaffMember[]
+  staff: MockStaff[]
   equipment: Equipment[]
   thresholds: Threshold[]
   suppliers: Supplier[]
@@ -247,11 +250,10 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       oil_polar_max: state.oil_polar_max ?? DEMO_SETTINGS.oil_polar_max,
       oil_polar_warn: state.oil_polar_warn ?? DEMO_SETTINGS.oil_polar_warn,
     } satisfies Settings)
-  const pushStaff = (s: StaffMember) => {
+  const pushStaff = (s: MockStaff) => {
     if (!t) return
-    const { updated_at: _u, ...rest } = s
-    void _u
-    t.upsertStaff({ ...rest, active: true })
+    const { id, display_name, role, pin_salt, pin_hash } = s
+    t.upsertStaff({ id, display_name, role, pin_salt, pin_hash, active: true })
     if (!s.active) t.deactivate('staff', s.id)
   }
   const pushEquipment = (e: Equipment) => {
@@ -341,7 +343,24 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     if (needSession && !state.session) throw new ManagerError('unauthorized', MESSAGES.unauthorized, 401)
   }
 
-  const toManaged = (s: StaffMember): ManagedStaff => ({ id: s.id, display_name: s.display_name, role: s.role, active: s.active, updated_at: s.updated_at })
+  const toManaged = (s: MockStaff): ManagedStaff => ({
+    id: s.id,
+    display_name: s.display_name,
+    role: s.role,
+    active: s.active,
+    updated_at: s.updated_at,
+    created_at: s.created_at ?? s.updated_at,
+    deactivated_at: s.active ? null : (s.deactivated_at ?? s.updated_at),
+    privacy_notice_on: s.privacy_notice_on ?? null,
+    forgotten_at: s.forgotten_at ?? null,
+  })
+  // Journal d'audit simulé des fiches de l'équipe (mémoire seulement, secrets jamais écrits).
+  const staffAudit = new Map<string, StaffAuditEntry[]>()
+  const auditStaff = (id: string, action: string, before: MockStaff | null, after: MockStaff | null, secrets = false) => {
+    const view = (x: MockStaff | null) => (x ? { display_name: x.display_name, role: x.role, active: x.active, privacy_notice_on: x.privacy_notice_on ?? null, pin_hash: '***', pin_salt: '***' } : null)
+    const entry: StaffAuditEntry = { at: nowIso(), action, old: view(before), new: after ? { ...view(after), ...(secrets ? { _secrets_changed: ['pin_hash', 'pin_salt'] } : {}) } : null }
+    staffAudit.set(id, [...(staffAudit.get(id) ?? []), entry])
+  }
   const requireName = (name: string, what: string, max = 100) => {
     const n = name.trim().replace(/\s+/g, ' ')
     if (!n) throw new ManagerError('validation', `${what} est obligatoire.`, 400)
@@ -389,7 +408,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       if (!input.pin_salt || !input.pin_hash) throw new ManagerError('validation', 'Code PIN invalide.', 400)
       const display_name = requireName(input.display_name, 'Votre nom')
       const establishment_name = requireName(input.establishment_name, 'Le nom de l’établissement', 200)
-      const staff: StaffMember = { id: uuid(), display_name, role: 'manager', active: true, pin_salt: input.pin_salt, pin_hash: input.pin_hash, updated_at: nowIso() }
+      const staff: MockStaff = { id: uuid(), display_name, role: 'manager', active: true, pin_salt: input.pin_salt, pin_hash: input.pin_hash, updated_at: nowIso(), created_at: nowIso() }
       state = { ...state, bootstrapped: true, account: { email: input.email.trim().toLowerCase(), password: input.password }, establishment_name, staff: [...state.staff, staff] }
       pushStaff(staff)
       pushSettings()
@@ -476,8 +495,9 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     },
     async addStaff(input) {
       await gate(true)
-      const s: StaffMember = { id: uuid(), display_name: requireName(input.display_name, 'Le nom'), role: input.role, active: true, pin_salt: input.pin_salt, pin_hash: input.pin_hash, updated_at: nowIso() }
+      const s: MockStaff = { id: uuid(), display_name: requireName(input.display_name, 'Le nom'), role: input.role, active: true, pin_salt: input.pin_salt, pin_hash: input.pin_hash, updated_at: nowIso(), created_at: nowIso() }
       state.staff.push(s)
+      auditStaff(s.id, 'INSERT', null, s)
       pushStaff(s)
       save()
       return toManaged(s)
@@ -486,13 +506,23 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       await gate(true)
       const s = state.staff.find((x) => x.id === id)
       if (!s) throw new ManagerError('validation', 'Membre de l’équipe introuvable.', 404)
+      const before = { ...s }
+      if (s.forgotten_at && (patch.active || patch.display_name !== undefined || patch.pin_hash !== undefined)) {
+        throw new ManagerError('validation', 'Valeur refusée par le serveur : vérifiez la saisie.', 400)
+      }
       if (patch.display_name !== undefined) s.display_name = requireName(patch.display_name, 'Le nom')
-      if (patch.active !== undefined) s.active = patch.active
+      if (patch.active !== undefined) {
+        if (s.active && !patch.active) s.deactivated_at = nowIso()
+        if (patch.active) s.deactivated_at = null
+        s.active = patch.active
+      }
       if (patch.pin_salt !== undefined && patch.pin_hash !== undefined) {
         s.pin_salt = patch.pin_salt
         s.pin_hash = patch.pin_hash
       }
+      if (patch.privacy_notice_on !== undefined) s.privacy_notice_on = patch.privacy_notice_on
       s.updated_at = nowIso()
+      auditStaff(s.id, 'UPDATE', before, s, patch.pin_hash !== undefined)
       pushStaff(s)
       save()
       return toManaged(s)
@@ -779,6 +809,37 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       await gate(true)
       const keep = range?.types ? new Set<string>([...range.types, 'correction', 'corrective_action']) : null
       return (await registry()).filter((r) => !keep || keep.has(r.type))
+    },
+    async forgetStaff(id) {
+      await gate(true)
+      const s = state.staff.find((x) => x.id === id)
+      if (!s) throw new ManagerError('validation', 'Membre de l’équipe introuvable.', 404)
+      if (s.forgotten_at) return toManaged(s)
+      if (s.role === 'manager' || s.active) throw new ManagerError('forbidden', MESSAGES.forbidden, 403)
+      const n = state.staff.filter((x) => x.forgotten_at).length + 1
+      const pseudo = `Ancien équipier n° ${n}`
+      s.display_name = pseudo
+      s.pin_salt = 'AAAAAAAAAAAAAAAAAAAAAA=='
+      s.pin_hash = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+      s.privacy_notice_on = null
+      s.forgotten_at = nowIso()
+      s.updated_at = nowIso()
+      for (const e of staffAudit.get(id) ?? []) {
+        if (e.old && 'display_name' in e.old) e.old.display_name = pseudo
+        if (e.new && 'display_name' in e.new) e.new.display_name = pseudo
+      }
+      staffAudit.set(id, [...(staffAudit.get(id) ?? []), { at: nowIso(), action: 'RGPD_FORGET', old: null, new: { display_name: pseudo, reason: 'manager' } }])
+      pushStaff(s)
+      save()
+      return toManaged(s)
+    },
+    async listStaffRecords(staffId) {
+      await gate(true)
+      return (await registry()).filter((r) => r.author_id === staffId)
+    },
+    async listStaffAudit(staffId) {
+      await gate(true)
+      return clone(staffAudit.get(staffId) ?? [])
     },
     async listDevices() {
       await gate(true)

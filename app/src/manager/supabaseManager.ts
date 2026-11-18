@@ -2,9 +2,20 @@
 // Seule la clé publique « anon » est utilisée ; les droits viennent de la session du gérant (RLS is_manager()).
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { DeviceEnrollResponse, Equipment, Threshold } from '../../../shared/types.ts'
-import { PHOTO_BUCKET, type Checklist, type CleaningTask, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
-import { ManagerError, MESSAGES, type ManagedStaff, type ManagerApi, type ManagerSettings } from './api.ts'
-import { normalizeChecklistInput, normalizeCleaningTaskInput, normalizeProductInput, normalizeRecipeInput, normalizeSupplierInput, oilSettingsError } from './helpers.ts'
+import { DOCUMENT_BUCKET, PHOTO_BUCKET, type Checklist, type CleaningTask, type DocumentRef, type IntegrityReport, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
+import { ManagerError, MESSAGES, type ManagedDevice, type ManagedStaff, type ManagerApi, type ManagerSettings, type RegistryRecord } from './api.ts'
+import {
+  documentFileError,
+  documentMime,
+  documentPath,
+  normalizeChecklistInput,
+  normalizeCleaningTaskInput,
+  normalizeDocumentInput,
+  normalizeProductInput,
+  normalizeRecipeInput,
+  normalizeSupplierInput,
+  oilSettingsError,
+} from './helpers.ts'
 
 export interface SupabaseManagerOptions {
   url: string
@@ -24,6 +35,29 @@ const PRODUCT_COLS = 'id,name,allergens,storage,shelf_life_opened_hours,shelf_li
 const RECIPE_COLS = 'id,name,kind,category,ingredient_product_ids,ingredient_recipe_ids,extra_allergens,may_contain,storage,shelf_life_hours,active,updated_at'
 const CLEANING_COLS = 'id,name,frequency,product,method,active,updated_at'
 const CHECKLIST_COLS = 'id,name,kind,items,active,updated_at'
+const DOCUMENT_COLS = 'id,title,category,file_path,mime_type,size_bytes,issued_on,valid_until,notes,active,updated_at'
+const RECORD_COLS = 'id,type,payload,author_id,device_id,device_seq,device_time,prev_hash,hash,supersedes_id,server_time,clock_suspect,quarantine_reason'
+/** Lignes par page de lecture du registre (max_rows de PostgREST). */
+const REGISTRY_PAGE = 1000
+
+/** Sous-ensemble du constructeur de requêtes PostgREST utilisé pour lire le registre. */
+interface RegistryQuery extends PromiseLike<{ data: RegistryRecord[] | null; error: PgError | null; status?: number }> {
+  gte(column: string, value: string): RegistryQuery
+  lte(column: string, value: string): RegistryQuery
+  gt(column: string, value: string): RegistryQuery
+  in(column: string, values: readonly string[]): RegistryQuery
+  order(column: string): RegistryQuery
+  range(from: number, to: number): RegistryQuery
+}
+
+/** timestamptz relu (`…+00:00`) → ISO canonique `…Z` avec millisecondes (comme sur l'appareil). */
+function isoUtc(v: string): string {
+  const t = new Date(v)
+  return Number.isNaN(t.getTime()) ? v : t.toISOString()
+}
+function toRegistryRecord(r: RegistryRecord): RegistryRecord {
+  return { ...r, device_seq: Number(r.device_seq), device_time: isoUtc(r.device_time), server_time: isoUtc(r.server_time), clock_suspect: Boolean(r.clock_suspect), quarantine_reason: r.quarantine_reason ?? null }
+}
 
 interface PgError {
   message: string
@@ -367,6 +401,102 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
       if (status === 400 || status === 404) throw new ManagerError('validation', 'Photo introuvable sur le serveur (pas encore envoyée par l’appareil ?).', status)
       if (e && /fetch|network|Load failed/i.test(e.message)) throw new ManagerError('network', MESSAGES.network)
       throw new ManagerError('server', MESSAGES.server, status)
+    },
+
+    // ───── Lot 7 : documents ─────
+    async listDocuments() {
+      return run<DocumentRef[]>(sb.from('documents').select(DOCUMENT_COLS).order('created_at', { ascending: false }))
+    },
+    async addDocument(file, input) {
+      const fileError = documentFileError(file)
+      if (fileError) throw new ManagerError('validation', fileError, 400)
+      const n = normalizeDocumentInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const mime = documentMime(file.type)!
+      const path = documentPath(crypto.randomUUID(), mime)
+      // 1. Fichier d'abord, sans jamais écraser (upsert: false) ; 2. fiche ensuite.
+      let up
+      try {
+        up = await sb.storage.from(DOCUMENT_BUCKET).upload(path, file, { contentType: mime, upsert: false, cacheControl: '3600' })
+      } catch {
+        throw new ManagerError('network', MESSAGES.network)
+      }
+      if (up.error) {
+        const e = up.error as Error & { status?: number; statusCode?: string }
+        const status = e.status ?? (e.statusCode ? Number(e.statusCode) : null)
+        if (status === 401) throw new ManagerError('unauthorized', MESSAGES.unauthorized, 401)
+        if (status === 403) throw new ManagerError('forbidden', MESSAGES.forbidden, 403)
+        if (status === 413) throw new ManagerError('validation', 'Fichier trop lourd (10 Mo au maximum).', 413)
+        if (status === 415 || status === 400) throw new ManagerError('validation', 'Fichier refusé par le serveur (format ou taille).', status)
+        if (/fetch|network|Load failed/i.test(e.message)) throw new ManagerError('network', MESSAGES.network)
+        throw new ManagerError('server', MESSAGES.server, status)
+      }
+      return run<DocumentRef>(
+        sb
+          .from('documents')
+          .insert({ ...n.value, file_path: path, mime_type: mime, size_bytes: file.size, active: true })
+          .select(DOCUMENT_COLS)
+          .single(),
+      )
+    },
+    async updateDocument(id, patch) {
+      const { active, ...fields } = patch
+      const n = normalizeDocumentInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const p: Record<string, unknown> = { ...n.value }
+      if (active !== undefined) p.active = active
+      return run<DocumentRef>(sb.from('documents').update(p).eq('id', id).select(DOCUMENT_COLS).single())
+    },
+    async downloadDocument(doc) {
+      let res
+      try {
+        res = await sb.storage.from(DOCUMENT_BUCKET).download(doc.file_path)
+      } catch {
+        throw new ManagerError('network', MESSAGES.network)
+      }
+      if (res.data) return res.data.type === doc.mime_type ? res.data : new Blob([res.data], { type: doc.mime_type })
+      const e = res.error as (Error & { status?: number; statusCode?: string }) | null
+      const status = e?.status ?? (e?.statusCode ? Number(e.statusCode) : null)
+      if (status === 401) throw new ManagerError('unauthorized', MESSAGES.unauthorized, 401)
+      if (status === 403) throw new ManagerError('forbidden', MESSAGES.forbidden, 403)
+      if (status === 400 || status === 404) throw new ManagerError('validation', 'Fichier introuvable sur le serveur.', status)
+      if (e && /fetch|network|Load failed/i.test(e.message)) throw new ManagerError('network', MESSAGES.network)
+      throw new ManagerError('server', MESSAGES.server, status)
+    },
+
+    // ───── Lot 7 : mode Contrôle ─────
+    async listRegistry({ from, to }) {
+      const out = new Map<string, RegistryRecord>()
+      // Lecture paginée par (device_time, id) croissants : pas de doublon ni d'oubli entre deux pages.
+      const query = () => sb.from('records').select(RECORD_COLS) as unknown as RegistryQuery
+      const readAll = async (build: () => RegistryQuery) => {
+        for (let offset = 0; ; offset += REGISTRY_PAGE) {
+          const rows = await run<RegistryRecord[]>(build().order('device_time').order('id').range(offset, offset + REGISTRY_PAGE - 1))
+          for (const r of rows) out.set(r.id, toRegistryRecord(r))
+          if (rows.length < REGISTRY_PAGE) break
+        }
+      }
+      await readAll(() => query().gte('device_time', from).lte('device_time', to))
+      // Corrections et actions correctives saisies après la période : elles peuvent viser un enregistrement de la période.
+      await readAll(() => query().gt('device_time', to).in('type', ['correction', 'corrective_action']))
+      // Originaux d'avant la période visés par une correction de la période (affichés barrés).
+      for (let guard = 0; guard < 5; guard++) {
+        const missing = [...new Set([...out.values()].map((r) => r.supersedes_id).filter((id): id is string => !!id && !out.has(id)))]
+        if (missing.length === 0) break
+        for (let i = 0; i < missing.length; i += 200) {
+          const rows = await run<RegistryRecord[]>(query().in('id', missing.slice(i, i + 200)))
+          for (const r of rows) out.set(r.id, toRegistryRecord(r))
+        }
+      }
+      return [...out.values()].sort((a, b) => a.device_time.localeCompare(b.device_time) || a.id.localeCompare(b.id))
+    },
+    async listDevices() {
+      return run<ManagedDevice[]>(sb.from('devices').select('id,name,revoked_at').order('name'))
+    },
+    async verifyIntegrity() {
+      const { data } = await callFunction<IntegrityReport>('verify-integrity', { method: 'POST', auth: true })
+      if (!data || !Array.isArray(data.devices)) throw new ManagerError('server', MESSAGES.server)
+      return data
     },
   }
 }

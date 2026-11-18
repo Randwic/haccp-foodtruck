@@ -16,12 +16,24 @@ import {
   type MockTransport,
   type Transport,
 } from '../core/index.ts'
-import type { DeviceEnrollResponse, Equipment, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
-import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { DeviceEnrollResponse, Equipment, HaccpRecord, Settings, StaffMember, Threshold } from '../../../shared/types.ts'
+import type { Checklist, CleaningTask, DocumentRef, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import { verifyChains } from '../features/control/integrity.ts'
 import { normalizeProduct, normalizeRecipe } from '../core/catalog.ts'
 import { wouldCreateCycle } from '../features/labels/allergens.ts'
-import { ManagerError, MESSAGES, type ManagedStaff, type ManagerApi, type ManagerErrorCode, type ManagerSettings } from './api.ts'
-import { normalizeChecklistInput, normalizeCleaningTaskInput, normalizeProductInput, normalizeRecipeInput, normalizeSupplierInput, oilSettingsError } from './helpers.ts'
+import { ManagerError, MESSAGES, type ManagedDevice, type ManagedStaff, type ManagerApi, type ManagerErrorCode, type ManagerSettings, type RegistryRecord } from './api.ts'
+import {
+  documentFileError,
+  documentMime,
+  documentPath,
+  normalizeChecklistInput,
+  normalizeCleaningTaskInput,
+  normalizeDocumentInput,
+  normalizeProductInput,
+  normalizeRecipeInput,
+  normalizeSupplierInput,
+  oilSettingsError,
+} from './helpers.ts'
 
 /** Compte de démonstration (mode `seeded`). */
 export const MOCK_MANAGER_ACCOUNT = { email: 'gerant@demo.fr', password: 'demo-demo-demo' } as const
@@ -47,6 +59,15 @@ export interface MockManagerOptions {
    * les produits / recettes créés dans Gestion apparaissent aussitôt dans Étiquettes, Cuisson…
    */
   referenceSink?: ReferenceSink
+  /** Lot 7 : documents déjà déposés (démo). Leur fichier est un PDF d'exemple. */
+  documents?: DocumentRef[]
+  /**
+   * Lot 7 : registre « du serveur » quand aucun serveur simulé n'est branché (démo `?demo=` : saisies du core factice).
+   * Avec un `transport`, le registre est celui du serveur simulé.
+   */
+  registrySource?: () => Promise<HaccpRecord[]>
+  /** Lot 7 : appareils connus (démo). */
+  devices?: ManagedDevice[]
 }
 
 /** Ce que le core factice expose pour recevoir les références (même forme que FakeCore.simulate). */
@@ -77,6 +98,8 @@ interface MockState {
   recipes: Recipe[]
   cleaning_tasks: CleaningTask[]
   checklists: Checklist[]
+  /** Lot 7 (absent des états enregistrés avant). */
+  documents?: DocumentRef[]
 }
 
 export interface MockManagerApi extends ManagerApi {
@@ -120,6 +143,35 @@ function initialState(seeded: boolean): MockState {
     checklists: clone(DEMO_CHECKLISTS),
   }
 }
+
+/** Appareils vus dans le registre simulé (l'appareil de démonstration s'appelle « iPad »). */
+function mockDevices(records: readonly HaccpRecord[]): ManagedDevice[] {
+  const ids = new Set([DEMO_DEVICE.device_id, ...records.map((r) => r.device_id)])
+  let n = 1
+  return [...ids].map((id) => ({ id, name: id === DEMO_DEVICE.device_id ? 'iPad' : `Appareil ${++n}`, revoked_at: null }))
+}
+
+/** PDF d'une page « Document d'exemple » (fichiers des documents de démonstration). */
+const SAMPLE_PDF = (() => {
+  const text = 'BT /F1 24 Tf 72 720 Td (Document d exemple - demonstration) Tj ET'
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ]
+  let body = '%PDF-1.4\n'
+  const offsets: number[] = []
+  objs.forEach((o, i) => {
+    offsets.push(body.length)
+    body += `${i + 1} 0 obj\n${o}\nendobj\n`
+  })
+  const xref = body.length
+  body += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`
+  body += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  return new TextEncoder().encode(body)
+})()
 
 /** Fait apparaître le nom d'établissement du gérant dans les sync-pull du serveur simulé. */
 export function withEstablishmentName(transport: Transport, name: () => string): Transport {
@@ -171,6 +223,10 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       /* état illisible : on repart de zéro */
     }
   }
+  if (opts.documents) state.documents = clone(opts.documents)
+  state.documents ??= []
+  /** Fichiers déposés (en mémoire seulement : perdus au rechargement, comme le serveur simulé du core). */
+  const files = new Map<string, Blob>()
   const save = () => {
     if (!opts.storageKey) return
     try {
@@ -648,6 +704,91 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       const bytes = t?.storedPhotos().get(path)
       if (!bytes) throw new ManagerError('validation', 'Photo introuvable sur le serveur (pas encore envoyée par l’appareil ?).', 404)
       return new Blob([bytes.slice().buffer], { type: 'image/webp' })
+    },
+
+    // ───── Lot 7 : documents ─────
+    async listDocuments() {
+      await gate(true)
+      return clone(state.documents ?? []).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    },
+    async addDocument(file, input) {
+      await gate(true)
+      const fileError = documentFileError(file)
+      if (fileError) throw new ManagerError('validation', fileError, 400)
+      const n = normalizeDocumentInput(input)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const v = n.value as Required<typeof n.value>
+      const mime = documentMime(file.type)!
+      const path = documentPath(uuid(), mime)
+      files.set(path, file)
+      const doc: DocumentRef = {
+        id: uuid(),
+        title: v.title,
+        category: v.category,
+        file_path: path,
+        mime_type: mime,
+        size_bytes: file.size,
+        issued_on: v.issued_on ?? null,
+        valid_until: v.valid_until ?? null,
+        notes: v.notes ?? null,
+        active: true,
+        updated_at: nowIso(),
+      }
+      state.documents = [doc, ...(state.documents ?? [])]
+      save()
+      return clone(doc)
+    },
+    async updateDocument(id, patch) {
+      await gate(true)
+      const { active, ...fields } = patch
+      const n = normalizeDocumentInput(fields)
+      if (!n.ok) throw new ManagerError('validation', n.message, 400)
+      const doc = (state.documents ?? []).find((d) => d.id === id)
+      if (!doc) throw new ManagerError('validation', 'Document introuvable.', 404)
+      const next = { ...doc, ...n.value, ...(active === undefined ? {} : { active }) }
+      if (next.issued_on && next.valid_until && next.valid_until < next.issued_on) throw new ManagerError('validation', 'L’échéance doit être après la date du document.', 400)
+      Object.assign(doc, next, { updated_at: nowIso() })
+      save()
+      return clone(doc)
+    },
+    async downloadDocument(d) {
+      await gate(true)
+      const f = files.get(d.file_path)
+      if (f) return f
+      if ((state.documents ?? []).some((x) => x.file_path === d.file_path) && d.mime_type === 'application/pdf') {
+        return new Blob([SAMPLE_PDF], { type: 'application/pdf' })
+      }
+      throw new ManagerError('validation', 'Fichier introuvable sur le serveur.', 404)
+    },
+
+    // ───── Lot 7 : mode Contrôle ─────
+    async listRegistry() {
+      await gate(true)
+      if (t) {
+        const at = (r: HaccpRecord) => r.server_time ?? r.device_time
+        return [
+          ...t.acceptedRecords().map((r): RegistryRecord => ({ ...r, server_time: at(r), clock_suspect: false, quarantine_reason: null })),
+          ...t.quarantinedRecords().map(({ record, reason }): RegistryRecord => ({ ...record, server_time: at(record), clock_suspect: false, quarantine_reason: reason })),
+        ].sort((a, b) => a.device_time.localeCompare(b.device_time))
+      }
+      const list = opts.registrySource ? await opts.registrySource() : []
+      return list.map((r): RegistryRecord => ({ ...clone(r), server_time: r.server_time ?? r.device_time, clock_suspect: false, quarantine_reason: null }))
+    },
+    async listDevices() {
+      await gate(true)
+      if (opts.devices) return clone(opts.devices)
+      return mockDevices(t ? t.acceptedRecords() : opts.registrySource ? await opts.registrySource() : [])
+    },
+    async verifyIntegrity() {
+      await gate(true)
+      const names = new Map((await api.listDevices()).map((d) => [d.id, d.name]))
+      if (!t && opts.registrySource) {
+        // Démo : le core factice ne calcule pas de vraies empreintes ; rapport simulé « intègre ».
+        const report = await verifyChains(await opts.registrySource(), (id) => names.get(id) ?? 'Appareil', { complete: false })
+        return { ...report, ok: true, devices: report.devices.map((d) => ({ ...d, ok: true, problems: [] })) }
+      }
+      const records = t ? [...t.acceptedRecords(), ...t.quarantinedRecords().map((q) => q.record)] : []
+      return verifyChains(records, (id) => names.get(id) ?? 'Appareil')
     },
 
     simulate: {

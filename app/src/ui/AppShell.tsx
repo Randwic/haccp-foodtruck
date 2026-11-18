@@ -17,6 +17,7 @@ import { LabelsScreen } from '../features/labels/LabelsScreen.tsx'
 import { CleaningScreen } from '../features/cleaning/CleaningScreen.tsx'
 import { OilScreen } from '../features/oil/OilScreen.tsx'
 import { WasteScreen } from '../features/reception/WasteScreen.tsx'
+import { DocumentsScreen } from '../features/documents/DocumentsScreen.tsx'
 import { AppHeader } from './AppHeader.tsx'
 import { useCore } from './CoreContext.tsx'
 import { useAutoLock } from './hooks/useAutoLock.ts'
@@ -26,7 +27,7 @@ import { OfflineBanner } from './pwa/OfflineBanner.tsx'
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
 
 type Boot = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; device: DeviceInfo | null }
-type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | 'cleaning' | 'oil' | 'waste' | ProcessView
+type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | 'cleaning' | 'oil' | 'waste' | 'documents' | ProcessView
 
 /** Enchaînement des écrans : première configuration → verrouillage (PIN) → accueil / Gestion. */
 export function AppShell() {
@@ -149,6 +150,8 @@ export function AppShell() {
             onBack={() => setView(allergensFrom === 'management' && staff.role !== 'manager' ? 'today' : allergensFrom)}
             backLabel={allergensFrom === 'labels' ? 'Étiquettes' : allergensFrom === 'management' ? 'Gestion' : 'Accueil'}
           />
+        ) : view === 'documents' && staff.role === 'manager' ? (
+          <DocumentsScreen onBack={() => setView('today')} />
         ) : view === 'management' && staff.role === 'manager' ? (
           <ManagementScreen onBack={() => setView('today')} meId={staff.id} onOpenAllergens={() => openAllergens('management')} />
         ) : (
@@ -166,6 +169,7 @@ export function AppShell() {
             onOpenAllergens={() => openAllergens('today')}
             onOpenProcess={setView}
             onOpenManagement={staff.role === 'manager' ? () => setView('management') : undefined}
+            onOpenDocuments={staff.role === 'manager' ? () => setView('documents') : undefined}
           />
         )}
       </>

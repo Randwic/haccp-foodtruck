@@ -37,12 +37,10 @@ import type { OilSummary, VatStatus } from '../oil/model.ts'
 import { formatPercent } from '../oil/model.ts'
 import { wastesThisWeek } from '../reception/wasteModel.ts'
 import { IconChecklist, IconWaste } from '../../ui/icons.tsx'
+import { useDocumentReminders, type DocumentReminders } from '../documents/useDocumentReminders.ts'
 
 const ICON = 22
 
-const UPCOMING = [
-  { title: 'Documents & PMS', Icon: IconDocuments, description: 'Plan de maîtrise, export contrôle' },
-] as const
 
 function SectionLabel({ id, children }: { id: string; children: string }) {
   return (
@@ -225,6 +223,16 @@ function oilLines(s: OilSummary | null, statuses: readonly VatStatus[]): StatusL
   return lines
 }
 
+/** Tuile Documents & PMS : documents échus (rouge) ou à renouveler sous 30 jours (ambre). */
+function documentLines(r: DocumentReminders | null): StatusLine[] {
+  if (!r) return [{ tone: 'muted', icon: <IconDocuments size={17} className="shrink-0" />, text: 'Dossier pour un contrôle' }]
+  const lines: StatusLine[] = []
+  if (r.expired > 0) lines.push({ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: plural(r.expired, 'document échu', 'documents échus') })
+  if (r.soon > 0) lines.push({ tone: 'warn', icon: <IconDue size={17} className="shrink-0" />, text: plural(r.soon, 'document à renouveler', 'documents à renouveler') })
+  if (!lines.length) lines.push({ tone: 'ok', icon: <IconOk size={17} className="shrink-0" />, text: 'Documents à jour' })
+  return lines
+}
+
 /** Rappels des checklists (ouverture, fermeture, nuisibles) : ambre si en retard. */
 function ChecklistReminder({ status, onOpen }: { status: CleaningStatus['summary']['checklists'][number]; onOpen: () => void }) {
   const late = status.state === 'late' || status.state === 'overdue'
@@ -259,10 +267,13 @@ export interface TodayScreenProps {
   onOpenCleaning?: (checklistId?: string) => void
   onOpenOil?: () => void
   onOpenWaste?: () => void
+  /** Documents & PMS (gérant). Sans gestionnaire : tuile grisée « réservé au gérant ». */
+  onOpenDocuments?: () => void
 }
 
 /** Accueil « Aujourd'hui » : alertes, modules HACCP puis outils. */
-export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess, onOpenLabels, onOpenAllergens, onOpenCleaning, onOpenOil, onOpenWaste }: TodayScreenProps) {
+export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess, onOpenLabels, onOpenAllergens, onOpenCleaning, onOpenOil, onOpenWaste, onOpenDocuments }: TodayScreenProps) {
+  const documents = documentLines(useDocumentReminders(!!onOpenDocuments))
   const { status: cleaningStatus } = useCleaningStatus(60_000)
   const cleaning = cleaningLines(cleaningStatus)
   const { summary: oilSummary, statuses: vatStatuses } = useOilStatus(60_000)
@@ -426,9 +437,19 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
               onClick={onOpenOil}
             />
           )}
-          {UPCOMING.map((m) => (
-            <Tile key={m.title} title={m.title} icon={<m.Icon size={ICON} />} description={m.description} disabled />
-          ))}
+          {onOpenDocuments ? (
+            <Tile
+              title="Documents & PMS"
+              icon={<IconDocuments size={ICON} />}
+              description="Mode Contrôle, documents, plan"
+              status={<StatusLines lines={documents} />}
+              tone={tileTone(documents)}
+              ariaLabel={ariaOf('Documents & PMS', documents)}
+              onClick={onOpenDocuments}
+            />
+          ) : (
+            <Tile title="Documents & PMS" icon={<IconDocuments size={ICON} />} description="Réservé au gérant" disabled />
+          )}
         </div>
       </section>
 

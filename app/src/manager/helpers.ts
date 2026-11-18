@@ -1,8 +1,8 @@
 // Aides pures de l'espace gérant (testables sans DOM).
 import type { EquipmentKind, RecordType } from '../../../shared/types.ts'
-import { ALLERGENS, type Allergen, type Checklist, type ChecklistItem, type CleaningFrequency } from '../../../shared/payloads.ts'
+import { ALLERGENS, DOCUMENT_MAX_BYTES, type Allergen, type Checklist, type ChecklistItem, type CleaningFrequency, type DocumentCategory, type DocumentRef } from '../../../shared/payloads.ts'
 import { STORAGE_KINDS } from '../../../shared/validation.ts'
-import type { ChecklistInput, CleaningTaskInput, ProductInput, RecipeInput } from './api.ts'
+import type { ChecklistInput, CleaningTaskInput, DocumentInput, ProductInput, RecipeInput } from './api.ts'
 
 /** Nom proposé pour l'appareil : « iPad », « iPhone »… (modifiable par l'utilisateur). */
 export function guessDeviceName(
@@ -348,5 +348,74 @@ export function oilSettingsError(max: number, warn: number): string | null {
   if (!oneDecimal(max) || max < 10 || max > 30) return 'La limite des composés polaires doit être comprise entre 10 et 30 % (une décimale au plus).'
   if (!oneDecimal(warn) || warn <= 0) return 'Le seuil d’alerte doit être un pourcentage positif (une décimale au plus).'
   if (warn >= max) return 'Le seuil d’alerte doit être inférieur à la limite.'
+  return null
+}
+
+// ───────────────────────────── Lot 7 : documents ─────────────────────────────
+
+export const DOCUMENT_CATEGORIES: readonly DocumentCategory[] = [
+  'pms', 'registration', 'training', 'health', 'pest_control', 'maintenance', 'supplier', 'lab_analysis', 'inspection', 'other',
+]
+
+export const DOCUMENT_MIME_EXT: Record<DocumentRef['mime_type'], 'pdf' | 'jpg' | 'png' | 'webp'> = {
+  'application/pdf': 'pdf',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+}
+
+/** Type de fichier accepté par le bucket `documents`, sinon null. */
+export function documentMime(type: string): DocumentRef['mime_type'] | null {
+  const t = type.toLowerCase().trim()
+  if (t === 'image/jpg' || t === 'image/pjpeg') return 'image/jpeg'
+  return t in DOCUMENT_MIME_EXT ? (t as DocumentRef['mime_type']) : null
+}
+
+/** Nom du fichier dans le bucket : `<uuid>.<ext>` (contrainte de la table et des politiques Storage). */
+export function documentPath(id: string, mime: DocumentRef['mime_type']): string {
+  return `${id}.${DOCUMENT_MIME_EXT[mime]}`
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+function validDate(d: string): boolean {
+  if (!ISO_DATE.test(d)) return false
+  const t = new Date(`${d}T00:00:00Z`)
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === d
+}
+
+/** Mêmes règles que la table `documents` : titre 1–120, catégorie connue, dates AAAA-MM-JJ (échéance ≥ émission), notes ≤ 500. */
+export function normalizeDocumentInput(input: Partial<DocumentInput>): Normalized<Partial<DocumentInput>> {
+  const out: Partial<DocumentInput> = {}
+  if (input.title !== undefined) {
+    const t = input.title.trim().replace(/\s+/g, ' ')
+    if (!t) return { ok: false, field: 'title', message: 'Le titre du document est obligatoire.' }
+    if (t.length > 120) return { ok: false, field: 'title', message: 'Titre trop long (120 caractères au plus).' }
+    out.title = t
+  }
+  if (input.category !== undefined) {
+    if (!DOCUMENT_CATEGORIES.includes(input.category)) return { ok: false, field: 'category', message: 'Catégorie inconnue.' }
+    out.category = input.category
+  }
+  for (const f of ['issued_on', 'valid_until'] as const) {
+    const v = input[f]
+    if (v === undefined) continue
+    const d = (v ?? '').trim()
+    if (d && !validDate(d)) return { ok: false, field: f, message: 'Date invalide.' }
+    out[f] = d || null
+  }
+  if (out.issued_on && out.valid_until && out.valid_until < out.issued_on) {
+    return { ok: false, field: 'valid_until', message: 'L’échéance doit être après la date du document.' }
+  }
+  const n = optionalText(input.notes, 500, 'notes', 'Note')
+  if (!n.ok) return n
+  if (n.value !== undefined) out.notes = n.value
+  return { ok: true, value: out }
+}
+
+/** Fichier acceptable pour le bucket `documents` (type et taille), sinon message d'erreur. */
+export function documentFileError(file: { type: string; size: number }): string | null {
+  if (!documentMime(file.type)) return 'Format non accepté : PDF ou photo (JPEG, PNG, WebP) seulement.'
+  if (file.size <= 0) return 'Le fichier est vide.'
+  if (file.size > DOCUMENT_MAX_BYTES) return 'Fichier trop lourd (10 Mo au maximum).'
   return null
 }

@@ -10,6 +10,7 @@ import { demoProcessAlerts, demoProcessRecords } from './features/processes/demo
 import { demoReceptions } from './features/reception/demoData.ts'
 import { DEMO_MENU_PRODUCTS, DEMO_MENU_RECIPES, demoLabels } from './features/labels/demoData.ts'
 import { demoCleaningRecords, demoOilRecords, demoWasteRecords } from './features/cleaning/demoData.ts'
+import { demoDocuments } from './features/documents/demoData.ts'
 import { createCore, createHttpTransport, createMockTransport, notifyActivity } from './core/index.ts'
 import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, type ManagerApi } from './manager/index.ts'
 
@@ -109,6 +110,10 @@ function createApp(): { core: CoreApi; manager: ManagerApi } {
       latencyMs: 300,
       catalog: { products: DEMO_MENU_PRODUCTS, recipes: DEMO_MENU_RECIPES },
       referenceSink: core.simulate,
+      // Lot 7 : documents de démonstration, registre « du serveur » = saisies du core factice.
+      documents: demoDocuments(new Date()),
+      registrySource: () => core.listRecords(),
+      devices: [{ id: '00000000-0000-4000-8000-000000000001', name: 'iPad cuisine', revoked_at: null }],
     })
     return { core, manager }
   }

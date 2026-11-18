@@ -149,7 +149,7 @@ export function defaultAnswers(ctx: { establishmentName: string; ownerName: stri
     waste:
       'Poubelle à couvercle et sacs fermés, évacués après chaque service dans les conteneurs prévus. Huiles de friture usagées stockées dans des bidons fermés et remises à un collecteur agréé (bon de collecte conservé).',
     allergens:
-      'Tableau des 14 allergènes affiché à la remorque, tenu à jour à partir des recettes de l’application. Le client est invité à signaler toute allergie avant de commander. Friteuse et plancha communes : des traces sont possibles, ce qui est indiqué au client.',
+      'Tableau des 14 allergènes affiché à la remorque, tenu à jour à partir des recettes de l’application. Le client est invité à signaler toute allergie avant de commander. Plancha commune : des traces sont possibles, ce qui est indiqué au client. Les nuggets (panés) cuisent dans une friteuse d’appoint séparée : pas de gluten dans l’huile des frites.',
     recall:
       'En cas de rappel d’un produit (RappelConso, information de Metro) ou de produit dangereux découvert : retirer immédiatement les produits du lot concerné (le registre de réception et les étiquettes indiquent les lots), les isoler avec la mention « Ne pas utiliser », les enregistrer dans « Produits jetés » (motif rappel), prévenir le fournisseur et, si des produits ont pu être servis, informer la DDPP du département.',
     verification:

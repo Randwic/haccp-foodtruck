@@ -215,7 +215,7 @@ export function ReceptionScreen({ onBack, canAddSupplier, onOpenRecall }: { onBa
                   e.refused.map((it, k) => (
                     <li key={`${e.id}-${k}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3.5 sm:px-5">
                       <IconBan size={20} className="shrink-0 text-danger" />
-                      <span className="min-w-0 flex-1 text-[16px] text-fg">
+                      <span className="min-w-0 flex-1 basis-48 text-[16px] text-fg">
                         <span className="font-semibold">{it.product}</span>
                         <span className="text-fg-muted">
                           {' '}

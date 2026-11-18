@@ -18,6 +18,8 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   CalendarDays,
   CalendarClock,
   Copy,
@@ -105,6 +107,8 @@ export const IconClose = make(X, 'IconClose')
 export const IconArrowLeft = make(ArrowLeft, 'IconArrowLeft')
 export const IconChevronLeft = make(ChevronLeft, 'IconChevronLeft')
 export const IconChevronRight = make(ChevronRight, 'IconChevronRight')
+export const IconChevronUp = make(ChevronUp, 'IconChevronUp')
+export const IconChevronDown = make(ChevronDown, 'IconChevronDown')
 export const IconDelete = make(Delete, 'IconDelete')
 export const IconLock = make(Lock, 'IconLock')
 export const IconLogOut = make(LogOut, 'IconLogOut')

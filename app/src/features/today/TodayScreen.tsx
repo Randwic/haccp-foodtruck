@@ -303,7 +303,7 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
       {summary && summary.missingActions > 0 && (
         <div role="alert" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-danger/35 bg-danger-soft px-4 py-3.5 sm:px-5">
           <IconError size={22} className="shrink-0 text-danger" />
-          <p className="min-w-0 flex-1 text-[16px] text-fg">
+          <p className="min-w-0 flex-1 basis-48 text-[16px] text-fg">
             <span className="font-semibold">{plural(summary.missingActions, 'relevé hors seuil', 'relevés hors seuil')} sans action corrective.</span> À traiter dans Températures.
           </p>
           <Button variant="danger" onClick={onOpenTemperatures}>
@@ -314,7 +314,7 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
       {processMissing > 0 && (
         <div role="alert" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-danger/35 bg-danger-soft px-4 py-3.5 sm:px-5">
           <IconError size={22} className="shrink-0 text-danger" />
-          <p className="min-w-0 flex-1 text-[16px] text-fg">
+          <p className="min-w-0 flex-1 basis-48 text-[16px] text-fg">
             <span className="font-semibold">{plural(processMissing, 'mesure hors objectif', 'mesures hors objectif')} sans action corrective.</span> À traiter depuis la tuile signalée en rouge.
           </p>
         </div>

@@ -313,7 +313,7 @@ function TimedList(props: {
           <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
             {doneToday.map((b) => (
               <li key={b.batchId} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-5">
-                <span className="min-w-0 flex-1 text-[16px] text-fg">
+                <span className="min-w-0 flex-1 basis-48 text-[16px] text-fg">
                   <span className="font-semibold">{b.product}</span>
                   <span className="text-fg-muted tabular-nums">
                     {' '}

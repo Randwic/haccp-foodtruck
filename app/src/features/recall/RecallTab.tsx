@@ -135,7 +135,7 @@ export function RecallTab({ manager, timeZone, onSignIn }: { manager: ManagerApi
           {found.data.source === 'device' ? (
             <div className="flex flex-wrap items-start gap-4 rounded-2xl border border-warn/35 bg-warn-soft p-4 sm:p-5">
               <IconOffline size={22} className="mt-0.5 shrink-0 text-warn" />
-              <div className="min-w-0 flex-1 text-[16px] text-fg">
+              <div className="min-w-0 flex-1 basis-48 text-[16px] text-fg">
                 <p className="font-semibold">Saisies de cet appareil seulement.</p>
                 <p className="text-fg-muted">{found.data.fallbackReason ?? 'Connectez-vous pour chercher dans tout le registre (tous les appareils).'}</p>
               </div>

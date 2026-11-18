@@ -198,7 +198,7 @@ export function ControlTab({ manager, timeZone, onSignIn }: { manager: ManagerAp
           {data.source === 'device' ? (
             <div className="flex flex-wrap items-start gap-4 rounded-2xl border border-warn/35 bg-warn-soft p-4 sm:p-5">
               <IconOffline size={22} className="mt-0.5 shrink-0 text-warn" />
-              <div className="min-w-0 flex-1 text-[16px] text-fg">
+              <div className="min-w-0 flex-1 basis-48 text-[16px] text-fg">
                 <p className="font-semibold">Saisies de cet appareil seulement.</p>
                 <p className="text-fg-muted">
                   {data.fallbackReason ?? 'Sans connexion gérant, l’application ne lit que ce qui a été saisi sur cet appareil.'} Connectez-vous pour inclure tout le registre (tous les appareils) et les documents.
@@ -223,7 +223,7 @@ export function ControlTab({ manager, timeZone, onSignIn }: { manager: ManagerAp
           {/* Intégrité */}
           <div className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 basis-48">
                 <h3 className="text-lg font-semibold text-fg">Intégrité du registre</h3>
                 <p className="text-[15px] text-fg-muted">Prouve qu’aucune saisie n’a été modifiée, retirée ou ajoutée après coup.</p>
               </div>
@@ -386,7 +386,7 @@ function RowCard({
   return (
     <li className={`rounded-2xl border bg-surface p-4 ${r.missingAction ? 'border-danger/55' : r.status === 'ko' ? 'border-warn/55' : 'border-line'}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-48">
           <p className="text-[14px] text-fg-muted">
             {formatDayTime(r.time, timeZone)}
             {module ? ` · ${module}` : ''} · {r.author}

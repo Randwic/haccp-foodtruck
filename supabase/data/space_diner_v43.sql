@@ -97,7 +97,7 @@ with v (id, name, allergens, may_contain, storage, opened_h, cook_c) as (values
   -- Pain et fromages
   -- Pain du boulanger (pas de DLC fabricant) : gardé 4 jours après l'achat ; le reste peut être congelé,
   -- décongelé à température ambiante et servi dans les 24 h (validé par Cédric le 18/11/2026).
-  ('00000000-0000-4000-8000-000000000401', 'Pain brioché', '{gluten,oeufs,lait}', '{}', 'ambient', 96, 24),
+  ('00000000-0000-4000-8000-000000000401', 'Pain brioché', '{gluten,oeufs,lait}', '{}', 'ambient', 96, null), -- 24 h après décongélation : voir plus bas
   ('00000000-0000-4000-8000-000000000402', 'Cheddar en tranche', '{lait}', '{}', 'fridge', null, null),
   ('5d000000-0000-4000-8000-000000000405', 'Emmental en tranche', '{lait}', '{}', 'fridge', null, null),
   ('5d000000-0000-4000-8000-000000000406', 'Chèvre en rondelles', '{lait}', '{}', 'fridge', null, null),
@@ -158,6 +158,10 @@ up as (
   returning id, name
 )
 insert into sd_product select id, name from up;
+
+-- Pain brioché : 24 h après décongélation (le reste est congelé le jour de l'achat).
+update public.products set shelf_life_thawed_hours = 24
+ where id = '00000000-0000-4000-8000-000000000401' and shelf_life_thawed_hours is distinct from 24;
 
 -- Noms → id (erreur si un nom est inconnu : protège contre une faute de frappe).
 create or replace function pg_temp.sd_p(p_names text[]) returns uuid[]
@@ -239,8 +243,8 @@ end $$;
 -- 5. Plats du menu (kind 'menu_item', shelf_life_hours null, storage sans objet : 'ambient',
 --    servis tout de suite). Allergènes calculés = tableau des allergènes (vérifié par
 --    supabase/tests/sql/96c_space_diner_v43.sql).
---    Seule trace propre à un plat : gluten sur les frites (friteuse commune aux frites et
---    aux nuggets, mention du tableau des allergènes).
+--    Aucune trace propre aux plats : les nuggets (panés) cuisent dans une friteuse d'appoint
+--    séparée, donc pas de trace de gluten sur les frites (confirmé par Cédric le 18/11/2026).
 -- ---------------------------------------------------------------------------
 with v (id, name, category, products, preparations, may) as (values
   ('5d000000-0000-4000-8000-000000000701'::uuid, 'Supernova', 'Croq''Brioche',
@@ -272,15 +276,15 @@ with v (id, name, category, products, preparations, may) as (values
      array['Pain brioché', 'Mascarpone', 'Crème de citron (lemon curd)', 'Galettes bretonnes', 'Meringues', 'Sucre glace'],
      array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000710', 'Frites nature', 'Frites',
-     array['Frites fraîches précuites', 'Sel fin', 'Huile de friture'], array[]::text[], '{gluten}'),
+     array['Frites fraîches précuites', 'Sel fin', 'Huile de friture'], array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000711', 'Frites Roswell', 'Frites',
      array['Frites fraîches précuites', 'Sel fin', 'Huile de friture', 'Sauce cheddar (achetée)', 'Bacon croustillant (Sol y Tapas Crispy)'],
-     array[]::text[], '{gluten}'),
+     array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000712', 'Barquette de frites nature', 'Frites',
-     array['Frites fraîches précuites', 'Sel fin', 'Huile de friture'], array[]::text[], '{gluten}'),
+     array['Frites fraîches précuites', 'Sel fin', 'Huile de friture'], array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000713', 'Barquette de frites Roswell', 'Frites',
      array['Frites fraîches précuites', 'Sel fin', 'Huile de friture', 'Sauce cheddar (achetée)', 'Bacon croustillant (Sol y Tapas Crispy)'],
-     array[]::text[], '{gluten}'),
+     array[]::text[], '{}'),
   ('5d000000-0000-4000-8000-000000000714', 'Petit Martien', 'Menu enfant',
      array['Nuggets de poulet surgelés', 'Frites fraîches précuites', 'Sel fin', 'Huile de friture', 'Ketchup tomato Colona', 'Compote gourde'],
      array[]::text[], '{}')

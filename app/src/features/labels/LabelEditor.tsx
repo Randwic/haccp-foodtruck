@@ -31,6 +31,13 @@ import { buildLabelPdf } from './pdf.ts'
 import { canSharePdf, pdfFilename, sharePdf } from './printing.ts'
 import type { LabelData } from './useLabelData.ts'
 
+/**
+ * Enregistrer les traces imprimées (`may_contain`) dans le registre. À passer à true SEULEMENT après avoir
+ * redéployé les fonctions Supabase (nouveau validateur) : sinon le serveur met l'étiquette en quarantaine.
+ * Mis en ligne le 18/11/2026 sans accès à Supabase depuis la session : désactivé en attendant.
+ */
+export const LABEL_TRACES_IN_REGISTRY = false
+
 /** Ce que le parcours a choisi à l'étape 1. */
 export interface LabelDraft {
   kind: LabelKind
@@ -255,7 +262,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
     }
     if (draft.kind === 'prepared') p.recipe_id = recipe!.id
     else p.product_id = product!.id
-    if (content.traces?.length) p.may_contain = [...content.traces]
+    if (LABEL_TRACES_IN_REGISTRY && content.traces?.length) p.may_contain = [...content.traces]
     if (content.lot) p.lot = content.lot
     if (sources.length) p.source_record_ids = sources.slice(0, LIMITS.labelSourceRecordsMax)
     return p

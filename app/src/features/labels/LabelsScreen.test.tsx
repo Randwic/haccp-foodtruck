@@ -1,5 +1,6 @@
 // Module Étiquettes (lot 4) : parcours jusqu'au label_printed, impression, échéances et « Jeté »,
 // correction, Gestion › Produits / Recettes, tableau des allergènes.
+import { LABEL_TRACES_IN_REGISTRY } from './LabelEditor.tsx'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { PDFDocument } from 'pdf-lib'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -129,7 +130,7 @@ describe('parcours', () => {
     expect(preview).toHaveTextContent('20/12/2026 23:59')
     await printAndConfirm()
     const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
-    expect(p).toMatchObject({ kind: 'opened', product_id: MENU_PRODUCTS[4].id, made_at: '2026-11-15T09:30:00.000Z', dlc_at: '2026-12-20T22:59:00.000Z', allergens: ['oeufs', 'moutarde'], may_contain: ['celeri', 'sulfites'] })
+    expect(p).toMatchObject({ kind: 'opened', product_id: MENU_PRODUCTS[4].id, made_at: '2026-11-15T09:30:00.000Z', dlc_at: '2026-12-20T22:59:00.000Z', allergens: ['oeufs', 'moutarde'], ...(LABEL_TRACES_IN_REGISTRY ? { may_contain: ['celeri', 'sulfites'] } : {}) })
     expect(validatePayload('label_printed', p).ok).toBe(true)
   })
 
@@ -162,7 +163,7 @@ describe('parcours', () => {
     const saved = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
     expect(saved.allergens).toEqual(['oeufs', 'poissons', 'moutarde'])
     // Traces enregistrées telles qu'imprimées (registre fidèle à l'étiquette).
-    expect(saved.may_contain).toEqual(['celeri', 'sulfites'])
+    expect(saved.may_contain).toEqual(LABEL_TRACES_IN_REGISTRY ? ['celeri', 'sulfites'] : undefined)
   })
 
   it('DLC antérieure à la fabrication : impression bloquée', async () => {

@@ -104,7 +104,7 @@ describe('bloc Alertes', () => {
     setup(many)
     await screen.findByRole('heading', { name: '5 alertes à voir' })
     expect(screen.getAllByRole('listitem')).toHaveLength(3)
-    fireEvent.click(screen.getByRole('button', { name: 'Voir les 2 autres' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Voir les 2 autres alertes' }))
     expect(screen.getAllByRole('listitem')).toHaveLength(5)
   })
 

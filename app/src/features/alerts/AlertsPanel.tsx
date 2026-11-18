@@ -150,7 +150,7 @@ export function AlertsPanel({ onOpenTemperatures, onOpenProcess }: AlertsPanelPr
       {(hidden > 0 || showAll) && (
         <div>
           <Button variant="ghost" icon={showAll ? <IconChevronUp size={18} /> : <IconChevronDown size={18} />} onClick={() => setShowAll((s) => !s)}>
-            {showAll ? 'Réduire' : `Voir les ${hidden} autres`}
+            {showAll ? 'Réduire' : hidden === 1 ? 'Voir l’autre alerte' : `Voir les ${hidden} autres alertes`}
           </Button>
         </div>
       )}

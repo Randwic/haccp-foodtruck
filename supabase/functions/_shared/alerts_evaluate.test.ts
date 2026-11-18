@@ -227,3 +227,32 @@ describe('alerts-evaluate : e-mail', () => {
     expect(await run({ push: null, email: failing })).toMatchObject({ opened: 2, notified: 0, email: 'failed' })
   })
 })
+
+describe('alerts-evaluate : date d’ouverture (pas encore ouvert)', () => {
+  it('avant l’ouverture : aucune alerte, aucune notification ; les alertes déjà ouvertes sont résolues', async () => {
+    await run()
+    expect(open().length).toBeGreaterThan(0) // ouvert : relevé en retard, capteur muet…
+    push.calls = []
+    repo.settings = { ...repo.settings!, opening_date: '2027-03-01' }
+    clock = minutes(60)
+    const r = await run()
+    expect(r).toMatchObject({ paused: true, opened: 0, open: 0, notified: 0 })
+    expect(r.resolved).toBeGreaterThan(0)
+    expect(open()).toHaveLength(0)
+    expect(push.calls).toHaveLength(0)
+  })
+
+  it('le jour de l’ouverture : surveillance reprise, sans créneau d’avant l’ouverture', async () => {
+    repo.settings = { ...repo.settings!, opening_date: '2026-11-14' } // NOW = 14/11 11:00 à Paris
+    const r = await run()
+    expect(r.paused).toBeUndefined()
+    expect(open().some((a) => a.kind === 'check_overdue')).toBe(true) // créneau de 08:00 du jour d'ouverture
+
+    repo.alerts.length = 0
+    repo.settings = { ...repo.settings!, opening_date: '2026-11-15' }
+    clock = new Date('2026-11-14T23:30:00.000Z') // 15/11 00:30 à Paris : jour d'ouverture, avant le 1er créneau
+    await run()
+    // Le créneau de 18:00 de la veille (avant l'ouverture) ne compte pas.
+    expect(open().filter((a) => a.kind === 'check_overdue')).toHaveLength(0)
+  })
+})

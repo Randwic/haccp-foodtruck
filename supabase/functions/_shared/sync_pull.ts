@@ -89,6 +89,7 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
       thermometer_check_days: settings.thermometer_check_days ?? DEFAULT_THERMOMETER_SETTINGS.thermometer_check_days,
       sensor_silent_minutes: settings.sensor_silent_minutes ?? DEFAULT_ALERT_SETTINGS.sensor_silent_minutes,
       alert_repeat_minutes: settings.alert_repeat_minutes ?? DEFAULT_ALERT_SETTINGS.alert_repeat_minutes,
+      opening_date: settings.opening_date ?? null,
     },
     suppliers: suppliers
       .filter((s) => s.active)

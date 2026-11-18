@@ -89,6 +89,7 @@ export const CHECKLIST_ITEM_ID_RE = /^[a-z0-9_-]{1,40}$/
 
 export const LIMITS = {
   noteMax: 500,
+  userAgentMax: 200,
   reasonMax: 500,
   commentMax: 1000,
   photoPathMax: 300,
@@ -456,6 +457,9 @@ type SchemaType =
 const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
   system_test: {
     note: { check: str({ max: LIMITS.noteMax }) },
+    // Navigateur de l'appareil (diagnostic). Envoyé par les premières versions de l'app, longtemps refusé
+    // (champ inconnu → quarantaine `invalid_payload` du 15/11/2026) : accepté désormais, facultatif.
+    ua: { check: str({ max: LIMITS.userAgentMax }), optional: true },
   },
   temperature_check: {
     equipment_id: { check: uuidField },
@@ -518,6 +522,7 @@ const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
     made_at: { check: isoTimeField },
     dlc_at: { check: isoTimeField },
     allergens: { check: allergensField },
+    may_contain: { check: allergensField, optional: true },
     storage: { check: oneOf(STORAGE_KINDS) },
     lot: { check: str({ max: LIMITS.lotMax, nonEmpty: true }), optional: true },
     source_record_ids: { check: arrayOf(uuidField, { min: 0, max: LIMITS.labelSourceRecordsMax }), optional: true },

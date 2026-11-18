@@ -100,3 +100,16 @@ export function cookingRuleFor(productName: string, products: readonly Product[]
   if (product) return { kind: 'cooking_check', threshold: { min_c: product.cook_min_c, max_c: null }, isDefault: false, product }
   return { ...generic, product: null }
 }
+
+/**
+ * Règle d'un lot de remise en température : l'objectif est le plus exigeant entre le seuil générique
+ * (≥ 63 °C) et la cuisson à cœur du produit du catalogue (`cook_min_c`, ex. poulet / nuggets 74 °C).
+ * Refroidissement : règle inchangée.
+ */
+export function ruleForBatch(rule: TimedRule, productName: string, products: readonly Product[]): TimedRule & { product: Product | null } {
+  if (rule.kind !== 'reheating') return { ...rule, product: null }
+  const product = catalogProductNamed(products, productName)
+  const generic = rule.target.min_c ?? -Infinity
+  if (!product || product.cook_min_c === null || product.cook_min_c <= generic) return { ...rule, product: null }
+  return { ...rule, target: { min_c: product.cook_min_c, max_c: null }, product }
+}

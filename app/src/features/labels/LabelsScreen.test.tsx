@@ -129,7 +129,7 @@ describe('parcours', () => {
     expect(preview).toHaveTextContent('20/12/2026 23:59')
     await printAndConfirm()
     const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
-    expect(p).toMatchObject({ kind: 'opened', product_id: MENU_PRODUCTS[4].id, made_at: '2026-11-15T09:30:00.000Z', dlc_at: '2026-12-20T22:59:00.000Z', allergens: ['oeufs', 'moutarde'] })
+    expect(p).toMatchObject({ kind: 'opened', product_id: MENU_PRODUCTS[4].id, made_at: '2026-11-15T09:30:00.000Z', dlc_at: '2026-12-20T22:59:00.000Z', allergens: ['oeufs', 'moutarde'], may_contain: ['celeri', 'sulfites'] })
     expect(validatePayload('label_printed', p).ok).toBe(true)
   })
 
@@ -159,7 +159,10 @@ describe('parcours', () => {
     const preview = await screen.findByRole('img', { name: /Aperçu de l’étiquette Sauce UFO/ })
     expect(preview).toHaveTextContent('Traces possibles : Céleri, Sulfites')
     await printAndConfirm()
-    expect(((await lastLabel(core)).payload as unknown as LabelPrintedPayload).allergens).toEqual(['oeufs', 'poissons', 'moutarde'])
+    const saved = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
+    expect(saved.allergens).toEqual(['oeufs', 'poissons', 'moutarde'])
+    // Traces enregistrées telles qu'imprimées (registre fidèle à l'étiquette).
+    expect(saved.may_contain).toEqual(['celeri', 'sulfites'])
   })
 
   it('DLC antérieure à la fabrication : impression bloquée', async () => {

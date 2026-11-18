@@ -119,7 +119,8 @@ function createApp(): { core: CoreApi; manager: ManagerApi } {
     return { core, manager }
   }
   const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+  // Nouvelle clé « publishable » si elle est fournie, sinon l'ancienne clé « anon » (retirée début 2027).
+  const anonKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined
   setActivityNotifier(notifyActivity)
   // MODE ESSAI (?essai) : tout le parcours réel (création du compte gérant, PIN, Gestion…) contre un
   // serveur simulé. Rien n'est envoyé au vrai serveur ; chaque ouverture repart de zéro.

@@ -255,6 +255,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
     }
     if (draft.kind === 'prepared') p.recipe_id = recipe!.id
     else p.product_id = product!.id
+    if (content.traces?.length) p.may_contain = [...content.traces]
     if (content.lot) p.lot = content.lot
     if (sources.length) p.source_record_ids = sources.slice(0, LIMITS.labelSourceRecordsMax)
     return p

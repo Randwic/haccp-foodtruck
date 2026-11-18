@@ -32,7 +32,7 @@ import { TemperatureCorrection } from './CorrectionForms.tsx'
 import { lastValue, recentProducts, type Entry, type TimedBatch } from './entries.ts'
 import { objectiveLabel, TIMED_LABELS } from './labels.ts'
 import { requestDeadlineNotifications } from './notifications.ts'
-import type { TimedKind, TimedRule } from './thresholds.ts'
+import { ruleForBatch, type TimedKind, type TimedRule } from './thresholds.ts'
 import { countdown, elapsedLabel, plainSpaces, evaluateEnd, formatMinutes, remainingLabel, type Countdown } from './timing.ts'
 import { batchesOf, PROCESS_HISTORY_DAYS, useProcessStatus, type ProcessData } from './useProcessData.ts'
 
@@ -105,7 +105,7 @@ export function TimedProcessScreen({ kind, onBack }: { kind: TimedKind; onBack: 
             <MeasureStep
               batch={batch}
               step={view.step}
-              rule={rule}
+              rule={ruleForBatch(rule, batch.product, data.products)}
               data={data}
               now={now}
               onSaved={async (rec, payload) => {
@@ -129,7 +129,7 @@ export function TimedProcessScreen({ kind, onBack }: { kind: TimedKind; onBack: 
             <StepCorrection
               batch={batch}
               entry={entry}
-              rule={rule}
+              rule={ruleForBatch(rule, batch.product, data.products)}
               data={data}
               now={now}
               onCancel={() => setView(view.back)}
@@ -301,7 +301,7 @@ function TimedList(props: {
         <ul className="grid gap-3 sm:gap-4 md:grid-cols-2" aria-label="Lots en cours">
           {running.map((b) => (
             <li key={b.batchId}>
-              <RunningCard batch={b} rule={rule} data={data} now={now} onMeasure={props.onMeasure} />
+              <RunningCard batch={b} rule={ruleForBatch(rule, b.product, data.products)} data={data} now={now} onMeasure={props.onMeasure} />
             </li>
           ))}
         </ul>
@@ -372,8 +372,8 @@ function StartBatch({ kind, data, onStarted }: { kind: TimedKind; data: ProcessD
   const toast = useToast()
   const { save, busy, error } = useRecordSaver()
   const labels = TIMED_LABELS[kind]
-  const rule = data.rules[kind]
   const [product, setProduct] = useState('')
+  const rule = ruleForBatch(data.rules[kind], product, data.products)
   const [value, setValue] = useState<number | null>(null)
   const suggestions = useMemo(
     () => recentProducts(batchesOf(data, kind).map((b) => ({ product: b.product, time: b.startedAt })), labels.defaults),
@@ -407,6 +407,11 @@ function StartBatch({ kind, data, onStarted }: { kind: TimedKind; data: ProcessD
           <div className="mt-6">
             <ProductField value={product} onChange={setProduct} suggestions={suggestions} />
           </div>
+          {rule.product && (
+            <p className="mt-3 max-w-md text-[15px] font-semibold text-fg">
+              {rule.product.name} : objectif {describeThreshold(rule.target)} à cœur (cuisson à cœur du produit, plus exigeante que le seuil général).
+            </p>
+          )}
           <p className="mt-5 max-w-md text-[15px] text-fg-subtle">{labels.startHint} Le chronomètre part à l’enregistrement.</p>
         </>
       }
@@ -607,7 +612,7 @@ function TimedHistory(props: {
 function BatchHistoryCard({ batch, data, onCorrect, onCorrectiveAction }: { batch: TimedBatch; data: ProcessData; onCorrect: (e: Entry<CoolingPayload>) => void; onCorrectiveAction: () => void }) {
   const tz = data.timeZone
   const author = useAuthorName(data.staff)
-  const rule = data.rules[batch.kind]
+  const rule = ruleForBatch(data.rules[batch.kind], batch.product, data.products)
   return (
     <article aria-label={`Lot ${batch.product} de ${formatTime(batch.startedAt, tz)}`} className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-3.5 sm:px-5">

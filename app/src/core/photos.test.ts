@@ -257,7 +257,7 @@ describe('transport HTTP : photo-upload', () => {
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe(`https://x.supabase.co/functions/v1/photo-upload?path=${encodeURIComponent(path)}`)
     expect(init.method).toBe('PUT')
-    expect(init.headers).toMatchObject({ apikey: 'anon', Authorization: 'Bearer anon', 'x-device-token': 'tok', 'Content-Type': 'image/webp' })
+    expect(init.headers).toMatchObject({ apikey: 'anon', 'x-device-token': 'tok', 'Content-Type': 'image/webp' })
     expect((await transportWith(200, { ok: true, status: 'already_present' }).t.uploadPhoto!(path, syntheticWebp(100), { device_token: 'tok' }))).toEqual({ ok: true, status: 'already_present' })
   })
 

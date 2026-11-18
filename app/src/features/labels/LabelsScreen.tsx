@@ -562,7 +562,7 @@ function LabelHistory({ data, now, onCorrect }: { data: LabelData; now: Date; on
                       <span className="text-[15px] text-fg-muted">{l.payload.lot ? `lot ${l.payload.lot}` : 'sans lot'}</span>
                     </p>
                     <p className="mt-1 text-[15px] text-fg-muted">
-                      Allergènes : <AllergenLine allergens={l.payload.allergens} />
+                      Allergènes : <AllergenLine allergens={l.payload.allergens} traces={l.payload.may_contain} />
                     </p>
                     {l.versions.slice(1).map((c) => (
                       <p key={c.record.id} className="mt-1.5 flex items-start gap-2 text-[15px] text-fg">

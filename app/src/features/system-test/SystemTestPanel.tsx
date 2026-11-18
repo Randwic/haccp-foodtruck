@@ -44,7 +44,8 @@ export function SystemTestPanel({ onBack, timeZone }: { onBack: () => void; time
     setBusy(true)
     setError(null)
     try {
-      await core.addRecord('system_test', { note: 'Test d’enregistrement depuis l’interface', ua: navigator.userAgent.slice(0, 120) })
+      // Navigateur dans la note : un champ `ua` à part était refusé par le serveur (quarantaine du 15/11/2026).
+      await core.addRecord('system_test', { note: `Test d’enregistrement depuis l’interface — ${navigator.userAgent}`.slice(0, 500) })
       toast('Enregistrement test créé', 'ok')
       await refresh()
     } catch (e) {

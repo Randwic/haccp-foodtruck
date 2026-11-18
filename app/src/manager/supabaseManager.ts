@@ -1,5 +1,6 @@
 // Implémentation Supabase de ManagerApi : Edge Functions (bootstrap, device-enroll) + supabase-js (REST/RLS).
 // Seule la clé publique « anon » est utilisée ; les droits viennent de la session du gérant (RLS is_manager()).
+import { publicKeyHeaders } from '../core/supabaseKey.ts'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { DeviceEnrollResponse, Equipment, Threshold } from '../../../shared/types.ts'
 import { DOCUMENT_BUCKET, PHOTO_BUCKET, type Checklist, type CleaningTask, type DocumentRef, type IntegrityReport, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
@@ -108,8 +109,8 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
   }
 
   async function callFunction<T>(name: string, init: { method: 'GET' | 'POST'; body?: unknown; auth?: boolean }): Promise<{ status: number; data: T }> {
-    const headers: Record<string, string> = { apikey: opts.anonKey }
-    headers.Authorization = `Bearer ${init.auth ? await accessToken() : opts.anonKey}`
+    const headers: Record<string, string> = publicKeyHeaders(opts.anonKey)
+    if (init.auth) headers.Authorization = `Bearer ${await accessToken()}`
     if (init.body !== undefined) headers['Content-Type'] = 'application/json'
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)

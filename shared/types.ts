@@ -12,6 +12,7 @@ export type RecordType =
   | 'thawing'
   | 'oil_check'
   | 'oil_change'
+  | 'thermometer_check'
   | 'reception'
   | 'label_printed'
   | 'waste'
@@ -145,6 +146,8 @@ export interface Settings {
   thaw_dlc_days: number // DLC proposée après décongélation, en jours à partir de la fin (défaut 3, 0..30)
   oil_polar_max: number // limite des composés polaires en % (défaut 25, légal), 10..30
   oil_polar_warn: number // seuil d'alerte préventive en % (défaut 22), < oil_polar_max
+  thermometer_tolerance_c: number // écart admis lors de la vérification d'un thermomètre (défaut 1 °C), 0,1..2
+  thermometer_check_days: number // vérification d'un thermomètre au moins tous les N jours (défaut 30), 1..365
   sensor_silent_minutes: number // capteur muet au-delà (défaut 60, 15..1440) — lot 6
   alert_repeat_minutes: number // rappel d'une alerte non prise en compte (défaut 15, 5..1440) — lot 6
 }

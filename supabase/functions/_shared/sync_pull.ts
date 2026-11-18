@@ -1,5 +1,5 @@
 // sync-pull : téléchargement incrémental des données de référence par un appareil.
-import { DEFAULT_ALERT_SETTINGS } from '../../../shared/payloads.ts'
+import { DEFAULT_ALERT_SETTINGS, DEFAULT_THERMOMETER_SETTINGS } from '../../../shared/payloads.ts'
 import type { SyncPullResponse } from '../../../shared/types.ts'
 import { authenticateDevice } from './auth.ts'
 import { HttpError, jsonResponse, withHttp, type HttpEnv } from './http.ts'
@@ -85,6 +85,8 @@ export async function processPull(since: Date | null, repo: PullRepo, now: Date)
       thaw_dlc_days: settings.thaw_dlc_days ?? 3,
       oil_polar_max: Number(settings.oil_polar_max ?? 25),
       oil_polar_warn: Number(settings.oil_polar_warn ?? 22),
+      thermometer_tolerance_c: Number(settings.thermometer_tolerance_c ?? DEFAULT_THERMOMETER_SETTINGS.thermometer_tolerance_c),
+      thermometer_check_days: settings.thermometer_check_days ?? DEFAULT_THERMOMETER_SETTINGS.thermometer_check_days,
       sensor_silent_minutes: settings.sensor_silent_minutes ?? DEFAULT_ALERT_SETTINGS.sensor_silent_minutes,
       alert_repeat_minutes: settings.alert_repeat_minutes ?? DEFAULT_ALERT_SETTINGS.alert_repeat_minutes,
     },

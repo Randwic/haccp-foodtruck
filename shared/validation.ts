@@ -7,6 +7,7 @@ import type {
   LabelPrintedPayload,
   MeasureSource,
   OilCheckPayload,
+  ThermometerCheckPayload,
   ProcessStep,
   ReceptionItem,
   ThawingPayload,
@@ -27,6 +28,7 @@ export const RECORD_TYPES = [
   'thawing',
   'oil_check',
   'oil_change',
+  'thermometer_check',
   'reception',
   'label_printed',
   'waste',
@@ -58,6 +60,7 @@ export const SUPPORTED_RECORD_TYPES = [
   'checklist_done',
   'oil_check',
   'oil_change',
+  'thermometer_check',
   'alert_ack',
   'correction',
 ] as const
@@ -83,6 +86,8 @@ export const WASTE_REASONS = ['expired', 'non_compliant', 'temperature', 'damage
 export const LABEL_KINDS = ['opened', 'prepared', 'thawed'] as const satisfies readonly LabelPrintedPayload['kind'][]
 /** Lot 5 : méthode de mesure des composés polaires, nature d'une checklist. */
 export const OIL_METHODS = ['tester', 'strip'] as const satisfies readonly OilCheckPayload['method'][]
+/** Lot 9 : méthode de vérification d'un thermomètre. */
+export const THERMOMETER_METHODS = ['ice_water', 'boiling_water', 'reference'] as const satisfies readonly ThermometerCheckPayload['method'][]
 export const CHECKLIST_KINDS = ['opening', 'closing', 'pest_control', 'other'] as const satisfies readonly Checklist['kind'][]
 /** Identifiant stable d'un point de checklist (ChecklistItem.id). */
 export const CHECKLIST_ITEM_ID_RE = /^[a-z0-9_-]{1,40}$/
@@ -120,6 +125,15 @@ export const LIMITS = {
   oilCommentMax: 300,
   /** Lot 6 (prise en compte d'une alerte) — borne de shared/payloads.ts. */
   alertAckCommentMax: 300,
+  /** Lot 9 (vérification des thermomètres). */
+  thermometerNameMax: 40,
+  thermometerCommentMax: 300,
+  thermometerReferenceMinC: -20,
+  thermometerReferenceMaxC: 110,
+  thermometerMeasuredMinC: -30,
+  thermometerMeasuredMaxC: 130,
+  thermometerToleranceMinC: 0.1,
+  thermometerToleranceMaxC: 2,
   polarMin: 0,
   polarMax: 50,
   valueMinC: -50,
@@ -386,6 +400,15 @@ const polarField: FieldCheck = (v, name) => {
   if (Math.round(v * 10) / 10 !== v) return `${name} : une décimale maximum`
   return null
 }
+/** Nombre borné à une décimale (vérification des thermomètres). */
+const decimalField =
+  (min: number, max: number, unit: string): FieldCheck =>
+  (v, name) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return `${name} : nombre attendu`
+    if (v < min || v > max) return `${name} : entre ${min} et ${max} ${unit}`
+    if (Math.round(v * 10) / 10 !== v) return `${name} : une décimale maximum`
+    return null
+  }
 const checklistItemIdField: FieldCheck = (v, name) =>
   typeof v === 'string' && CHECKLIST_ITEM_ID_RE.test(v) ? null : `${name} : identifiant de point attendu ([a-z0-9_-], 1 à 40 caractères)`
 /** Réponse à un point de checklist : un « non » exige un commentaire non vide. */
@@ -452,6 +475,7 @@ type SchemaType =
   | 'checklist_done'
   | 'oil_check'
   | 'oil_change'
+  | 'thermometer_check'
   | 'alert_ack'
 
 const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
@@ -547,6 +571,15 @@ const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
   oil_change: {
     equipment_id: { check: uuidField },
     comment: { check: str({ max: LIMITS.oilCommentMax }), optional: true },
+  },
+  thermometer_check: {
+    thermometer: { check: str({ max: LIMITS.thermometerNameMax, nonEmpty: true }) },
+    method: { check: oneOf(THERMOMETER_METHODS) },
+    reference_c: { check: decimalField(LIMITS.thermometerReferenceMinC, LIMITS.thermometerReferenceMaxC, '°C') },
+    measured_c: { check: decimalField(LIMITS.thermometerMeasuredMinC, LIMITS.thermometerMeasuredMaxC, '°C') },
+    tolerance_c: { check: decimalField(LIMITS.thermometerToleranceMinC, LIMITS.thermometerToleranceMaxC, '°C') },
+    in_range: { check: boolField },
+    comment: { check: str({ max: LIMITS.thermometerCommentMax }), optional: true },
   },
   alert_ack: {
     alert_id: { check: uuidField },
@@ -682,9 +715,29 @@ export function validatePayload(type: RecordType | string, payload: unknown, ctx
   if (type === 'waste' && payload.reason === 'other' && (typeof payload.comment !== 'string' || payload.comment.trim() === '')) {
     return fail('payload.comment : obligatoire quand le motif est « other »')
   }
+  if (type === 'thermometer_check') {
+    const e = checkThermometer(payload)
+    if (e) return fail(e)
+  }
   // Pas de contrôle de cohérence in_range / seuils : l'app calcule in_range avec le seuil en vigueur
   // au moment de la saisie (éventuellement hors réseau) ; le serveur ne peut pas le rejuger.
   return ok
+}
+
+/**
+ * Vérification d'un thermomètre : la tolérance est dans le payload, donc `in_range` est revérifiable
+ * (contrairement aux seuils réglables des autres contrôles). Eau glacée = référence 0 °C.
+ */
+function checkThermometer(p: Record<string, unknown>): string | null {
+  if (p.method === 'ice_water' && p.reference_c !== 0) return 'payload.reference_c : 0 °C attendu pour l’eau glacée'
+  const inRange = isThermometerInRange(p.measured_c as number, p.reference_c as number, p.tolerance_c as number)
+  if (p.in_range !== inRange) return `payload.in_range : doit valoir ${inRange} (écart ${inRange ? '≤' : '>'} tolérance)`
+  return null
+}
+
+/** Écart |mesure − référence| ≤ tolérance, calculé au dixième de degré (sans erreur d'arrondi binaire). */
+export function isThermometerInRange(measured: number, reference: number, tolerance: number): boolean {
+  return Math.abs(Math.round(measured * 10) - Math.round(reference * 10)) <= Math.round(tolerance * 10)
 }
 
 /**

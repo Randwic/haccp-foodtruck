@@ -11,6 +11,7 @@ export const RECORD_TYPES = [
   'thawing',
   'oil_check',
   'oil_change',
+  'thermometer_check',
   'reception',
   'label_printed',
   'waste',

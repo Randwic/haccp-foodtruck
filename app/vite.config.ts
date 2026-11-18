@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { Plugin } from 'vite'
 
 // Lecture d'étiquette (Tesseract) : moteur, script du worker et langue française servis par l'app sous
@@ -17,6 +18,18 @@ const OCR_FILES: Record<string, string> = {
   'ocr/tesseract-core-simd-lstm.wasm.js': 'tesseract.js-core/tesseract-core-simd-lstm.wasm.js',
   'ocr/tesseract-core-lstm.wasm.js': 'tesseract.js-core/tesseract-core-lstm.wasm.js',
   'ocr/lang/fra.traineddata.gz': '@tesseract.js-data/fra/4.0.0_best_int/fra.traineddata.gz',
+  // Moteur principal (PaddleOCR, réseau de neurones) : détection des zones de texte puis lecture.
+  // Lit les impressions en points et le texte de travers, là où Tesseract échoue.
+  'ocr/ort/ort-wasm-simd-threaded.mjs': 'onnxruntime-web/ort-wasm-simd-threaded.mjs',
+  'ocr/ort/ort-wasm-simd-threaded.wasm': 'onnxruntime-web/ort-wasm-simd-threaded.wasm',
+  'ocr/paddle/det.onnx': '@gutenye/ocr-models#assets/ch_PP-OCRv4_det_infer.onnx',
+  'ocr/paddle/rec.onnx': '@gutenye/ocr-models#assets/ch_PP-OCRv4_rec_infer.onnx',
+  'ocr/paddle/keys.txt': '@gutenye/ocr-models#assets/ppocr_keys_v1.txt',
+}
+/** Chemin d'un fichier de node_modules ; « @gutenye/ocr-models#… » : fichier du paquet des modèles (qui n'exporte que ./node). */
+function ocrFile(mod: string): string {
+  const [pkg, file] = mod.split('#')
+  return file ? join(dirname(require.resolve(pkg + '/node')), file) : require.resolve(mod)
 }
 function ocrAssets(): Plugin {
   return {
@@ -26,12 +39,12 @@ function ocrAssets(): Plugin {
         const key = req.url?.split('?')[0].replace(/^\//, '')
         const mod = key ? OCR_FILES[key] : undefined
         if (!mod) return next()
-        res.setHeader('Content-Type', key!.endsWith('.js') ? 'text/javascript' : 'application/octet-stream')
-        res.end(readFileSync(require.resolve(mod)))
+        res.setHeader('Content-Type', /\.m?js$/.test(key!) ? 'text/javascript' : key!.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream')
+        res.end(readFileSync(ocrFile(mod)))
       })
     },
     generateBundle() {
-      for (const [fileName, mod] of Object.entries(OCR_FILES)) this.emitFile({ type: 'asset', fileName, source: readFileSync(require.resolve(mod)) })
+      for (const [fileName, mod] of Object.entries(OCR_FILES)) this.emitFile({ type: 'asset', fileName, source: readFileSync(ocrFile(mod)) })
     },
   }
 }
@@ -63,12 +76,13 @@ export default defineConfig({
       // ocr/ : lecture d'étiquette, mise en cache à la première utilisation (puis disponible hors-ligne).
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2,wasm,ttf}'],
-        globIgnores: ['ocr/**'],
+        // ort-wasm* : copie du moteur émise par le bundler, inutilisée (chargé depuis /ocr/ort/).
+        globIgnores: ['ocr/**', 'assets/ort-wasm*'],
         runtimeCaching: [
           {
             urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/ocr/'),
             handler: 'CacheFirst',
-            options: { cacheName: 'haccp-ocr', expiration: { maxEntries: 10 } },
+            options: { cacheName: 'haccp-ocr', expiration: { maxEntries: 20 } },
           },
         ],
       },

@@ -91,3 +91,39 @@ describe('étiquettes réelles (jet d’encre, relief)', () => {
     expect(parseLabelText('ABC123456 bonjour', { today })).toBeNull()
   })
 })
+
+describe('sorties du moteur de lecture moderne', () => {
+  it('date collée à l’heure, mot-clé sans espaces', () => {
+    expect(parseLabelText('Aconsommerjusqu\n27.112607:31\n22982629304', { today })).toEqual({ dlc: '2026-11-27', lot: '22982629304' })
+  })
+  it('« J0712 » sans barre', () => {
+    expect(parseLabelText('J0712\nMILSANI\nFromage BLANC', { today })).toEqual({ dlc: '2026-12-07' })
+  })
+  it('une vraie date l’emporte sur un nombre qui ressemble à une date collée', () => {
+    expect(parseLabelText('Lot 271126\nDLC 30/11/2026', { today })).toEqual({ dlc: '2026-11-30', lot: '271126' })
+  })
+})
+
+describe('moteur moderne : zones de texte et décodage', () => {
+  it('trouve une ligne horizontale et une verticale', async () => {
+    const { boxesFromProbMap } = await import('./paddle.ts')
+    const w = 100
+    const h = 100
+    const prob = new Float32Array(w * h)
+    for (let y = 10; y < 18; y++) for (let x = 10; x < 70; x++) prob[y * w + x] = 0.9 // ligne horizontale
+    for (let y = 30; y < 95; y++) for (let x = 85; x < 92; x++) prob[y * w + x] = 0.9 // ligne verticale
+    const boxes = boxesFromProbMap(prob, w, h).sort((a, b) => a.cy - b.cy)
+    expect(boxes).toHaveLength(2)
+    expect(Math.abs(Math.sin(boxes[0].angle))).toBeLessThan(0.1)
+    expect(boxes[0].length).toBeGreaterThan(60)
+    expect(Math.abs(Math.sin(boxes[1].angle))).toBeGreaterThan(0.9)
+  })
+  it('décodage CTC : répétitions et vides retirés', async () => {
+    const { ctcDecode } = await import('./paddle.ts')
+    const chars = ['', 'A', 'B', ' ']
+    const steps = [1, 1, 0, 1, 2, 2, 3, 2] // A A _ A B B espace B
+    const data = new Float32Array(steps.length * 4)
+    steps.forEach((c, t) => (data[t * 4 + c] = 0.9))
+    expect(ctcDecode(data, steps.length, 4, chars).text).toBe('AAB B')
+  })
+})

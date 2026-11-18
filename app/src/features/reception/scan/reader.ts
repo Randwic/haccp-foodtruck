@@ -48,7 +48,10 @@ export function ocrWorker(): Promise<TesseractWorker> {
  */
 export function warmUpLabelReader(): void {
   if (workerPromise || typeof navigator === 'undefined' || !navigator.onLine) return
-  const go = () => void ocrWorker().catch(() => {})
+  const go = () => {
+    void import('./paddle.ts').then((m) => m.paddleEngine()).catch(() => {})
+    void ocrWorker().catch(() => {})
+  }
   if ('requestIdleCallback' in window) window.requestIdleCallback(go, { timeout: 5000 })
   else setTimeout(go, 2000)
 }
@@ -182,14 +185,35 @@ export async function readLabelPhoto(photo: Blob, onPass?: (name: string, text: 
   const canvas = await toCanvas(photo)
   const barcode = decodeBarcodeFromCanvas(canvas).then((t) => (t ? readingFromBarcode(t) : null))
   const text = (async () => {
+    const vote = new ReadingVote()
+    const today = localToday()
+    // 1. Moteur moderne (réseau de neurones) : lit les impressions en points, en relief, de travers.
+    let modern = false
+    try {
+      const { paddleReadText } = await import('./paddle.ts')
+      // Photo droite d'abord ; sans date trouvée, photo tournée (étiquette prise de côté, texte vertical).
+      let found: LabelReading | null = null
+      for (const q of [0, 1, 3] as const) {
+        const t = await paddleReadText(canvas, q)
+        onPass?.(`moteur moderne ${q * 90}°`, t)
+        const r = parseLabelText(t, { today })
+        if (r?.dlc || r?.ddm) return found?.lot && !r.lot ? { ...r, lot: found.lot } : r
+        found ??= r
+      }
+      modern = true
+      // Bien plus fiable que le secours : s'il a trouvé quelque chose, on s'arrête là.
+      if (found) return found
+    } catch {
+      // moteur non chargé (première utilisation hors connexion…) : on passe au moteur de secours
+    }
+    // 2. Secours (Tesseract) : complète ce qui manque, ou lit seul si le moteur moderne est indisponible.
     let worker: TesseractWorker
     try {
       worker = await ocrWorker()
     } catch {
+      if (modern) return null
       throw new LabelReaderUnavailable()
     }
-    const vote = new ReadingVote()
-    const today = localToday()
     const { main, turned } = passesFor(canvas)
     const run = async (passes: Pass[]) => {
       for (const p of passes) {

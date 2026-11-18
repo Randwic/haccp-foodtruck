@@ -14,7 +14,7 @@ const fold = (s: string) =>
 
 // Mots-clés (texte replié en majuscules sans accents). Français d'abord, puis langues fréquentes chez Metro.
 const DDM_KEYS = /PREFERENCE|\bDDM\b|\bDLUO\b|BEST ?BEFORE|\bBBE?\b|\bMHD\b|PREFERIBILMENTE|PREFERENTEMENTE|AVANT FIN|\bA\.?C\.?D\.?P\b/
-const DLC_KEYS = /CONSOMMER JUSQU|JUSQU'?AU|\bDLC\b|USE ?BY|\bEXP\b|\bEXPIRY\b|VERBRAUCHEN|CONSUMARSI ENTRO|CONSUMIR ANTES|LIMITE DE CONSOMMATION|A CONSOMMER (?:AVANT|LE)|\bDLUC\b/
+const DLC_KEYS = /CONSOMMER ?JUSQU|JUSQU'?AU|\bDLC\b|USE ?BY|\bEXP\b|\bEXPIRY\b|VERBRAUCHEN|CONSUMARSI ENTRO|CONSUMIR ANTES|LIMITE DE CONSOMMATION|A CONSOMMER (?:AVANT|LE)|\bDLUC\b/
 // Dates qui ne sont PAS une date limite (fabrication, emballage, abattage…).
 const OTHER_KEYS = /EMBALL|FABRI|ABATT|ABBATT|DECOUP|PRODUCTION|PRODUIT LE|PREPAR|CONGELE LE|SURGELE LE|PECHE|CONDITIONN|PACKED|PACK DATE|\bPROD\b|\bDDF\b|\bD\.?F\b|NE LE|DATE DE FAB|MIS EN/
 const LOT_KEYS = /(?:\bN[°O0]?\.? ?(?:DE )?LOT|\bLOT(?:E|TO)?\b(?: ?N[°O0]?\.?)?|\bBATCH\b|\bCH\.?-?B\.?|\bCHARGE\b)\s*[:.#°/-]?\s*/
@@ -34,6 +34,8 @@ interface DateHit {
   index: number
   /** Mois / année seulement (DDM « fin 12/2027 ») : dernier jour du mois. */
   monthOnly: boolean
+  /** Date collée sans séparateurs (« 271126 ») : retenue seulement s'il n'y a rien de mieux. */
+  weak?: boolean
 }
 
 function isoOf(y: number, m: number, day: number | null): string | null {
@@ -47,14 +49,26 @@ function isoOf(y: number, m: number, day: number | null): string | null {
   return `${y}-${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
 }
 
+/**
+ * Date jour / mois / année lue sur une impression en points, où le 0 initial est souvent lu 8 ou 6
+ * (« 82.12.2025 » pour 02.12.2025) : on corrige seulement si la date telle quelle est impossible.
+ */
+function dottedIso(y: string, m: string, day: string): string | null {
+  const n = (s: string) => Number(fixDigits(s))
+  const zero = (s: string) => (s.length === 2 && /[86]/.test(s[0]) ? '0' + s[1] : s)
+  return isoOf(n(y), n(m), n(day)) ?? isoOf(n(y), n(zero(m)), n(zero(day)))
+}
+
 /** Dates d'une ligne (JJ/MM/AA[AA], JJ.MM.AA, JJ-MM-AAAA, JJ MOIS AAAA, MM/AAAA). */
-function datesIn(line: string): DateHit[] {
+function datesIn(rawLine: string): DateHit[] {
+  // Heures (« 07:31 », « 11H38 ») effacées sans décaler les positions : jamais des dates.
+  const line = rawLine.replace(/\d{2}[:H]\d{2}(?![0-9])/g, (m) => ' '.repeat(m.length))
   const out: DateHit[] = []
   const taken: [number, number][] = []
   const free = (a: number, b: number) => taken.every(([x, y]) => b <= x || a >= y)
   const full = new RegExp(`(?<![0-9])(${d}{1,2}) ?[./-] ?(${d}{1,2}) ?[./-] ?(${d}{4}|${d}{2})(?![0-9])`, 'g')
   for (const m of line.matchAll(full)) {
-    const iso = isoOf(Number(fixDigits(m[3])), Number(fixDigits(m[2])), Number(fixDigits(m[1])))
+    const iso = dottedIso(m[3], m[2], m[1])
     if (iso) {
       out.push({ iso, index: m.index!, monthOnly: false })
       taken.push([m.index!, m.index! + m[0].length])
@@ -83,6 +97,15 @@ function datesIn(line: string): DateHit[] {
     const iso = isoOf(Number(fixDigits(m[2])), Number(fixDigits(m[1])), null)
     if (iso && free(m.index!, m.index! + m[0].length)) {
       out.push({ iso, index: m.index!, monthOnly: true })
+      taken.push([m.index!, m.index! + m[0].length])
+    }
+  }
+  // Jet d'encre sans séparateurs ou presque : « 271126 », « 27.1126 », « 27112026 ».
+  const compact = new RegExp(`(?<![0-9A-Z])(${d}{2})[./]?(${d}{2})[./]?(20\\d{2}|\\d{2})(?![0-9])`, 'g')
+  for (const m of line.matchAll(compact)) {
+    const iso = isoOf(Number(fixDigits(m[3])), Number(fixDigits(m[2])), Number(fixDigits(m[1])))
+    if (iso && free(m.index!, m.index! + m[0].length)) {
+      out.push({ iso, index: m.index!, monthOnly: false, weak: true })
       taken.push([m.index!, m.index! + m[0].length])
     }
   }
@@ -150,7 +173,7 @@ function lotNearDates(lines: string[], dateLines: number[]): string | null {
 /** « J07/12 », « DLC 07/12 » : jour et mois sans année, la prochaine occurrence (tolérance 30 jours). */
 function dayMonthDate(text: string, today: string | undefined): string | null {
   if (!today) return null
-  const m = /(?:(?:^|[^A-Z])J|JUSQU'?AU|\bDLC|\bDDM)\s*[:.]?\s*(\d{2})[/.](\d{2})(?![0-9]|[/.]\d)/.exec(fold(text))
+  const m = /(?:(?:^|[^A-Z])J|JUSQU'?AU|\bDLC|\bDDM)\s*[:.]?\s*(\d{2})[/.]?(\d{2})(?![0-9]|[/.]\d)/.exec(fold(text))
   if (!m) return null
   const y = Number(today.slice(0, 4))
   const limit = new Date(Date.parse(today) - 30 * 86_400_000).toISOString().slice(0, 10)
@@ -177,9 +200,10 @@ export function parseLabelText(text: string, opts: ParseOptions = {}): LabelRead
   }
   const unlabeled: string[] = []
   const dateLines: number[] = []
+  const strong = lines.some((l) => datesIn(l).some((h) => !h.weak && plausible(h.iso)))
   lines.forEach((line, i) => {
     for (const hit of datesIn(line)) {
-      if (!plausible(hit.iso)) continue
+      if (!plausible(hit.iso) || (hit.weak && strong)) continue
       dateLines.push(i)
       let kind = kindBefore(line.slice(0, hit.index))
       // Mot-clé seul sur la ligne précédente (« À consommer jusqu'au : » puis la date à la ligne).

@@ -465,10 +465,11 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
     },
 
     // ───── Lot 7 : mode Contrôle ─────
-    async listRegistry({ from, to }) {
+    async listRegistry({ from, to, types }) {
       const out = new Map<string, RegistryRecord>()
       // Lecture paginée par (device_time, id) croissants : pas de doublon ni d'oubli entre deux pages.
-      const query = () => sb.from('records').select(RECORD_COLS) as unknown as RegistryQuery
+      // types : types demandés (ex. rappel produit) ; les corrections et actions correctives restent incluses.
+      const query = () => (types ? sb.from('records').select(RECORD_COLS).in('type', [...new Set([...types, 'correction', 'corrective_action'])]) : sb.from('records').select(RECORD_COLS)) as unknown as RegistryQuery
       const readAll = async (build: () => RegistryQuery) => {
         for (let offset = 0; ; offset += REGISTRY_PAGE) {
           const rows = await run<RegistryRecord[]>(build().order('device_time').order('id').range(offset, offset + REGISTRY_PAGE - 1))

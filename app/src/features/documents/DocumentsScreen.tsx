@@ -1,4 +1,4 @@
-// « Documents & PMS » (gérant) : documents du contrôle sanitaire, assistant PMS et mode Contrôle.
+// « Documents & PMS » (gérant) : documents du contrôle sanitaire, assistant PMS, mode Contrôle et rappel produit.
 // Documents : Internet + session gérant. PMS : rédaction hors-ligne possible, enregistrement connecté.
 // Contrôle : registre complet si connecté, sinon saisies de cet appareil.
 import { useEffect, useState, type ReactNode } from 'react'
@@ -6,16 +6,18 @@ import { ManagerProvider, useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { useOnline } from '../../ui/hooks/useOnline.ts'
-import { IconChevronLeft, IconDocuments, IconOffline, IconSystemTest, IconTable, type IconProps } from '../../ui/icons.tsx'
+import { IconChevronLeft, IconDocuments, IconOffline, IconRecall, IconSystemTest, IconTable, type IconProps } from '../../ui/icons.tsx'
 import { ControlTab } from '../control/ControlTab.tsx'
 import { ManagerReauth, useManagerSession } from '../management/useManagerSession.tsx'
 import { PmsTab } from '../pms/PmsTab.tsx'
+import { RecallTab } from '../recall/RecallTab.tsx'
 import { DEFAULT_TIMEZONE } from '../temperatures/schedule.ts'
 import { DocumentsTab } from './DocumentsTab.tsx'
 
-export type DocumentsView = 'control' | 'documents' | 'pms'
+export type DocumentsView = 'control' | 'recall' | 'documents' | 'pms'
 const TABS: { id: DocumentsView; label: string; Icon: (p: IconProps) => ReactNode }[] = [
   { id: 'control', label: 'Mode Contrôle', Icon: IconSystemTest },
+  { id: 'recall', label: 'Rappel produit', Icon: IconRecall },
   { id: 'documents', label: 'Documents', Icon: IconDocuments },
   { id: 'pms', label: 'Plan (PMS)', Icon: IconTable },
 ]
@@ -59,6 +61,8 @@ export function DocumentsScreen({ onBack, initialTab = 'control' }: { onBack: ()
   else if (login && online && auth.kind !== 'ok') body = reauth('Connectez-vous pour lire tout le registre (tous les appareils), les photos et les documents.')
   else if (tab === 'documents') {
     body = !online ? offline : auth.kind === 'needed' ? reauth('Par sécurité, les documents demandent le mot de passe de votre compte gérant.') : <DocumentsTab timeZone={timeZone} refreshKey={version} />
+  } else if (tab === 'recall') {
+    body = <RecallTab key={connected ? 'on' : 'off'} manager={connected} timeZone={timeZone} onSignIn={online ? () => setLogin(true) : undefined} />
   } else if (tab === 'pms') {
     body = <PmsTab key={connected ? 'on' : 'off'} manager={connected} timeZone={timeZone} onSaved={() => setVersion((v) => v + 1)} />
   } else {
@@ -79,7 +83,7 @@ export function DocumentsScreen({ onBack, initialTab = 'control' }: { onBack: ()
             </span>
           )}
         </div>
-        <div role="tablist" aria-label="Rubriques" className="mb-8 grid grid-cols-3 gap-1 rounded-xl bg-sunken p-1">
+        <div role="tablist" aria-label="Rubriques" className="mb-8 grid grid-cols-2 gap-1 rounded-xl bg-sunken p-1 sm:grid-cols-4">
           {TABS.map((t) => (
             <button
               key={t.id}

@@ -1,7 +1,7 @@
 // Chargement des données du mode Contrôle : registre du serveur (tous appareils) si le gérant est connecté,
 // complété par les saisies de cet appareil pas encore envoyées ; sinon, saisies de cet appareil seulement.
 import type { Checklist, CleaningTask, DocumentRef, Supplier } from '../../../../shared/payloads.ts'
-import type { Equipment, HaccpRecord, Threshold } from '../../../../shared/types.ts'
+import type { Equipment, HaccpRecord, RecordType, Threshold } from '../../../../shared/types.ts'
 import type { CoreApi } from '../../core/api.ts'
 import type { ManagedDevice, ManagedStaff, ManagerApi, RegistryRecord } from '../../manager/api.ts'
 import { DEFAULT_TIMEZONE } from '../temperatures/schedule.ts'
@@ -28,8 +28,14 @@ export interface ControlData {
  * `manager` null : hors connexion ou sans session gérant. Le registre du serveur est lu sur [from, to] ;
  * les saisies locales sont toutes lues (l'appareil n'en garde que quelques milliers).
  */
-export async function loadControlData(core: CoreApi, manager: ManagerApi | null, range: { from: Date; to: Date }): Promise<ControlData> {
-  const [local, establishment, deviceInfo] = await Promise.all([core.listRecords(), core.getEstablishment(), core.getDevice()])
+export async function loadControlData(
+  core: CoreApi,
+  manager: ManagerApi | null,
+  range: { from: Date; to: Date; types?: readonly RecordType[] },
+): Promise<ControlData> {
+  const [all, establishment, deviceInfo] = await Promise.all([core.listRecords(), core.getEstablishment(), core.getDevice()])
+  const keep = range.types ? new Set<string>([...range.types, 'correction', 'corrective_action']) : null
+  const local = keep ? all.filter((r) => keep.has(r.type)) : all
   const timeZone = establishment?.timezone || DEFAULT_TIMEZONE
 
   let server: RegistryRecord[] | null = null
@@ -46,7 +52,7 @@ export async function loadControlData(core: CoreApi, manager: ManagerApi | null,
   if (manager) {
     try {
       ;[server, staff, equipment, suppliers, tasks, checklists, devices, documents, thresholds] = await Promise.all([
-        manager.listRegistry({ from: range.from.toISOString(), to: range.to.toISOString() }),
+        manager.listRegistry({ from: range.from.toISOString(), to: range.to.toISOString(), ...(range.types ? { types: range.types } : {}) }),
         manager.listStaff(),
         manager.listEquipment(),
         manager.listSuppliers(),

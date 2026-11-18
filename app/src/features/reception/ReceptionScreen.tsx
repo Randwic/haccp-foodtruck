@@ -4,7 +4,7 @@ import type { ReceptionItem } from '../../../../shared/payloads.ts'
 import { Badge, Button, Notice, useToast } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { formatTime } from '../../ui/format.ts'
-import { IconBan, IconChevronRight, IconError, IconHistory, IconSyncPending, IconTruck, IconWaste } from '../../ui/icons.tsx'
+import { IconBan, IconChevronRight, IconError, IconHistory, IconSyncPending, IconTruck, IconWaste, IconRecall } from '../../ui/icons.tsx'
 import { describeThreshold, formatTemperature } from '../../ui/temperature.ts'
 import { CorrectiveActionFlow } from '../corrective-action/CorrectiveActionFlow.tsx'
 import { BackButton, EmptyCard, PageTitle, SectionLabel } from '../processes/common.tsx'
@@ -30,7 +30,7 @@ function outOfRangeDetail(items: readonly ReceptionItem[]) {
     .join(' · ')
 }
 
-export function ReceptionScreen({ onBack, canAddSupplier }: { onBack: () => void; canAddSupplier: boolean }) {
+export function ReceptionScreen({ onBack, canAddSupplier, onOpenRecall }: { onBack: () => void; canAddSupplier: boolean; /** Gérant : ouvre « Rappel produit ». */ onOpenRecall?: () => void }) {
   const core = useCore()
   const toast = useToast()
   const { data, error, reload, now, summary } = useReceptionStatus(30_000)
@@ -189,6 +189,9 @@ export function ReceptionScreen({ onBack, canAddSupplier }: { onBack: () => void
               onClick={() => setView({ name: 'new' })}
             />
             <ActionCard title="Produit jeté" description="Date dépassée, non conforme, abîmé, rappel" icon={<IconWaste size={26} />} onClick={() => setView({ name: 'waste' })} />
+            {onOpenRecall && (
+              <ActionCard title="Rappel produit" description="Retrouver un lot ou un code-barres : achats, préparations, retraits" icon={<IconRecall size={26} />} onClick={onOpenRecall} />
+            )}
           </div>
 
           <section className="mt-8" aria-labelledby="rc-today">

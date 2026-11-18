@@ -247,7 +247,7 @@ export interface ManagerApi {
    * les corrections et actions correctives postérieures (elles peuvent viser un enregistrement de la période)
    * et les originaux visés par ces corrections. Quarantaine comprise (`quarantine_reason` non nul).
    */
-  listRegistry(range: { from: string; to: string }): Promise<RegistryRecord[]>
+  listRegistry(range: { from: string; to: string; types?: readonly RecordType[] }): Promise<RegistryRecord[]>
   listDevices(): Promise<ManagedDevice[]>
   /** Vérification de la chaîne de hachage de tout le registre (Edge Function `verify-integrity`, journalisée). */
   verifyIntegrity(): Promise<IntegrityReport>

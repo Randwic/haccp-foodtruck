@@ -50,7 +50,8 @@ select tests.assert_eq((select cook_min_c::text from public.products where name 
 select tests.assert_eq((select shelf_life_opened_hours from public.products where name = 'Mascarpone'), 72, 'mascarpone : 72 h après ouverture');
 select tests.assert_eq((select shelf_life_opened_hours from public.products where name = 'Persil frais'), 72, 'persil ciselé : 72 h');
 select tests.assert((select shelf_life_opened_hours is null from public.products where name = 'Porc BBQ cuit'), 'porc : après ouverture « selon l''étiquette » (null)');
-select tests.assert_eq((select count(*) from public.products where active and shelf_life_thawed_hours is not null)::int, 0, 'aucune durée après décongélation');
+select tests.assert_eq((select string_agg(name || '=' || shelf_life_thawed_hours, ',') from public.products where active and shelf_life_thawed_hours is not null), 'Pain brioché=24', 'durée après décongélation : pain brioché seul (24 h)');
+select tests.assert_eq((select cook_min_c from public.products where id = '00000000-0000-4000-8000-000000000401'), null::numeric, 'pain brioché : pas de température de cuisson');
 select tests.assert_eq((select allergens || may_contain from public.products where name = 'Sauce Worcestershire'), '{poissons,gluten}'::text[],
   'Worcestershire : poisson, traces de gluten');
 

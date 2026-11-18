@@ -100,7 +100,7 @@ records
   - **pile faible** ;
   - tâches HACCP en retard, DLC dépassées.
 - **Envoi** : notification push web sur l'iPhone et la tablette ; rappel toutes les 15 min tant que ce n'est pas acquitté ; l'acquittement + l'action corrective sont enregistrés dans `records`.
-- **Garde‑fou quota gratuit** : les mesures capteurs maintiennent le projet actif ; en plus, une sauvegarde hebdomadaire exportable (JSON + CSV) est générée.
+- **Garde‑fou quota gratuit** : les mesures capteurs maintiennent le projet actif ; en plus, une sauvegarde exportable (SQL + CSV + photos) est faite chaque nuit dans le dépôt privé `Randwic/haccp-sauvegardes`.
 
 ## 7. Impression des étiquettes
 

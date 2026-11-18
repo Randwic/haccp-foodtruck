@@ -133,6 +133,7 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
       <ItemEditor
         item={current}
         suggestions={suggestions}
+        catalog={data.catalog}
         knownGtins={knownGtins}
         remainingPhotos={RECEPTION_MAX_PHOTOS - others}
         today={today}

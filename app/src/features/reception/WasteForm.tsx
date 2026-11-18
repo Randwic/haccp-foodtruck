@@ -75,6 +75,7 @@ export function WasteForm({ data, onSaved, onCancel, suggestions: extraSuggestio
                 setRelated(null)
               }}
               suggestions={suggestions}
+              catalog={data.catalog.map((c) => c.product)}
             />
             <div className="grid gap-5 sm:grid-cols-2">
               <TextField

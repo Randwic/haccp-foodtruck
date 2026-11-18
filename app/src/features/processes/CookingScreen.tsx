@@ -38,13 +38,13 @@ const SPOT_LABELS: Record<SpotKind, { title: string; short: string; hint: string
     title: 'Cuisson à cœur',
     short: 'Cuisson',
     hint: 'Sonde au centre de la pièce la plus épaisse, en fin de cuisson.',
-    defaults: ['Steak haché', 'Saucisse'],
+    defaults: ['Nuggets de poulet surgelés', 'Porc BBQ cuit', 'Émincé de poulet cuit'],
   },
   hot_holding: {
     title: 'Maintien au chaud',
     short: 'Maintien',
     hint: 'Sonde au cœur du produit dans le bac, la vitrine ou le bain-marie.',
-    defaults: ['Chili con carne', 'Sauce', 'Frites'],
+    defaults: ['Porc BBQ cuit', 'Émincé de poulet cuit', 'Trio poivrons cuits'],
   },
 }
 

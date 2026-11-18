@@ -56,6 +56,16 @@ describe('assistant PMS', () => {
     expect(back).toEqual(a)
   })
 
+  it('pain du boulanger : durée après achat et congélation du reste dans le PMS', () => {
+    const a = defaultAnswers({ establishmentName: 'Space Diner', ownerName: 'Cédric' })
+    const bread = { ...MENU_PRODUCTS[0], id: 'pain', name: 'Pain brioché', storage: 'ambient' as const, shelf_life_opened_hours: 96, shelf_life_thawed_hours: 24, active: true }
+    const text = JSON.stringify(buildPmsDocument(a, { ...app, products: [bread] }, opts).blocks)
+    expect(text).toMatch(/Pain brioché \(boulanger, sans DLC du fabricant\)\s:\sgardé\s4\sjours après l’achat/)
+    expect(text).toMatch(/servi dans les 24\sh, jamais recongelé/)
+    expect(text).toContain('(sauf le pain, voir ci-dessous)')
+    expect(JSON.stringify(buildPmsDocument(a, { ...app, products: [] }, opts).blocks)).not.toContain('sauf le pain')
+  })
+
   it('refuse des réponses d’un autre format', () => {
     const d = defaultAnswers({ establishmentName: 'X', ownerName: 'Y' })
     expect(parseAnswers({ v: 99 }, d)).toBeNull()

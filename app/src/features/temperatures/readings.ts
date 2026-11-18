@@ -2,6 +2,7 @@
 // actions correctives rattachées. Fonctions pures, réutilisables (historique, accueil, export).
 import type { CorrectiveActionPayload, MeasureSource, TemperatureCheckPayload } from '../../../../shared/payloads.ts'
 import type { HaccpRecord } from '../../../../shared/types.ts'
+import { withoutTestMarked } from '../../../../shared/testMarks.ts'
 
 export interface ReadingVersion {
   record: HaccpRecord
@@ -57,7 +58,7 @@ const chronological = (a: HaccpRecord, b: HaccpRecord) => a.device_time.localeCo
  * Triés du plus récent au plus ancien.
  */
 export function buildReadings(records: readonly HaccpRecord[]): Reading[] {
-  const sorted = [...records].sort(chronological)
+  const sorted = withoutTestMarked(records).sort(chronological)
   const readings = new Map<string, Reading>()
   const rootOf = new Map<string, string>()
 

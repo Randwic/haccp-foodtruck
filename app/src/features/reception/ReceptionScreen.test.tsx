@@ -2,7 +2,9 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReceptionPayload, WastePayload } from '../../../../shared/payloads.ts'
 import { validatePayload } from '../../../../shared/validation.ts'
+import { MENU_PRODUCTS } from '../../core/demoMenu.ts'
 import { DEMO_SUPPLIERS } from '../../core/mockTransport.ts'
+import { matchCatalog } from '../processes/common.tsx'
 import { syntheticWebp, type PhotoEncoder } from '../../core/photoEncoder.ts'
 import { createMockManagerApi } from '../../manager/mockManager.ts'
 import { createFakeCore, type FakeCoreOptions, type FakeRecordSeed } from '../../ui/fakeCore.ts'
@@ -178,6 +180,47 @@ const seedReception = (minAgo: number, payload: Record<string, unknown>, id = R1
   author_id: 'staff-equipier',
   device_time: new Date(Date.parse(NOW) - minAgo * 60_000).toISOString(),
   payload,
+})
+
+describe('Produits de Gestion proposés à l’achat', () => {
+  it('recherche sans accents ni majuscules, nom exact masque la liste', () => {
+    const names = MENU_PRODUCTS.map((p) => p.name)
+    expect(matchCatalog(names, 'poul')).toEqual(['Filet de poulet pané', 'Nuggets de poulet'])
+    expect(matchCatalog(names, 'pate')).toEqual(['Pâte à tartiner noisette'])
+    expect(matchCatalog(names, 'Ketchup')).toEqual([])
+    expect(matchCatalog(names, '  ')).toEqual([])
+  })
+
+  it('taper quelques lettres propose le produit ; le choisir reprend sa conservation', async () => {
+    const core = setup({ products: MENU_PRODUCTS })
+    await startDelivery()
+    press('Ajouter le premier produit acheté')
+    await screen.findByRole('heading', { name: 'Ajouter un produit' })
+    fireEvent.change(screen.getByLabelText('Produit'), { target: { value: 'nugg' } })
+    fireEvent.click(within(screen.getByRole('group', { name: 'Mes produits correspondants' })).getByRole('button', { name: 'Nuggets de poulet' }))
+    expect(screen.getByLabelText('Produit')).toHaveValue('Nuggets de poulet')
+    expect(screen.queryByRole('group', { name: 'Mes produits correspondants' })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('radiogroup', { name: 'Conservation' })).getByRole('radio', { name: /Congélateur/ })).toBeChecked()
+    typeTemp('-19')
+    fireEvent.click(screen.getByRole('radio', { name: 'Accepté' }))
+    press('Valider ce produit')
+    press('Continuer : validation')
+    press(/^Enregistrer l’approvisionnement/)
+    await waitFor(async () => expect(((await lastOf(core, 'reception'))?.payload as unknown as ReceptionPayload | undefined)?.items[0]).toMatchObject({ product: 'Nuggets de poulet', storage: 'freezer' }))
+  })
+
+  it('« Choisir dans mes produits » ouvre la liste complète, triée', async () => {
+    setup({ products: MENU_PRODUCTS })
+    await startDelivery()
+    press('Ajouter le premier produit acheté')
+    await screen.findByRole('heading', { name: 'Ajouter un produit' })
+    press(`Choisir dans mes produits (${MENU_PRODUCTS.length})`)
+    const all = screen.getByRole('group', { name: 'Tous mes produits' })
+    expect(within(all).getAllByRole('button')[0]).toHaveTextContent('Compote en gourde')
+    fireEvent.click(within(all).getByRole('button', { name: 'Ketchup' }))
+    expect(screen.getByLabelText('Produit')).toHaveValue('Ketchup')
+    expect(screen.queryByRole('group', { name: 'Tous mes produits' })).not.toBeInTheDocument()
+  })
 })
 
 describe('Historique, correction, pertes', () => {

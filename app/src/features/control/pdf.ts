@@ -109,6 +109,9 @@ export async function buildControlPdf(input: ControlPdfInput, fonts: LabelFonts)
     report.totals.corrected ? `${report.totals.corrected} saisie(s) corrigée(s) : l’original reste visible (barré) avec le motif de la correction.` : '',
     report.totals.pending ? `${report.totals.pending} saisie(s) de cet appareil pas encore reçue(s) par le serveur au moment de l’édition.` : '',
     report.totals.clockSuspect ? `${report.totals.clockSuspect} saisie(s) faite(s) avec une horloge d’appareil décalée (signalée par le serveur).` : '',
+    report.testEntries.length
+      ? `${report.testEntries.length} saisie(s) d’essai faite(s) marquée(s) « saisie de test » : conservée(s) au registre (empreinte intacte) mais non reprise(s) ici — ${report.testEntries.map((t) => `${t.what} du ${formatDayTime(t.time, tz)}${t.reason ? ` (${t.reason})` : ''}`).join(' ; ')}.`
+      : '',
     report.quarantined ? `${report.quarantined} saisie(s) refusée(s) par le serveur (contenu invalide), conservée(s) à part et non reprise(s) ici.` : '',
   ].filter(Boolean)
   pdf.bullets(notes)

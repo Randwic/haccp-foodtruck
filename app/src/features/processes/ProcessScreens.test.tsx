@@ -152,7 +152,7 @@ describe('Cuisson & maintien', () => {
     await openTile(/^Cuisson & maintien :/, 'Cuisson & maintien')
     press('Nouvelle mesure — Cuisson à cœur')
     await screen.findByRole('heading', { name: 'Cuisson à cœur' })
-    press('Steak haché') // suggestion
+    press('Nuggets de poulet surgelés') // suggestion
     typeTemp('65')
     expect(screen.getByText('Hors seuil')).toBeInTheDocument()
     press('Enregistrer la mesure')
@@ -168,7 +168,7 @@ describe('Cuisson & maintien', () => {
     await screen.findByRole('heading', { name: 'Cuisson & maintien' })
 
     const [cook] = await core.listRecords({ type: 'cooking_check' })
-    expect(cook.payload).toEqual({ product: 'Steak haché', value_c: 65, source: 'manual', in_range: false })
+    expect(cook.payload).toEqual({ product: 'Nuggets de poulet surgelés', value_c: 65, source: 'manual', in_range: false })
     const [action] = await core.listRecords({ type: 'corrective_action' })
     expect(action.payload).toMatchObject({ related_record_id: cook.id, action: 'reheat' })
     const [hot] = await core.listRecords({ type: 'hot_holding' })
@@ -243,18 +243,18 @@ describe('Décongélation', () => {
     await openTile(/^Décongélation :/, 'Décongélation')
     press('Démarrer')
     await screen.findByRole('heading', { name: 'Démarrer une décongélation' })
-    press('Steaks hachés')
+    press('Pain brioché')
     const go = screen.getByRole('button', { name: 'Démarrer la décongélation' })
     expect(go).toBeDisabled() // enceinte obligatoire
     expect(screen.queryByRole('radio', { name: /Congélateur/ })).toBeNull()
     fireEvent.click(screen.getByRole('radio', { name: 'Frigo 1' }))
     fireEvent.click(go)
-    await screen.findByRole('article', { name: 'Steaks hachés, Frigo 1' })
+    await screen.findByRole('article', { name: 'Pain brioché, Frigo 1' })
     press('Accueil')
     expect(await screen.findByRole('button', { name: 'Décongélation : 1 en cours' })).toBeInTheDocument()
     await openTile(/^Décongélation :/, 'Décongélation')
 
-    press('Terminer — Steaks hachés')
+    press('Terminer — Pain brioché')
     await screen.findByRole('heading', { name: 'Terminer la décongélation' })
     expect(screen.getByLabelText('DLC après décongélation')).toHaveValue('2026-11-16')
     expect(screen.getByText(/à confirmer selon votre PMS/)).toBeInTheDocument()
@@ -264,8 +264,8 @@ describe('Décongélation', () => {
     await screen.findByText('Terminées aujourd’hui')
 
     const [end, start] = await core.listRecords({ type: 'thawing' })
-    expect(start.payload).toEqual({ batch_id: end.payload.batch_id, step: 'start', product: 'Steaks hachés', equipment_id: FRIGO_1.id })
-    expect(end.payload).toEqual({ batch_id: start.payload.batch_id, step: 'end', product: 'Steaks hachés', equipment_id: FRIGO_1.id, dlc: '2026-11-17' })
+    expect(start.payload).toEqual({ batch_id: end.payload.batch_id, step: 'start', product: 'Pain brioché', equipment_id: FRIGO_1.id })
+    expect(end.payload).toEqual({ batch_id: start.payload.batch_id, step: 'end', product: 'Pain brioché', equipment_id: FRIGO_1.id, dlc: '2026-11-17' })
   })
 })
 

@@ -28,6 +28,8 @@ export function StorageIcon({ storage, ...p }: IconProps & { storage: Storage })
 interface Props {
   item: DraftItem | null
   suggestions: { product: string; storage: Storage }[]
+  /** Produits de Gestion (fiches produits) : recherche et liste complète ; donnent la conservation. */
+  catalog?: readonly { product: string; storage: Storage }[]
   /** Produits déjà reçus par code-barres (GTIN) : un scan pré-remplit le nom et la conservation. */
   knownGtins?: ReadonlyMap<string, { product: string; storage: Storage }>
   /** Photos encore autorisées pour toute la réception, en plus de celles de cette ligne. */
@@ -40,7 +42,7 @@ interface Props {
   onCancel: () => void
 }
 
-export function ItemEditor({ item, suggestions, knownGtins, remainingPhotos, today, keepPhotos, onSave, onCancel }: Props) {
+export function ItemEditor({ item, suggestions, catalog = [], knownGtins, remainingPhotos, today, keepPhotos, onSave, onCancel }: Props) {
   const ext = receptionExtensions()
   const core = useCore()
   const [product, setProduct] = useState(item?.product ?? '')
@@ -149,10 +151,11 @@ export function ItemEditor({ item, suggestions, knownGtins, remainingPhotos, tod
           value={product}
           onChange={(v) => {
             setProduct(v)
-            const s = suggestions.find((x) => x.product === v)
+            const s = suggestions.find((x) => x.product === v) ?? catalog.find((x) => x.product === v)
             if (s && !item) setStorage(s.storage)
           }}
           suggestions={suggestions.map((s) => s.product)}
+          catalog={catalog.map((c) => c.product)}
         />
         <PhotoPicker
           label="Photos de l’étiquette"

@@ -83,7 +83,57 @@ export const chipClass = (active: boolean) =>
   }`
 
 /** Produit : champ texte + suggestions (produits récents) en grosses pastilles. */
-export function ProductField({ value, onChange, suggestions, label = 'Produit' }: { value: string; onChange: (v: string) => void; suggestions: readonly string[]; label?: string }) {
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr-FR').trim()
+
+/** Produits du catalogue (Gestion) qui contiennent le texte tapé, accents et majuscules ignorés. */
+export function matchCatalog(catalog: readonly string[], query: string, max = 8): string[] {
+  const q = fold(query)
+  if (!q) return []
+  const starts: string[] = []
+  const contains: string[] = []
+  for (const name of catalog) {
+    const n = fold(name)
+    if (n === q) return []
+    if (n.startsWith(q)) starts.push(name)
+    else if (n.includes(q)) contains.push(name)
+  }
+  return [...starts, ...contains].slice(0, max)
+}
+
+/**
+ * Champ produit : saisie libre + produits récents ; avec `catalog` (produits de Gestion), propose les
+ * produits qui correspondent au texte tapé et permet d'ouvrir la liste complète.
+ */
+export function ProductField({
+  value,
+  onChange,
+  suggestions,
+  catalog = [],
+  label = 'Produit',
+}: {
+  value: string
+  onChange: (v: string) => void
+  suggestions: readonly string[]
+  catalog?: readonly string[]
+  label?: string
+}) {
+  const [showAll, setShowAll] = useState(false)
+  const matches = matchCatalog(catalog, value)
+  const sorted = showAll ? [...catalog].sort((a, b) => a.localeCompare(b, 'fr')) : []
+  const chip = (p: string, onPick?: () => void) => (
+    <button
+      key={p}
+      type="button"
+      className={chipClass(value.trim() === p)}
+      aria-pressed={value.trim() === p}
+      onClick={() => {
+        onChange(p)
+        onPick?.()
+      }}
+    >
+      {p}
+    </button>
+  )
   return (
     <TextField
       label={label}
@@ -91,17 +141,32 @@ export function ProductField({ value, onChange, suggestions, label = 'Produit' }
       onChange={onChange}
       maxLength={LIMITS.productMax}
       autoCapitalize="sentences"
-      placeholder="Ex. : chili, bolognaise…"
+      placeholder={catalog.length ? 'Tapez les premières lettres…' : 'Ex. : chili, bolognaise…'}
       below={
-        suggestions.length > 0 && (
-          <div role="group" aria-label="Produits récents" className="mt-2.5 flex flex-wrap gap-2">
-            {suggestions.map((p) => (
-              <button key={p} type="button" className={chipClass(value.trim() === p)} aria-pressed={value.trim() === p} onClick={() => onChange(p)}>
-                {p}
-              </button>
-            ))}
-          </div>
-        )
+        <>
+          {matches.length > 0 && (
+            <div role="group" aria-label="Mes produits correspondants" className="mt-2.5 flex flex-wrap gap-2">
+              {matches.map((p) => chip(p))}
+            </div>
+          )}
+          {suggestions.length > 0 && (
+            <div role="group" aria-label="Produits récents" className="mt-2.5 flex flex-wrap gap-2">
+              {suggestions.map((p) => chip(p))}
+            </div>
+          )}
+          {catalog.length > 0 && (
+            <div className="mt-2.5">
+              <Button variant="ghost" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} className="-ml-3 px-3 text-accent">
+                {showAll ? 'Masquer la liste de mes produits' : `Choisir dans mes produits (${catalog.length})`}
+              </Button>
+              {showAll && (
+                <div role="group" aria-label="Tous mes produits" className="mt-2 flex max-h-80 flex-wrap gap-2 overflow-y-auto rounded-xl border border-line bg-sunken p-3">
+                  {sorted.map((p) => chip(p, () => setShowAll(false)))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       }
     />
   )

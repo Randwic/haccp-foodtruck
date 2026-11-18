@@ -14,6 +14,35 @@ Cédric : « Rien de lisible » sur de vraies étiquettes bien lisibles (DLC/lot
 - **Mise en ligne** : seulement l'app (fusion de la PR → Cloudflare), aucune fonction Supabase ni SQL. À vérifier sur l'iPad après fusion : temps de lecture et mémoire.
 
 ## 0. Dernière session (18/11/2026 nuit) : lot 3 bis « Achats » + corrections techniques
+
+## 0 quinquies. 18/11/2026 (~04 h 15 UTC) : PMS, suite des remarques de Cédric
+- « Chutney d'oignons au bacon » **désactivé** (chutney et bacon séparés, posés directement dans le Supernova) ; Supernova reprend les deux produits (allergènes inchangés). Serveur + `space_diner_v43.sql` + test `96c` (7 préparations). Test SQL non relancé (pas de base locale dans la session).
+- Checklist Fermeture (serveur + v43) : flacons gardés s'ils sont restés en saladette froide (jetés à la DLC du bac), sinon jetés ; « restes » sans le mélange chutney-bacon. Libellés ≤ 120 caractères (contrainte SQL).
+- PDF du PMS : colonne « Après ouverture » = « Selon l'étiquette » si pas de durée, « 4 jours après achat » pour le pain ; annexe 2 : préparation ambiante ≤ 6 h = « Au chaud (bain-marie) ».
+
+## 0 quater. 18/11/2026 (~04 h UTC) : « Marquer comme saisie de test » (demandé par Cédric)
+- Registre append-only conservé : une **correction** `{ reason, replacement: valeur en vigueur, test: true }` marque la saisie. `shared/testMarks.ts` (`testMarkedRoots`, `withoutTestMarked`, `chainHead`) ; `buildEntries` et `buildReadings` écartent la saisie, sa chaîne et ses actions correctives ; le dossier de contrôle les compte avec les essais (`report.tests`, `report.testEntries`, note dans le PDF).
+- Bouton « Marquer comme saisie de test » sur chaque ligne du mode Contrôle (sauf lots chronométrés refroidissement / remise en T° / décongélation), avec motif.
+- Contrat : champ optionnel `test` (booléen) de la correction (`shared/validation.ts`) → **redéployer les fonctions Supabase AVANT de mettre l'app en ligne** (sinon le serveur refuse ces corrections : quarantaine).
+- Saisies test de Cédric : les 3 de l'« Ordinateur » du 15/11 vers 17 h 41 (checklist nuisibles, contrôle d'huile 12 %, test d'enregistrement — ce dernier est déjà exclu d'office).
+- Appareils : 2 « iPhone » (appli d'écran d'accueil et Safari = deux appareils) + « Ordinateur ». Pas d'écran pour retirer un appareil.
+
+## 0 ter. 18/11/2026 (~03 h 40 UTC) : relecture du PMS avec Cédric (fil « Corriger les durées et produits du PMS »)
+- Serveur vérifié : tous les produits actifs servent dans une recette ; les exemples du seed (Sauce burger, Steak haché surgelé, Salade iceberg, Sauce cheddar maison) sont désactivés depuis le 17/11. Aucun PMS enregistré sur le serveur : le PDF vu par Cédric (avec Sauce burger / steak haché) venait du serveur simulé ou d'un aperçu, pas de la vraie app.
+- Branche `claude/project-thread-d6aa7n` : suggestions par défaut des écrans Cuisson, Maintien, Refroidissement, Remise en température et Décongélation remplacées par ses produits (plus de chili, bolognaise, steak, saucisse…). **Pas mise en ligne** (accord requis).
+- Pain brioché : **4 jours après achat, 24 h après décongélation** — écrit sur le serveur le 18/11 03:45 UTC (accord de Cédric) et dans `space_diner_v43.sql`. Le PMS (`pms/model.ts`) ajoute une procédure pain (congélation du reste, décongélation à l'ambiante) si un produit « Pain… » existe — sur la branche, pas en ligne.
+- Sauces validées par Cédric (18/11 03:47 UTC) et écrites sur le serveur : Sauce UFO 5 → **3 jours** ; Ranch, sauce piquante fumée, pommes cannelle 3 jours ; miel piquant 1 mois ; chutney au bacon **mélangé au dernier moment, reste jeté en fin de service (3 h)**.
+- Crème pâtissière à l'amande (poudre Ancel + eau) : **48 h** au frigo (conseil du sachet), écrit sur le serveur le 18/11 03:50 UTC. Checklist Fermeture mise à jour (serveur + v43) : « jetée si plus de 48 h », mélange chutney-bacon jeté chaque soir, samedi = sauces froides seules.
+- En attente de Cédric : accord pour la mise en ligne de la PR n°5.
+
+## 0 bis. Suite du 18/11/2026 (~03 h UTC) : clé publishable + fonctions
+- Fonctions Supabase **redéployées** (`deploy-supabase.sh … functions`, environnement « haccp-foodtruck » avec accès à api.supabase.com). Migrations : toutes déjà appliquées (16), rien relancé côté base, données réelles intactes.
+- `LABEL_TRACES_IN_REGISTRY = true` (traces imprimées enregistrées dans le registre).
+- Clé `sb_publishable_…` lue via l'API de gestion et posée dans `app/.env.production` (`VITE_SUPABASE_PUBLISHABLE_KEY`, l'ancienne clé anon reste en secours). Vérifié : `health` et `bootstrap-status` répondent avec la nouvelle clé seule.
+- Mis en ligne (PR n°3, accord de Cédric, 03:04 UTC).
+- Puis (PR n°4) : à l'achat et en « produit jeté », le champ Produit propose les **produits de Gestion** (recherche dès les premières lettres, sans accents ; bouton « Choisir dans mes produits (N) » = liste complète). Choisir un produit reprend sa conservation. `ProductField` accepte `catalog`, `matchCatalog()` dans `processes/common.tsx`, `ReceptionData.catalog`. Demandé par Cédric (« je suis obligé de taper à la main »).
+
+## 0. Session précédente (18/11/2026 nuit) : lot 3 bis « Achats » + corrections techniques
 Branche `claude/project-thread-s0d29q` (poussée, **pas fusionnée** : la fusion met en ligne, accord de Cédric requis). Le lot 7 était déjà fusionné dans `main`.
 - **Lecture de l'étiquette** (`app/src/features/reception/scan/`) : à chaque photo d'étiquette, code-barres (ZXing) + texte (Tesseract, français, `parseLabel.ts`) lus **sur l'appareil** ; lot, DLC/DDM, code-barres pré-remplis dans les champs vides, bandeau « à vérifier ». Fichiers OCR copiés au build sous `/ocr/` (plugin `ocrAssets` de `vite.config.ts`, ≈ 4 Mo moteur + 0,7 Mo langue), cache `haccp-ocr` à la 1re utilisation, préchargés en arrière-plan à l'ouverture de la saisie. Testé dans Chromium : étiquette générée lue en ≈ 1 s.
 - **Scan du code-barres** (`BarcodeScanner.tsx`) : caméra en direct, repli photo. EAN/UPC → GTIN ; GS1-128 / DataMatrix / QR Digital Link → GTIN + lot (AI 10) + DLC (AI 17) ou DDM (AI 15). Un GTIN déjà reçu redonne le nom et la conservation (`productsByGtin`).

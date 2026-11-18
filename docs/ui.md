@@ -116,6 +116,12 @@ Tuile dédiée (total des 7 derniers jours) : « Déclarer un produit jeté » (
 `wasteSuggestions` : étiquettes en cours, produits récemment achetés, catalogue), total de la semaine par motif, historique
 30 jours. Toujours accessible depuis Achats & réception et par le bouton « Jeté » des étiquettes.
 
+## Lot 3 bis : lecture d'étiquette, code-barres, rappel produit
+
+- `reception/scan/` : `parseLabel.ts` (texte OCR → lot, DLC/DDM, GTIN ; mots-clés FR + EN/IT/ES/DE, dates d'emballage/abattage écartées, confusions O/0 I/1), `gtin.ts` (clé GS1, GS1-128, DataMatrix, Digital Link), `reader.ts` (Tesseract + ZXing, chargés à la demande), `BarcodeScanner.tsx` (caméra arrière, repli photo), `register.tsx` (branché dans `main.tsx`). Les tests n'enregistrent rien : l'interface cache ces fonctions.
+- Saisie d'un produit : la photo d'étiquette est juste sous le nom ; « Lecture de l'étiquette… » puis « Lu sur l'étiquette : lot, DLC… Vérifiez avant de valider » ; seuls les champs vides sont remplis. Bouton « Scanner le code-barres », code-barres affiché avec « Effacer ».
+- `recall/` : onglet « Rappel produit » de Documents & contrôle (et carte dans Achats, gérant). `model.ts` (`traceRecall`), `RecallTab.tsx`, `pdf.ts` (fiche de rappel).
+
 ## Module Réception (`app/src/features/reception/`, lot 3)
 Libellés « achats » (lot 5, le gérant va chercher sa marchandise) : « Achats & réception », étape « Approvisionnement »,
 « Fournisseur / magasin », « N° de ticket ou de facture (facultatif) », « Transport conforme (glacière / caisson isotherme,

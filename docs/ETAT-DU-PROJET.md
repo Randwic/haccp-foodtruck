@@ -1,13 +1,18 @@
-# État du projet — HACCP Space Diner (au 17/11/2026)
+# État du projet — HACCP Space Diner (au 18/11/2026)
 
 > **À lire en premier par toute nouvelle session.** Ce fichier remplace l'historique de la conversation d'origine.
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
-## 0. Dernière session (17/11/2026 soir) : écrans du lot 7
-Branche `claude/project-thread-rnufx5`, PR ouverte vers `main` (**ne pas fusionner sans l'accord de Cédric** : la fusion met en ligne).
-Écran « Documents & contrôle » (tuile d'accueil réservée au gérant), 3 onglets : Mode Contrôle, Documents, Plan (PMS). Détails dans `docs/ui.md`.
-Le contenu du classeur PMS papier de Cédric n'était pas disponible : l'assistant part des données de l'app et de textes types à relire.
+## 0. Dernière session (18/11/2026 nuit) : lot 3 bis « Achats » + corrections techniques
+Branche `claude/project-thread-s0d29q` (poussée, **pas fusionnée** : la fusion met en ligne, accord de Cédric requis). Le lot 7 était déjà fusionné dans `main`.
+- **Lecture de l'étiquette** (`app/src/features/reception/scan/`) : à chaque photo d'étiquette, code-barres (ZXing) + texte (Tesseract, français, `parseLabel.ts`) lus **sur l'appareil** ; lot, DLC/DDM, code-barres pré-remplis dans les champs vides, bandeau « à vérifier ». Fichiers OCR copiés au build sous `/ocr/` (plugin `ocrAssets` de `vite.config.ts`, ≈ 4 Mo moteur + 0,7 Mo langue), cache `haccp-ocr` à la 1re utilisation, préchargés en arrière-plan à l'ouverture de la saisie. Testé dans Chromium : étiquette générée lue en ≈ 1 s.
+- **Scan du code-barres** (`BarcodeScanner.tsx`) : caméra en direct, repli photo. EAN/UPC → GTIN ; GS1-128 / DataMatrix / QR Digital Link → GTIN + lot (AI 10) + DLC (AI 17) ou DDM (AI 15). Un GTIN déjà reçu redonne le nom et la conservation (`productsByGtin`).
+- **Rappel produit** (`app/src/features/recall/`) : onglet de « Documents & contrôle » + carte « Rappel produit » dans Achats (gérant). Recherche par lot ou code-barres sur 2 ans (registre du serveur si connecté, sinon l'appareil), logique = `trace_lot()` refaite en JS (+ GTIN, + étiquettes faites à partir d'étiquettes). « Noter le retrait » = `waste` motif `recall` lié à l'achat / l'étiquette. Fiche de rappel PDF. `listRegistry` accepte un filtre `types`. La RPC `trace_lot` n'est pas utilisée par l'app.
+- **Corrections** : quarantaine du `system_test` expliquée (champ `ua` en trop, refusé par le validateur strict) → l'app met le navigateur dans `note`, le validateur accepte aussi `ua` ; `label_printed.may_contain` (traces imprimées) ajouté au contrat ; remise en température : objectif = max(seuil générique, `cook_min_c` du produit) (`ruleForBatch`) ; clé « publishable » prise en charge (`VITE_SUPABASE_PUBLISHABLE_KEY`, sans `Authorization: Bearer` car ce n'est pas un JWT).
+- **Mis en ligne le 18/11/2026** (fusion de la PR n°2, accord de Cédric) **sans redéployer les fonctions Supabase** (pas d'accès à api.supabase.com depuis la session). Donc l'enregistrement des traces sur les étiquettes est **désactivé** (`LABEL_TRACES_IN_REGISTRY = false` dans `LabelEditor.tsx`). À faire dans une session qui a accès à Supabase : `bash scripts/deploy-supabase.sh tnikuszcrmsmlictktsj all`, PUIS passer cette constante à true et mettre en ligne. Aucun changement SQL.
+- **Clé publishable** : à récupérer dans Supabase › Project Settings › API Keys (l'environnement de cette session n'avait pas accès à api.supabase.com), la mettre dans `app/.env.production` puis vérifier sync, photos, enrôlement et connexion gérant.
+- Tests : 783 (vitest), `tsc` OK, `deno check` des fonctions OK. SQL non relancé (aucun changement SQL).
 
 ## 1. Infrastructure (tout gratuit)
 | Élément | Où | Détail |
@@ -25,14 +30,14 @@ Secrets de fonctions posés : `ALLOWED_ORIGIN` (URL de l'app), `PURGE_PHOTOS_SEC
 - **Registre infalsifiable** : table `records` en insertion seule (triggers, même pour le propriétaire), chaîne de hash par appareil, corrections = nouvel enregistrement `correction` (original barré). Refus de contenu → **quarantaine** (stocké, chaîne avancée).
 - **App** : React 19 + TS + Vite + Tailwind v4, hors-ligne d'abord (Dexie), synchro `sync-push`/`sync-pull`, PIN PBKDF2, design « Space Diner » (thème auto clair/sombre, charte dans `docs/marque/`), icônes Lucide (aucun emoji).
 - **Modes** : URL nue = réel ; `?essai` = parcours complet sur serveur simulé (rien envoyé) ; `?demo=unlocked&…` = vitrine (paramètres : `releves`, `procedes`, `receptions`, `etiquettes`, `nettoyage`, `huiles`, `pertes`, `sync`).
-- Tests : `cd app && npx vitest run` (752 au 17/11), `npx tsc -b --noEmit`, `bash supabase/tests/run.sh` (835 assertions), `npx -y deno@latest check supabase/functions/*/index.ts`.
+- Tests : `cd app && npx vitest run` (783 au 18/11), `npx tsc -b --noEmit`, `bash supabase/tests/run.sh` (835 assertions), `npx -y deno@latest check supabase/functions/*/index.ts`.
 
 ## 3. Ce qui est fait et en ligne
 | Lot | Contenu | État |
 |---|---|---|
 | 1 | Socle, compte gérant (inscription unique `bootstrap-manager`), enrôlement auto, PIN, Gestion, design | ✅ |
 | 2 | Températures (créneaux, action corrective obligatoire, correction), procédés (refroidissement, remise en T°, cuisson par produit, maintien chaud, décongélation) | ✅ |
-| 3 | Achats & réception (photos WebP, fournisseurs), produits jetés (tuile dédiée) | ✅ (OCR / scan / rappel produit : à faire) |
+| 3 / 3 bis | Achats & réception (photos WebP, fournisseurs), produits jetés ; lecture d'étiquette (OCR), scan code-barres (GS1), rappel produit | 3 ✅ ; 3 bis ✅ sur la branche, **en attente de mise en ligne** |
 | 4 / 4 bis | Produits, recettes (préparations + plats du menu, sous-recettes), allergènes ● présents / ○ traces, étiquettes DLC 62 mm (AirPrint), DLC fabricant saisie à la main, tableau allergènes A4 fidèle au PDF de Cédric | ✅ |
 | 5 | Nettoyage, checklists, huiles (polaires 25 % / alerte 22 %) | ✅ |
 | 6 | Serveur capteurs (`sensor-ingest`, Shelly), moteur d'alertes, Web Push (VAPID), email Resend (inactif) | Serveur ✅ — **écrans à faire** |
@@ -43,11 +48,11 @@ Secrets de fonctions posés : `ALLOWED_ORIGIN` (URL de l'app), `PURGE_PHOTOS_SEC
 **Compte réel** : créé par Cédric (1 gérant, 2 appareils). Registre : 4 saisies d'essai du 15/11 (dont 1 `system_test` en quarantaine `invalid_payload` — **à investiguer** : probablement un payload de test refusé par le validateur).
 
 ## 4. À faire (dans l'ordre conseillé)
-1. **Lot 7** : fusionner la PR après accord de Cédric ; faire relire le PMS généré (textes types) avec son classeur.
-2. **Écrans lot 6** : abonnement Web Push (`push-config`, `push-subscribe`, service worker — iOS : PWA installée seulement), liste et prise en compte des alertes (`alert_ack`), Gestion › Capteurs (`rpc('sensor_create')`, jeton affiché une fois, guide `docs/backend-shelly.md`).
-3. **Lot 3 bis** : OCR lot/DLC (Tesseract.js), scan code-barres (@zxing/browser), recherche de lot / rappel produit (`rpc('trace_lot')`) — points d'extension dans `app/src/features/reception/extensions.ts`.
+1. **Lot 3 bis** : mise en ligne après accord de Cédric (fonctions d'abord, puis fusion ; voir §0). Faire relire le PMS généré (lot 7, textes types) avec son classeur.
+2. **Écrans lot 6** (remis à plus tard par Cédric le 18/11) : abonnement Web Push (`push-config`, `push-subscribe`, service worker — iOS : PWA installée seulement), liste et prise en compte des alertes (`alert_ack`), Gestion › Capteurs (`rpc('sensor_create')`, jeton affiché une fois, guide `docs/backend-shelly.md`).
+3. Essayer la lecture d'étiquette sur de vraies étiquettes Metro (iPad) et ajuster `parseLabel.ts` si besoin.
 4. **Lot 8** : RGPD (registre des traitements, export/effacement), durcissement, guide d'installation iPad.
-5. Petits points : investiguer la quarantaine du `system_test` ; traces non stockées dans `label_printed` (champ de contrat à ajouter) ; seuil `cook_min_c` non appliqué à la remise en température ; passer de la clé anon « legacy » (retrait Supabase début 2027) à la clé publishable `sb_publishable_…` dans `app/.env.production` (vérifier les en-têtes des appels aux fonctions).
+5. Petits points : poser la clé `sb_publishable_…` dans `app/.env.production` (code prêt, voir §0) avant le retrait de la clé anon début 2027.
 
 ## 5. En attente de Cédric
 - **Valider les allergènes supposés des produits achetés** (traces sur porc, poulet, ketchup, chutney, Worcestershire, sauce cheddar, Ancel…) et les durées supposées : pommes cannelle 72 h (étiquette inconnue), crème pâtissière 6 h (« jetée en fin de service »). Tout est modifiable dans Gestion.

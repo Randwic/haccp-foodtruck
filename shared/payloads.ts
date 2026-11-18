@@ -204,6 +204,7 @@ export interface LabelPrintedPayload {
   made_at: string // ISO UTC canonique : ouverture / fabrication / fin de décongélation
   dlc_at: string // ISO UTC canonique : date-heure limite calculée
   allergens: Allergen[] // tels qu'imprimés (gras sur l'étiquette)
+  may_contain?: Allergen[] // « traces possibles » telles qu'imprimées (sans les allergènes présents) ; absent = aucune
   storage: StorageMode
   lot?: string // lot interne ou lot fournisseur, 1..40
   source_record_ids?: string[] // 0..20 : réceptions / décongélations utilisées (traçabilité amont→aval)

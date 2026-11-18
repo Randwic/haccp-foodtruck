@@ -1,4 +1,5 @@
 // Transport : seul point de contact entre le core et le serveur.
+import { publicKeyHeaders } from './supabaseKey.ts'
 import type { SyncPullResponse, SyncPushRequest, SyncPushResponse } from '../../../shared/types.ts'
 
 export interface DeviceAuth {
@@ -77,8 +78,7 @@ export function createHttpTransport(opts: HttpTransportOptions): Transport {
         ...init,
         signal: controller.signal,
         headers: {
-          apikey: opts.anonKey,
-          Authorization: `Bearer ${opts.anonKey}`,
+          ...publicKeyHeaders(opts.anonKey),
           'x-device-token': auth.device_token,
           ...(init.body ? { 'Content-Type': 'application/json' } : {}),
         },
@@ -118,8 +118,7 @@ export function createHttpTransport(opts: HttpTransportOptions): Transport {
         method: 'PUT',
         signal: controller.signal,
         headers: {
-          apikey: opts.anonKey,
-          Authorization: `Bearer ${opts.anonKey}`,
+          ...publicKeyHeaders(opts.anonKey),
           'x-device-token': auth.device_token,
           'Content-Type': 'image/webp',
         },

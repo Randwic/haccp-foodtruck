@@ -27,7 +27,9 @@ describe('createHttpTransport', () => {
     expect(calls[0].url).toBe('https://p.supabase.co/functions/v1/sync-push')
     expect(calls[0].init.method).toBe('POST')
     expect(JSON.parse(String(calls[0].init.body))).toEqual({ device_id: 'd', records: [] })
-    expect(calls[0].init.headers).toMatchObject({ apikey: 'anon', Authorization: 'Bearer anon', 'x-device-token': 'tok-123' })
+    // Clé « publishable » (pas un JWT) : apikey seulement ; le jeton d'appareil authentifie l'appel.
+    expect(calls[0].init.headers).toMatchObject({ apikey: 'anon', 'x-device-token': 'tok-123' })
+    expect(calls[0].init.headers).not.toHaveProperty('Authorization')
     expect(calls[1].url).toBe('https://p.supabase.co/functions/v1/sync-pull?since=2026-11-14T10%3A00%3A00.000Z')
     expect(calls[1].init.method).toBe('GET')
     expect(calls[2].url).toBe('https://p.supabase.co/functions/v1/sync-pull?since=')

@@ -192,6 +192,11 @@ describe('validatePayload — system_test', () => {
     expectFail(validatePayload('system_test', { note: 3 }))
     expectFail(validatePayload('system_test', { note: 'x', y: 1 }), 'invalid_payload', /inconnu/)
   })
+  it('accepte le navigateur de l’appareil (ua, facultatif, 200 caractères au plus)', () => {
+    expect(validatePayload('system_test', { note: 'x', ua: 'Mozilla/5.0 (iPad)' }).ok).toBe(true)
+    expectFail(validatePayload('system_test', { note: 'x', ua: 'x'.repeat(201) }))
+    expectFail(validatePayload('system_test', { note: 'x', ua: 3 }))
+  })
   it('refuse les caractères que jsonb ne stocke pas', () => {
     expectFail(validatePayload('system_test', { note: 'a\u0000b' }), 'invalid_payload', /nul/)
     expectFail(validatePayload('system_test', { note: 'a\ud800b' }), 'invalid_payload', /unicode/)
@@ -694,6 +699,12 @@ describe('validatePayload — label_printed (lot 4)', () => {
     expectFail(v({ ...opened, allergens: ['noix'] }))
     expectFail(v({ ...opened, allergens: 'lait' }))
     expectFail(v({ ...opened, allergens: [...all, 'lait'] }))
+  })
+  it('traces possibles (may_contain) : facultatives, mêmes codes', () => {
+    expect(v({ ...opened, may_contain: ['gluten', 'sesame'] }).ok).toBe(true)
+    expect(v({ ...opened, may_contain: [] }).ok).toBe(true)
+    expectFail(v({ ...opened, may_contain: ['noix'] }))
+    expectFail(v({ ...opened, may_contain: 'gluten' }))
   })
   it('copies 1..20 (entier), name 1..80, lot 1..40, storage, source_record_ids 0..20 uuid', () => {
     expect(v({ ...opened, copies: 20 }).ok).toBe(true)

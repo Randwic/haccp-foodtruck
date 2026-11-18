@@ -27,7 +27,7 @@ import { OfflineBanner } from './pwa/OfflineBanner.tsx'
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
 
 type Boot = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; device: DeviceInfo | null }
-type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | 'cleaning' | 'oil' | 'waste' | 'documents' | ProcessView
+type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | 'cleaning' | 'oil' | 'waste' | 'documents' | 'recall' | ProcessView
 
 /** Enchaînement des écrans : première configuration → verrouillage (PIN) → accueil / Gestion. */
 export function AppShell() {
@@ -134,7 +134,7 @@ export function AppShell() {
         ) : view === 'cooking' ? (
           <CookingScreen onBack={() => setView('today')} />
         ) : view === 'reception' ? (
-          <ReceptionScreen onBack={() => setView('today')} canAddSupplier={staff.role === 'manager'} />
+          <ReceptionScreen onBack={() => setView('today')} canAddSupplier={staff.role === 'manager'} onOpenRecall={staff.role === 'manager' ? () => setView('recall') : undefined} />
         ) : view === 'thawing' ? (
           <ThawingScreen onBack={() => setView('today')} />
         ) : view === 'cleaning' ? (
@@ -152,6 +152,8 @@ export function AppShell() {
           />
         ) : view === 'documents' && staff.role === 'manager' ? (
           <DocumentsScreen onBack={() => setView('today')} />
+        ) : view === 'recall' && staff.role === 'manager' ? (
+          <DocumentsScreen onBack={() => setView('today')} initialTab="recall" />
         ) : view === 'management' && staff.role === 'manager' ? (
           <ManagementScreen onBack={() => setView('today')} meId={staff.id} onOpenAllergens={() => openAllergens('management')} />
         ) : (

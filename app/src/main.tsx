@@ -12,6 +12,7 @@ import { DEMO_MENU_PRODUCTS, DEMO_MENU_RECIPES, demoLabels } from './features/la
 import { demoCleaningRecords, demoOilRecords, demoWasteRecords } from './features/cleaning/demoData.ts'
 import { demoDocuments } from './features/documents/demoData.ts'
 import { createCore, createHttpTransport, createMockTransport, notifyActivity } from './core/index.ts'
+import { registerLabelScanning } from './features/reception/scan/register.tsx'
 import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, type ManagerApi } from './manager/index.ts'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,7 +119,8 @@ function createApp(): { core: CoreApi; manager: ManagerApi } {
     return { core, manager }
   }
   const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+  // Nouvelle clé « publishable » si elle est fournie, sinon l'ancienne clé « anon » (retirée début 2027).
+  const anonKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined
   setActivityNotifier(notifyActivity)
   // MODE ESSAI (?essai) : tout le parcours réel (création du compte gérant, PIN, Gestion…) contre un
   // serveur simulé. Rien n'est envoyé au vrai serveur ; chaque ouverture repart de zéro.
@@ -149,6 +151,8 @@ function createApp(): { core: CoreApi; manager: ManagerApi } {
   return { core: createCore({ transport: named }), manager }
 }
 const { core, manager } = createApp()
+// Achats : lecture automatique de l'étiquette (lot, DLC/DDM) et scan du code-barres, sur l'appareil.
+registerLabelScanning()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

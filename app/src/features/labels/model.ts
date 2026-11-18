@@ -202,6 +202,10 @@ export function asLabel(p: unknown): LabelPrintedPayload | null {
   if (str(p.product_id)) out.product_id = p.product_id
   if (str(p.recipe_id)) out.recipe_id = p.recipe_id
   if (str(p.lot)) out.lot = p.lot
+  if (Array.isArray(p.may_contain)) {
+    const traces = orderAllergens(p.may_contain.filter(str)).filter((a) => !out.allergens.includes(a))
+    if (traces.length) out.may_contain = traces
+  }
   if (Array.isArray(p.source_record_ids)) out.source_record_ids = p.source_record_ids.filter(str)
   return out
 }

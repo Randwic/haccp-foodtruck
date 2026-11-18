@@ -359,6 +359,19 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     oil_polar_warn: state.oil_polar_warn ?? DEMO_SETTINGS.oil_polar_warn,
   })
 
+  /** Registre simulé « du serveur » : transport simulé, ou saisies du core factice (démo). */
+  const registry = async (): Promise<RegistryRecord[]> => {
+    if (t) {
+      const at = (r: HaccpRecord) => r.server_time ?? r.device_time
+      return [
+        ...t.acceptedRecords().map((r): RegistryRecord => ({ ...r, server_time: at(r), clock_suspect: false, quarantine_reason: null })),
+        ...t.quarantinedRecords().map(({ record, reason }): RegistryRecord => ({ ...record, server_time: at(record), clock_suspect: false, quarantine_reason: reason })),
+      ].sort((a, b) => a.device_time.localeCompare(b.device_time))
+    }
+    const list = opts.registrySource ? await opts.registrySource() : []
+    return list.map((r): RegistryRecord => ({ ...clone(r), server_time: r.server_time ?? r.device_time, clock_suspect: false, quarantine_reason: null }))
+  }
+
   const api: MockManagerApi = {
     mode: 'mock',
 
@@ -762,17 +775,10 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     },
 
     // ───── Lot 7 : mode Contrôle ─────
-    async listRegistry() {
+    async listRegistry(range) {
       await gate(true)
-      if (t) {
-        const at = (r: HaccpRecord) => r.server_time ?? r.device_time
-        return [
-          ...t.acceptedRecords().map((r): RegistryRecord => ({ ...r, server_time: at(r), clock_suspect: false, quarantine_reason: null })),
-          ...t.quarantinedRecords().map(({ record, reason }): RegistryRecord => ({ ...record, server_time: at(record), clock_suspect: false, quarantine_reason: reason })),
-        ].sort((a, b) => a.device_time.localeCompare(b.device_time))
-      }
-      const list = opts.registrySource ? await opts.registrySource() : []
-      return list.map((r): RegistryRecord => ({ ...clone(r), server_time: r.server_time ?? r.device_time, clock_suspect: false, quarantine_reason: null }))
+      const keep = range?.types ? new Set<string>([...range.types, 'correction', 'corrective_action']) : null
+      return (await registry()).filter((r) => !keep || keep.has(r.type))
     },
     async listDevices() {
       await gate(true)

@@ -3,7 +3,8 @@ import type { HaccpRecord, Threshold } from '../../../../shared/types.ts'
 import { validatePayload } from '../../../../shared/validation.ts'
 import { buildSpotChecks, buildThawBatches, buildTimedBatches, recentProducts } from './entries.ts'
 import { newlyOverdue } from './notifications.ts'
-import { spotRule, timedRule } from './thresholds.ts'
+import { ruleForBatch, spotRule, timedRule } from './thresholds.ts'
+import { MENU_PRODUCTS } from '../../core/demoMenu.ts'
 import { countdown, defaultDlc, elapsedMinutes, evaluateEnd, formatMinutes, remainingLabel, summarizeTimed } from './timing.ts'
 
 let seq = 0
@@ -146,5 +147,24 @@ describe('reconstruction des lots', () => {
     expect(newlyOverdue(batches, rule, now, new Set()).map((b) => b.batchId)).toEqual([B1])
     expect(newlyOverdue(batches, rule, now, new Set([B1]))).toEqual([])
     expect(newlyOverdue(batches, rule, new Date('2026-11-14T11:00:00.000Z'), new Set())).toEqual([])
+  })
+})
+
+describe('remise en température : cuisson à cœur du produit', () => {
+  const generic = timedRule('reheating', [])
+  it('objectif relevé à 74 °C pour le poulet (catalogue), 63 °C sinon ; refroidissement inchangé', () => {
+    expect(generic.target.min_c).toBe(63)
+    const chicken = ruleForBatch(generic, 'nuggets de poulet', MENU_PRODUCTS)
+    expect(chicken.target).toEqual({ min_c: 74, max_c: null })
+    expect(chicken.product?.name).toBe('Nuggets de poulet')
+    expect(ruleForBatch(generic, 'Porc effiloché BBQ', MENU_PRODUCTS)).toMatchObject({ target: { min_c: 63 }, product: null })
+    expect(ruleForBatch(generic, 'Chili maison', MENU_PRODUCTS).product).toBeNull()
+    expect(ruleForBatch(timedRule('cooling', []), 'Nuggets de poulet', MENU_PRODUCTS).target).toEqual(timedRule('cooling', []).target)
+  })
+  it('fin à 70 °C : conforme au seuil général, non conforme pour le poulet', () => {
+    const start = new Date('2026-11-14T10:00:00.000Z')
+    const end = new Date('2026-11-14T10:30:00.000Z')
+    expect(evaluateEnd({ startedAt: start.toISOString(), endedAt: end, value_c: 70, rule: generic }).targetReached).toBe(true)
+    expect(evaluateEnd({ startedAt: start.toISOString(), endedAt: end, value_c: 70, rule: ruleForBatch(generic, 'Nuggets de poulet', MENU_PRODUCTS) }).targetReached).toBe(false)
   })
 })

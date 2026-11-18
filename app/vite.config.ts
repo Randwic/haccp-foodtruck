@@ -3,11 +3,44 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import type { Plugin } from 'vite'
+
+// Lecture d'étiquette (Tesseract) : moteur, script du worker et langue française servis par l'app sous
+// /ocr/ (aucun appel à un CDN extérieur). Copiés depuis node_modules au build, servis tels quels en dev.
+// Trop lourds pour le pré-cache (≈ 4 Mo le moteur) : mis en cache à la première utilisation (runtimeCaching).
+const require = createRequire(import.meta.url)
+const OCR_FILES: Record<string, string> = {
+  'ocr/worker.min.js': 'tesseract.js/dist/worker.min.js',
+  'ocr/tesseract-core-relaxedsimd-lstm.wasm.js': 'tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js',
+  'ocr/tesseract-core-simd-lstm.wasm.js': 'tesseract.js-core/tesseract-core-simd-lstm.wasm.js',
+  'ocr/tesseract-core-lstm.wasm.js': 'tesseract.js-core/tesseract-core-lstm.wasm.js',
+  'ocr/lang/fra.traineddata.gz': '@tesseract.js-data/fra/4.0.0_best_int/fra.traineddata.gz',
+}
+function ocrAssets(): Plugin {
+  return {
+    name: 'haccp-ocr-assets',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const key = req.url?.split('?')[0].replace(/^\//, '')
+        const mod = key ? OCR_FILES[key] : undefined
+        if (!mod) return next()
+        res.setHeader('Content-Type', key!.endsWith('.js') ? 'text/javascript' : 'application/octet-stream')
+        res.end(readFileSync(require.resolve(mod)))
+      })
+    },
+    generateBundle() {
+      for (const [fileName, mod] of Object.entries(OCR_FILES)) this.emitFile({ type: 'asset', fileName, source: readFileSync(require.resolve(mod)) })
+    },
+  }
+}
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    ocrAssets(),
     VitePWA({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
@@ -27,7 +60,18 @@ export default defineConfig({
         ],
       },
       // .wasm : encodeur WebP de secours (Safari iOS) ; .ttf : polices des étiquettes (impression hors-ligne).
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2,wasm,ttf}'] },
+      // ocr/ : lecture d'étiquette, mise en cache à la première utilisation (puis disponible hors-ligne).
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2,wasm,ttf}'],
+        globIgnores: ['ocr/**'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/ocr/'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'haccp-ocr', expiration: { maxEntries: 10 } },
+          },
+        ],
+      },
     }),
   ],
   // L'encodeur WebAssembly charge son .wasm via import.meta.url : pas de pré-bundling.

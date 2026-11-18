@@ -12,7 +12,14 @@ export function UpdatePrompt() {
   } = useRegisterSW({
     onRegisteredSW(_url, registration) {
       // Vérifie régulièrement les mises à jour (l'app reste ouverte toute la journée sur l'iPad).
-      if (registration) setInterval(() => registration.update().catch(() => {}), CHECK_EVERY_MS)
+      if (!registration) return
+      const check = () => registration.update().catch(() => {})
+      setInterval(check, CHECK_EVERY_MS)
+      // iPad / iPhone : l'app installée est rarement rechargée (elle reprend où elle était) ; on vérifie
+      // aussi à chaque retour au premier plan, pour que « Nouvelle version disponible » arrive vite.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void check()
+      })
     },
   })
 

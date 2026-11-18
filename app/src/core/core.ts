@@ -86,6 +86,10 @@ export interface Core extends CoreApi {
   whenSyncIdle(): Promise<void>
   /** Arrête minuteries et écouteurs, ferme la base. */
   dispose(): Promise<void>
+  // Lot 6 : toujours présents dans le vrai core (facultatifs dans CoreApi pour les anciens cores).
+  listAlerts(): Promise<Alert[]>
+  getPushPublicKey(): Promise<string | null>
+  subscribePush(subscription: PushSubscribeRequest): Promise<void>
 }
 
 // Registre des instances, pour la fonction module `notifyActivity()`.

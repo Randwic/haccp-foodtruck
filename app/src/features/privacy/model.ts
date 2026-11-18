@@ -89,7 +89,7 @@ export interface Treatment {
 /** Registre des activités de traitement (art. 30 RGPD), pré-rempli pour l'établissement. */
 export function registerTreatments(ctx: PrivacyContext): Treatment[] {
   const y = years(ctx.retentionYears)
-  const hosts = 'Supabase (base de données et fichiers, région UE – Irlande) ; Cloudflare (diffusion de l’application, aucune saisie stockée) ; GitHub (sauvegardes hebdomadaires, dépôt privé). Prestataires techniques sans droit d’utilisation des données.'
+  const hosts = 'Supabase (base de données et fichiers, région UE – Irlande) ; Cloudflare (diffusion de l’application, aucune saisie stockée) ; GitHub (sauvegarde chaque nuit, dépôt privé). Prestataires techniques sans droit d’utilisation des données.'
   return [
     {
       name: '1. Registres d’hygiène HACCP signés par l’équipe',

@@ -4,6 +4,11 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
+## 0 sexies. Guide d'utilisation (18/11/2026 ~05 h UTC), branche `claude/project-thread-p781co`
+- `docs/guide/guide.html` (source) → `docs/guide/Guide-utilisation-HACCP-Space-Diner.pdf` (A4, 24 pages, 19 chapitres + aide-mémoire). Captures iPad prises en mode `?demo=` avec les noms remplacés par ceux de Cédric (script de captures non versionné). Rien de changé dans l'app.
+- Régénérer le PDF : ouvrir `guide.html` dans Chromium (Playwright) et `page.pdf({ format: 'A4', printBackground: true })`.
+- À mettre à jour si un bouton ou un écran change. Idée en attente d'accord : l'intégrer dans l'app (bouton « Aide »).
+
 ## 0 bis. Lecture d'étiquette fiable (18/11/2026 ~05 h UTC), branche `claude/project-thread-ks86le`
 Cédric : « Rien de lisible » sur de vraies étiquettes bien lisibles (DLC/lot en **jet d'encre à points**, en **relief** sur couvercle, photo **de côté**). Tesseract ne lit pas ça. **Exigence de Cédric : lecture sur l'iPad, sans abonnement, sans Internet, sans option à choisir** (lecture par Claude/serveur refusée).
 - **Moteur principal** : `scan/paddle.ts` = modèles PaddleOCR PP-OCRv4 (détection + lecture, paquet `@gutenye/ocr-models`) exécutés par `onnxruntime-web` (wasm, 1 thread hors crossOriginIsolated). Fichiers servis sous `/ocr/ort/` et `/ocr/paddle/` (≈ 30 Mo, plugin `ocrAssets`, cache `haccp-ocr` à la 1re utilisation, préchargés à l'ouverture de la saisie). Photo lue droite, puis tournée de 90° et 270° si aucune date trouvée.

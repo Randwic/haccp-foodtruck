@@ -59,6 +59,10 @@ export interface ManagerSettings {
   oil_polar_max: number
   /** Lot 5 : seuil d'alerte préventive en % (défaut 22), > 0 et < oil_polar_max. */
   oil_polar_warn: number
+  /** Lot 9 : écart admis lors de la vérification d'un thermomètre, °C (0,1..2, une décimale). */
+  thermometer_tolerance_c: number
+  /** Lot 9 : vérifier chaque thermomètre au moins tous les N jours (1..365). */
+  thermometer_check_days: number
 }
 
 /** Fournisseur saisi par le gérant (téléphone et email facultatifs : null pour effacer). */

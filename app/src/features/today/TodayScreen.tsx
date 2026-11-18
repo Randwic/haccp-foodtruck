@@ -35,6 +35,9 @@ import { useCleaningStatus, type CleaningStatus } from '../cleaning/useCleaningD
 import { useOilStatus } from '../oil/useOilData.ts'
 import type { OilSummary, VatStatus } from '../oil/model.ts'
 import { formatPercent } from '../oil/model.ts'
+import { useThermometerStatus } from '../thermometer/useThermometerData.ts'
+import { dueLabel, type ThermometerStatus, type ThermometerSummary } from '../thermometer/model.ts'
+import { IconThermometerCheck } from '../../ui/icons.tsx'
 import { wastesThisWeek } from '../reception/wasteModel.ts'
 import { IconChecklist, IconWaste } from '../../ui/icons.tsx'
 import { useDocumentReminders, type DocumentReminders } from '../documents/useDocumentReminders.ts'
@@ -223,6 +226,20 @@ function oilLines(s: OilSummary | null, statuses: readonly VatStatus[]): StatusL
   return lines
 }
 
+/** Tuile Thermomètres : actions manquantes, sonde hors tolérance, vérification en retard ou proche. */
+function thermometerLines(s: ThermometerSummary | null, statuses: readonly ThermometerStatus[]): StatusLine[] | null {
+  if (!s) return null
+  if (s.thermometers === 0) return [{ tone: 'warn', icon: <IconDue size={17} className="shrink-0" />, text: 'Aucune vérification enregistrée' }]
+  const lines = missingLine(s.missingActions)
+  for (const t of statuses) {
+    if (t.out && t.missingActions.length === 0) lines.push({ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: `${t.name} hors tolérance` })
+    else if (!t.out && t.due === 'overdue') lines.push({ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: `${t.name} : vérification ${dueLabel(t)}` })
+    else if (!t.out && t.due === 'soon') lines.push({ tone: 'warn', icon: <IconDue size={17} className="shrink-0" />, text: `${t.name} : vérification ${dueLabel(t)}` })
+  }
+  if (!lines.length) lines.push({ tone: 'ok', icon: <IconOk size={17} className="shrink-0" />, text: 'Thermomètres vérifiés' })
+  return lines
+}
+
 /** Tuile Documents & PMS : documents échus (rouge) ou à renouveler sous 30 jours (ambre). */
 function documentLines(r: DocumentReminders | null): StatusLine[] {
   if (!r) return [{ tone: 'muted', icon: <IconDocuments size={17} className="shrink-0" />, text: 'Dossier pour un contrôle' }]
@@ -266,18 +283,21 @@ export interface TodayScreenProps {
   /** Nettoyage ; avec un identifiant : ouvre directement cette checklist (rappel). */
   onOpenCleaning?: (checklistId?: string) => void
   onOpenOil?: () => void
+  onOpenThermometer?: () => void
   onOpenWaste?: () => void
   /** Documents & PMS (gérant). Sans gestionnaire : tuile grisée « réservé au gérant ». */
   onOpenDocuments?: () => void
 }
 
 /** Accueil « Aujourd'hui » : alertes, modules HACCP puis outils. */
-export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess, onOpenLabels, onOpenAllergens, onOpenCleaning, onOpenOil, onOpenWaste, onOpenDocuments }: TodayScreenProps) {
+export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess, onOpenLabels, onOpenAllergens, onOpenCleaning, onOpenOil, onOpenThermometer, onOpenWaste, onOpenDocuments }: TodayScreenProps) {
   const documents = documentLines(useDocumentReminders(!!onOpenDocuments))
   const { status: cleaningStatus } = useCleaningStatus(60_000)
   const cleaning = cleaningLines(cleaningStatus)
   const { summary: oilSummary, statuses: vatStatuses } = useOilStatus(60_000)
   const oil = oilLines(oilSummary, vatStatuses)
+  const { summary: thermoSummary, statuses: thermoStatuses } = useThermometerStatus(60_000)
+  const thermometer = thermometerLines(thermoSummary, thermoStatuses)
   const { summary: labelSummary } = useLabelStatus(60_000)
   const labels = labelLines(labelSummary)
   const { summary } = useTemperatureStatus()
@@ -435,6 +455,17 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
               tone={tileTone(oil)}
               ariaLabel={ariaOf('Huiles de friture', oil)}
               onClick={onOpenOil}
+            />
+          )}
+          {onOpenThermometer && (
+            <Tile
+              title="Thermomètres"
+              icon={<IconThermometerCheck size={ICON} />}
+              description="Vérification des sondes"
+              status={<StatusLines lines={thermometer} />}
+              tone={tileTone(thermometer)}
+              ariaLabel={ariaOf('Thermomètres', thermometer)}
+              onClick={onOpenThermometer}
             />
           )}
           {onOpenDocuments ? (

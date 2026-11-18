@@ -351,6 +351,15 @@ export function oilSettingsError(max: number, warn: number): string | null {
   return null
 }
 
+/** Réglages de vérification des thermomètres (lot 9), mêmes bornes que la contrainte SQL. */
+export function thermometerSettingsError(patch: { thermometer_tolerance_c?: number; thermometer_check_days?: number }): string | null {
+  const t = patch.thermometer_tolerance_c
+  if (t !== undefined && (!Number.isFinite(t) || Math.round(t * 10) / 10 !== t || t < 0.1 || t > 2)) return 'L’écart admis doit être compris entre 0,1 et 2 °C (une décimale au plus).'
+  const d = patch.thermometer_check_days
+  if (d !== undefined && (!Number.isInteger(d) || d < 1 || d > 365)) return 'La fréquence de vérification doit être comprise entre 1 et 365 jours.'
+  return null
+}
+
 // ───────────────────────────── Lot 7 : documents ─────────────────────────────
 
 export const DOCUMENT_CATEGORIES: readonly DocumentCategory[] = [

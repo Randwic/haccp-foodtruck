@@ -16,6 +16,7 @@ import {
   normalizeRecipeInput,
   normalizeSupplierInput,
   oilSettingsError,
+  thermometerSettingsError,
 } from './helpers.ts'
 
 export interface SupabaseManagerOptions {
@@ -260,8 +261,14 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
           thaw_dlc_days: number | null
           oil_polar_max: number | string | null
           oil_polar_warn: number | string | null
+          thermometer_tolerance_c?: number | string | null
+          thermometer_check_days?: number | null
         }>(
-          sb.from('settings').select('auto_lock_minutes, daily_check_times, missed_slot_carry_over, thaw_dlc_days, oil_polar_max, oil_polar_warn').eq('id', 1).single(),
+          sb
+            .from('settings')
+            .select('auto_lock_minutes, daily_check_times, missed_slot_carry_over, thaw_dlc_days, oil_polar_max, oil_polar_warn, thermometer_tolerance_c, thermometer_check_days')
+            .eq('id', 1)
+            .single(),
         ),
       ])
       // Colonne time[] ou text[] : Postgres peut renvoyer « 08:00:00 », on garde HH:MM.
@@ -275,6 +282,8 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
         // numeric(4,1) : PostgREST peut renvoyer une chaîne.
         oil_polar_max: s.oil_polar_max === null || s.oil_polar_max === undefined ? 25 : Number(s.oil_polar_max),
         oil_polar_warn: s.oil_polar_warn === null || s.oil_polar_warn === undefined ? 22 : Number(s.oil_polar_warn),
+        thermometer_tolerance_c: s.thermometer_tolerance_c === null || s.thermometer_tolerance_c === undefined ? 1 : Number(s.thermometer_tolerance_c),
+        thermometer_check_days: s.thermometer_check_days ?? 30,
       }
     },
     async saveSettings(patch) {
@@ -295,6 +304,12 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
         if (e) throw new ManagerError('validation', e, 400)
         settingsPatch.oil_polar_max = max
         settingsPatch.oil_polar_warn = warn
+      }
+      if (patch.thermometer_tolerance_c !== undefined || patch.thermometer_check_days !== undefined) {
+        const e = thermometerSettingsError(patch)
+        if (e) throw new ManagerError('validation', e, 400)
+        if (patch.thermometer_tolerance_c !== undefined) settingsPatch.thermometer_tolerance_c = patch.thermometer_tolerance_c
+        if (patch.thermometer_check_days !== undefined) settingsPatch.thermometer_check_days = patch.thermometer_check_days
       }
       if (Object.keys(settingsPatch).length > 0) {
         await run(sb.from('settings').update(settingsPatch).eq('id', 1).select('id').single())

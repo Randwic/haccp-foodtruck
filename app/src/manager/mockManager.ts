@@ -33,6 +33,7 @@ import {
   normalizeRecipeInput,
   normalizeSupplierInput,
   oilSettingsError,
+  thermometerSettingsError,
 } from './helpers.ts'
 
 /** Compte de démonstration (mode `seeded`). */
@@ -93,6 +94,8 @@ interface MockState {
   thaw_dlc_days: number
   oil_polar_max: number
   oil_polar_warn: number
+  thermometer_tolerance_c?: number
+  thermometer_check_days?: number
   staff: MockStaff[]
   equipment: Equipment[]
   thresholds: Threshold[]
@@ -136,6 +139,8 @@ function initialState(seeded: boolean): MockState {
     thaw_dlc_days: DEMO_SETTINGS.thaw_dlc_days,
     oil_polar_max: DEMO_SETTINGS.oil_polar_max,
     oil_polar_warn: DEMO_SETTINGS.oil_polar_warn,
+    thermometer_tolerance_c: DEMO_SETTINGS.thermometer_tolerance_c,
+    thermometer_check_days: DEMO_SETTINGS.thermometer_check_days,
     staff: clone(DEMO_STAFF),
     equipment: clone(DEMO_EQUIPMENT),
     thresholds: clone(DEMO_THRESHOLDS),
@@ -249,6 +254,8 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       thaw_dlc_days: state.thaw_dlc_days ?? DEMO_SETTINGS.thaw_dlc_days,
       oil_polar_max: state.oil_polar_max ?? DEMO_SETTINGS.oil_polar_max,
       oil_polar_warn: state.oil_polar_warn ?? DEMO_SETTINGS.oil_polar_warn,
+      thermometer_tolerance_c: state.thermometer_tolerance_c ?? DEMO_SETTINGS.thermometer_tolerance_c,
+      thermometer_check_days: state.thermometer_check_days ?? DEMO_SETTINGS.thermometer_check_days,
     } satisfies Settings)
   const pushStaff = (s: MockStaff) => {
     if (!t) return
@@ -376,6 +383,8 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     thaw_dlc_days: state.thaw_dlc_days ?? DEMO_SETTINGS.thaw_dlc_days,
     oil_polar_max: state.oil_polar_max ?? DEMO_SETTINGS.oil_polar_max,
     oil_polar_warn: state.oil_polar_warn ?? DEMO_SETTINGS.oil_polar_warn,
+    thermometer_tolerance_c: state.thermometer_tolerance_c ?? DEMO_SETTINGS.thermometer_tolerance_c,
+    thermometer_check_days: state.thermometer_check_days ?? DEMO_SETTINGS.thermometer_check_days,
   })
 
   /** Registre simulé « du serveur » : transport simulé, ou saisies du core factice (démo). */
@@ -554,6 +563,12 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
         if (e) throw new ManagerError('validation', e, 400)
         state.oil_polar_max = max
         state.oil_polar_warn = warn
+      }
+      if (patch.thermometer_tolerance_c !== undefined || patch.thermometer_check_days !== undefined) {
+        const e = thermometerSettingsError(patch)
+        if (e) throw new ManagerError('validation', e, 400)
+        if (patch.thermometer_tolerance_c !== undefined) state.thermometer_tolerance_c = patch.thermometer_tolerance_c
+        if (patch.thermometer_check_days !== undefined) state.thermometer_check_days = patch.thermometer_check_days
       }
       pushSettings() // le nom d'établissement passe par withEstablishmentName()
       save()

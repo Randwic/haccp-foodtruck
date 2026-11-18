@@ -4,6 +4,13 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
+## 0 sexies. RGPD de l'équipe (18/11/2026 ~06 h UTC), branche `claude/project-thread-i0ninf`
+- Migration `20261118000100_lot8_rgpd.sql` : `staff.deactivated_at` (trigger), `privacy_notice_on`, `forgotten_at` ; `staff_forget(id)` (gérant, équipier désactivé seulement) = pseudonyme « Ancien équipier n° N », PIN inutilisable, nom retiré de `audit_log` (seule exception à l'insertion seule, testée) ; `forget_former_staff()` chaque nuit 03:37 UTC (désactivé > 30 j et plus aucune saisie conservée). Tests SQL `99b` (879 assertions au total, OK).
+- App : Gestion › Équipe › encart « Données personnelles (RGPD) » (note d'information PDF, registre des traitements PDF) + bouton « Données personnelles » par personne (note à son nom, « remise aujourd'hui », copie PDF de ses données, effacement). `features/privacy/`.
+- Réparé au passage : `space_diner_v43.sql` mettait 24 (durée pain décongelé) dans `cook_min_c` → test 96c en échec.
+- **Mise en ligne** : d'abord `deploy-supabase.sh … db` (la migration ; l'app lit les nouvelles colonnes), puis fusion. Aucune fonction Edge modifiée.
+- Reste à faire : rotation des sauvegardes (l'historique Git de haccp-sauvegardes garde tout), retrait des documents d'un ancien salarié, lien « Vos données » sur l'écran de verrouillage.
+
 ## 0 bis. Lecture d'étiquette fiable (18/11/2026 ~05 h UTC), branche `claude/project-thread-ks86le`
 Cédric : « Rien de lisible » sur de vraies étiquettes bien lisibles (DLC/lot en **jet d'encre à points**, en **relief** sur couvercle, photo **de côté**). Tesseract ne lit pas ça. **Exigence de Cédric : lecture sur l'iPad, sans abonnement, sans Internet, sans option à choisir** (lecture par Claude/serveur refusée).
 - **Moteur principal** : `scan/paddle.ts` = modèles PaddleOCR PP-OCRv4 (détection + lecture, paquet `@gutenye/ocr-models`) exécutés par `onnxruntime-web` (wasm, 1 thread hors crossOriginIsolated). Fichiers servis sous `/ocr/ort/` et `/ocr/paddle/` (≈ 30 Mo, plugin `ocrAssets`, cache `haccp-ocr` à la 1re utilisation, préchargés à l'ouverture de la saisie). Photo lue droite, puis tournée de 90° et 270° si aucune date trouvée.

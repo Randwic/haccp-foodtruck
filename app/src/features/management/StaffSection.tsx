@@ -5,9 +5,10 @@ import { useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button, Modal, Notice, PinSetup, TextField } from '../../ui/components/index.ts'
 import { initials } from '../../ui/format.ts'
 import { IconChevronLeft, IconPlus } from '../../ui/icons.tsx'
+import { PrivacyCard, StaffPrivacyModal } from '../privacy/StaffPrivacy.tsx'
 import { ConfirmModal, SectionTitle, useManagement } from './common.tsx'
 
-type Dialog = { kind: 'add' } | { kind: 'pin'; s: ManagedStaff } | { kind: 'deactivate'; s: ManagedStaff } | { kind: 'reactivate'; s: ManagedStaff } | null
+type Dialog = { kind: 'privacy'; s: ManagedStaff } | { kind: 'add' } | { kind: 'pin'; s: ManagedStaff } | { kind: 'deactivate'; s: ManagedStaff } | { kind: 'reactivate'; s: ManagedStaff } | null
 
 /** Gestion › Équipe : liste, ajout avec PIN, désactivation/réactivation, changement de PIN. */
 export function StaffSection() {
@@ -54,7 +55,8 @@ export function StaffSection() {
             </h3>
             <div className="mt-1 flex flex-wrap gap-2">
               <Badge tone={s.role === 'manager' ? 'info' : 'neutral'}>{s.role === 'manager' ? 'Gérant' : 'Équipier'}</Badge>
-              {!s.active && <Badge tone="warn">Désactivé</Badge>}
+              {!s.active && <Badge tone="warn">{s.forgotten_at ? 'Données effacées' : 'Désactivé'}</Badge>}
+              {s.active && !s.privacy_notice_on && <Badge tone="warn">Note RGPD à remettre</Badge>}
             </div>
           </div>
         </div>
@@ -70,11 +72,14 @@ export function StaffSection() {
                 </Button>
               )}
             </>
-          ) : (
+          ) : s.forgotten_at ? null : (
             <Button variant="secondary" onClick={() => setDialog({ kind: 'reactivate', s })} aria-label={`Réactiver – ${s.display_name}`}>
               Réactiver
             </Button>
           )}
+          <Button variant="ghost" onClick={() => setDialog({ kind: 'privacy', s })} aria-label={`Données personnelles – ${s.display_name}`}>
+            Données personnelles
+          </Button>
         </div>
       </li>
     )
@@ -95,6 +100,7 @@ export function StaffSection() {
       {items === null && !loadError && <p className="text-[17px] text-fg-muted">Chargement…</p>}
       {items !== null && (
         <>
+          <PrivacyCard staff={items} />
           <SectionTitle count={active.length}>Actifs</SectionTitle>
           <ul className="grid gap-3 sm:gap-4 lg:grid-cols-2">{active.map(card)}</ul>
           {inactive.length > 0 && (
@@ -106,6 +112,7 @@ export function StaffSection() {
         </>
       )}
 
+      {dialog?.kind === 'privacy' && items && <StaffPrivacyModal s={dialog.s} staff={items} onClose={close} onChanged={() => void load()} />}
       {dialog?.kind === 'add' && <AddStaffModal onClose={close} onDone={after} />}
       {dialog?.kind === 'pin' && <ChangePinModal s={dialog.s} me={dialog.s.id === meId} onClose={close} onDone={after} />}
       {dialog?.kind === 'deactivate' && (

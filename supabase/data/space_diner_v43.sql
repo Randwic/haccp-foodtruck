@@ -73,7 +73,7 @@ on conflict on constraint thresholds_unique do update
 -- ---------------------------------------------------------------------------
 -- 3. Produits achetés
 --    shelf_life_opened_hours null = « selon l'étiquette du fabricant » (DLC saisie à la main).
---    shelf_life_thawed_hours null partout : aucune décongélation (cuisson directe).
+--    shelf_life_thawed_hours null partout (aucune décongélation, cuisson directe), sauf le pain brioché.
 --    storage : conservation du produit entamé (« frigo après ouverture » → fridge).
 -- ---------------------------------------------------------------------------
 -- Exemples du seed qui ne sont pas des produits de Space Diner.
@@ -95,7 +95,9 @@ with v (id, name, allergens, may_contain, storage, opened_h, cook_c) as (values
   ('00000000-0000-4000-8000-000000000405', 'Frites fraîches précuites', '{}', '{}', 'fridge', null, null), -- DLC 21 jours ; après ouverture : étiquette
   ('5d000000-0000-4000-8000-000000000404', 'Trio poivrons surgelés', '{}', '{}', 'freezer', null, null),
   -- Pain et fromages
-  ('00000000-0000-4000-8000-000000000401', 'Pain brioché', '{gluten,oeufs,lait}', '{}', 'ambient', null, null),
+  -- Pain du boulanger (pas de DLC fabricant) : gardé 4 jours après l'achat ; le reste peut être congelé,
+  -- décongelé à température ambiante et servi dans les 24 h (validé par Cédric le 18/11/2026).
+  ('00000000-0000-4000-8000-000000000401', 'Pain brioché', '{gluten,oeufs,lait}', '{}', 'ambient', 96, 24),
   ('00000000-0000-4000-8000-000000000402', 'Cheddar en tranche', '{lait}', '{}', 'fridge', null, null),
   ('5d000000-0000-4000-8000-000000000405', 'Emmental en tranche', '{lait}', '{}', 'fridge', null, null),
   ('5d000000-0000-4000-8000-000000000406', 'Chèvre en rondelles', '{lait}', '{}', 'fridge', null, null),

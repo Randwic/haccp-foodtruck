@@ -234,6 +234,8 @@ export function buildPmsDocument(a: PmsAnswers, app: PmsAppData, opts: { version
   const cook = spotRule('cooking_check', thresholds)
   const products = app.products.filter((p) => p.active).sort((x, y) => x.name.localeCompare(y.name, 'fr'))
   const cookProducts = products.filter((p) => p.cook_min_c !== null)
+  // Pain du boulanger : procédure propre (durée après achat, congélation possible du reste).
+  const bread = products.find((p) => /^pain\b/i.test(p.name))
   const preparations = app.recipes.filter((r) => r.active && r.kind === 'preparation').sort((x, y) => x.name.localeCompare(y.name, 'fr'))
   const checkTimes = app.settings?.daily_check_times ?? []
   const oilMax = app.settings?.oil_polar_max ?? 25
@@ -327,8 +329,13 @@ export function buildPmsDocument(a: PmsAnswers, app: PmsAppData, opts: { version
     kind: 'bullets',
     items: [
       'Produits rangés dès l’arrivée, cru et cuit séparés, denrées couvertes et étiquetées.',
-      `Décongélation uniquement en enceinte froide, enregistrée ; DLC fixée à ${thawDays} jour${thawDays > 1 ? 's' : ''} après la fin de la décongélation, jamais recongelé.`,
+      `Décongélation uniquement en enceinte froide, enregistrée ; DLC fixée à ${thawDays} jour${thawDays > 1 ? 's' : ''} après la fin de la décongélation, jamais recongelé${bread ? ' (sauf le pain, voir ci-dessous)' : ''}.`,
       'Produits entamés et préparations maison étiquetés (nom, date, DLC, allergènes) avec l’imprimante d’étiquettes ; durées en annexe.',
+      ...(bread
+        ? [
+            `${bread.name} (boulanger, sans DLC du fabricant) : gardé ${formatShelfLife(bread.shelf_life_opened_hours ?? 96)} après l’achat. Le reste peut être congelé avant la fin de ce délai, bien emballé, avec la date de congélation, 1 mois au plus à −18 °C ; décongelé dans son sachet à température ambiante, servi dans les ${formatShelfLife(bread.shelf_life_thawed_hours ?? 24)}, jamais recongelé.`,
+          ]
+        : []),
     ],
   })
 
@@ -461,7 +468,7 @@ export function buildPmsDocument(a: PmsAnswers, app: PmsAppData, opts: { version
     columns: [
       { title: 'Produit', width: 2.2 },
       { title: 'Conservation', width: 1.1 },
-      { title: 'Après ouverture', width: 1.4 },
+      { title: 'Après ouverture (ou achat)', width: 1.4 },
       { title: 'Cuisson à cœur', width: 1.1 },
       { title: 'Allergènes (traces)', width: 2.6 },
     ],

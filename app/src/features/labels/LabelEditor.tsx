@@ -11,13 +11,16 @@ import { chipClass, EntryLayout, ErrorNotice, useRecordSaver } from '../processe
 import { useLabelHeightMm } from './labelSettings.ts'
 import { LabelPaper, LabelPrintSheet, printSheet, useLabelFonts, useLabelLayout } from './LabelPreview.tsx'
 import {
+  capByOriginalDlc,
   computeDlc,
+  dlcFromDate,
   dlcProblem,
   formatLabelDateTime,
   formatShelfLife,
   fromLocalInputs,
   internalLot,
   KIND_MADE_LABEL,
+  originalDlcProblem,
   recentLots,
   recipeAllergens,
   recipeTraces,
@@ -51,8 +54,13 @@ export interface LabelDraft {
   dlcOrigin: string
   /** Enregistrements amont déjà connus (décongélation reprise du module Procédés). */
   sourceIds: string[]
-  /** Libellé libre d'une décongélation reprise (si aucun produit du catalogue ne correspond). */
+  /** Libellé libre d'une décongélation ou d'un achat repris (si aucun produit du catalogue ne correspond). */
   thawProductName?: string
+  /** Achat repris (module Achats) : lot déjà saisi à la réception et réception d'origine. */
+  lot?: string
+  lotSource?: string
+  /** DLC d'origine du fabricant saisie à la réception (AAAA-MM-JJ) : la DLC après ouverture ne la dépasse pas. */
+  originalDlc?: string
 }
 
 /** Mention sous le champ de DLC quand elle est lue sur l'emballage. */
@@ -215,18 +223,44 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
   const [productId, setProductId] = useState<string | null>(draft.product?.id ?? null)
   const product = draft.kind === 'prepared' ? undefined : data.products.find((p) => p.id === productId)
   const recipe = draft.recipe
-  const manual = draft.dlc === null
-  const initial = draft.dlc ? toLocalInputs(draft.dlc, tz) : { date: '', time: '' }
+  // Achat repris sans produit du catalogue : la durée après ouverture vient du produit choisi ensuite.
+  const base = !draft.product && draft.kind === 'opened' && product ? draftFor('opened', product, draft.madeAt) : draft
+  const manual = base.dlc === null
+  const lots = useMemo(() => (product ? recentLots(data.receptions, product.name) : draft.thawProductName ? recentLots(data.receptions, draft.thawProductName) : []), [product, draft.thawProductName, data.receptions])
+  // Lot : celui de l'achat repris, sinon le seul lot reçu pour ce produit (plusieurs : au choix, le plus ancien d'abord à ouvrir).
+  const single = draft.kind === 'opened' && !draft.lotSource && lots.length === 1 ? lots[0] : undefined
+  const [lot, setLot] = useState(draft.lot ?? single?.lot ?? '')
+  const [lotSource, setLotSource] = useState<string | null>(draft.lotSource ?? single?.receptionId ?? null)
+  const [originalDlc, setOriginalDlc] = useState<string | undefined>(draft.originalDlc ?? single?.dlc)
+  const proposed = manual ? { dlc: null, capped: false } : capByOriginalDlc(base.dlc, originalDlc, tz)
+  const dlcOrigin = proposed.capped ? `DLC d’origine du fabricant (plus courte que ${base.dlcOrigin})` : base.dlcOrigin
+  const initial = proposed.dlc ? toLocalInputs(proposed.dlc, tz) : { date: '', time: '' }
   const [date, setDate] = useState(initial.date)
   const [time, setTime] = useState(initial.time)
-  const [lot, setLot] = useState('')
-  const [lotSource, setLotSource] = useState<string | null>(null)
   const [copies, setCopies] = useState(1)
   const [confirm, setConfirm] = useState(false)
 
+  /** Choix d'un lot reçu : sa DLC d'origine peut raccourcir la DLC proposée. */
+  const chooseLot = (value: string, source: string | null, dlcOfLot: string | undefined) => {
+    setLot(value)
+    setLotSource(source)
+    setOriginalDlc(source ? dlcOfLot : undefined)
+    if (!manual && date === initial.date && time === initial.time) {
+      const next = capByOriginalDlc(base.dlc, source ? dlcOfLot : undefined, tz).dlc
+      if (next) {
+        const v = toLocalInputs(next, tz)
+        setDate(v.date)
+        setTime(v.time)
+      }
+    }
+  }
+
   // DLC du fabricant : date obligatoire, heure facultative (fin de journée).
   const dlc = manual && !date ? null : fromLocalInputs(date, manual && !time ? '23:59' : time, tz)
-  const problem = manual && !date ? 'Saisissez la DLC lue sur l’emballage avant d’imprimer.' : dlcProblem(draft.madeAt, dlc)
+  const problem =
+    originalDlcProblem(draft.madeAt, null, originalDlc, tz) ??
+    (manual && !date ? 'Saisissez la DLC lue sur l’emballage avant d’imprimer.' : (dlcProblem(draft.madeAt, dlc) ?? originalDlcProblem(draft.madeAt, dlc, originalDlc, tz)))
+  const originalExpired = originalDlcProblem(draft.madeAt, null, originalDlc, tz) !== null
   const name = (recipe?.name ?? product?.name ?? draft.thawProductName ?? '').slice(0, LIMITS.labelNameMax)
   const allergens = useMemo(() => (recipe ? recipeAllergens(recipe, data.products, data.recipes) : (product?.allergens ?? [])), [recipe, product, data.products, data.recipes])
   const traces = useMemo(
@@ -234,7 +268,6 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
     [recipe, product, data.products, data.recipes],
   )
   const storage = recipe?.storage ?? (draft.kind === 'thawed' ? 'fridge' : (product?.storage ?? 'fridge'))
-  const lots = useMemo(() => (product ? recentLots(data.receptions, product.name) : draft.thawProductName ? recentLots(data.receptions, draft.thawProductName) : []), [product, draft.thawProductName, data.receptions])
   const trimmedLot = lot.trim().slice(0, LIMITS.lotMax)
 
   const content = useMemo<LabelContent | null>(
@@ -315,7 +348,21 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                 {data.products
                   .filter((p) => p.active)
                   .map((p) => (
-                    <button key={p.id} type="button" role="radio" aria-checked={productId === p.id} className={chipClass(productId === p.id)} onClick={() => setProductId(p.id)}>
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={productId === p.id}
+                      className={chipClass(productId === p.id)}
+                      onClick={() => {
+                        setProductId(p.id)
+                        if (draft.kind !== 'opened' || draft.product) return
+                        const next = capByOriginalDlc(draftFor('opened', p, draft.madeAt).dlc, originalDlc, tz).dlc
+                        const v = next ? toLocalInputs(next, tz) : { date: '', time: '' }
+                        setDate(v.date)
+                        setTime(v.time)
+                      }}
+                    >
                       {p.name}
                     </button>
                   ))}
@@ -331,6 +378,20 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                 </span>
               </p>
             )}
+            {manual && originalDlc && dlcFromDate(originalDlc, tz).getTime() > draft.madeAt.getTime() && (
+              <div className="mb-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setDate(originalDlc)
+                    setTime('')
+                  }}
+                >
+                  Reprendre la DLC d’achat : {formatLabelDateTime(dlcFromDate(originalDlc, tz), tz).slice(0, 10)}
+                </Button>
+                <p className="mt-1.5 text-[14px] text-fg-muted">Seulement si l’emballage n’indique pas une durée plus courte après ouverture.</p>
+              </div>
+            )}
             <DlcFields
               date={date}
               time={time}
@@ -338,17 +399,17 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
               onTime={setTime}
               legend={manual ? 'DLC lue sur l’emballage' : undefined}
               timeOptional={manual}
-              error={problem && (date || time) ? problem : null}
+              error={problem && (date || time || originalExpired) ? problem : null}
             />
             <p className="mt-2 text-[15px] text-fg-muted">
               {dlc && !problem ? (
                 <>
-                  <span className="font-semibold text-fg">{weekdayOf(dlc, tz).replace(/^./, (c) => c.toUpperCase())}</span> · {manual ? draft.dlcOrigin : `proposée : ${draft.dlcOrigin}`}
+                  <span className="font-semibold text-fg">{weekdayOf(dlc, tz).replace(/^./, (c) => c.toUpperCase())}</span> · {manual ? dlcOrigin : `proposée : ${dlcOrigin}`}
                 </>
               ) : manual ? (
                 <>Obligatoire avant l’impression.</>
               ) : (
-                <>Proposée : {draft.dlcOrigin}</>
+                <>Proposée : {dlcOrigin}</>
               )}
               {!manual && (date !== initial.date || time !== initial.time) && (
                 <>
@@ -372,8 +433,8 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
             label="N° de lot (facultatif)"
             value={lot}
             onChange={(v) => {
-              setLot(v)
-              setLotSource(lots.find((l) => l.lot === v.trim())?.receptionId ?? null)
+              const match = lots.find((l) => l.lot === v.trim())
+              chooseLot(v, match?.receptionId ?? null, match?.dlc)
             }}
             maxLength={LIMITS.lotMax}
             autoCapitalize="characters"
@@ -387,13 +448,13 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                       className={chipClass(lotSource === l.receptionId && lot.trim() === l.lot)}
                       aria-pressed={lotSource === l.receptionId && lot.trim() === l.lot}
                       aria-label={`Lot ${l.lot}, reçu le ${formatLabelDateTime(l.receivedAt, tz).slice(0, 5)}`}
-                      onClick={() => {
-                        setLot(l.lot)
-                        setLotSource(l.receptionId)
-                      }}
+                      onClick={() => chooseLot(l.lot, l.receptionId, l.dlc)}
                     >
                       {l.lot}
-                      <span className="ml-1.5 font-normal opacity-80">reçu {formatLabelDateTime(l.receivedAt, tz).slice(0, 5)}</span>
+                      <span className="ml-1.5 font-normal opacity-80">
+                        reçu {formatLabelDateTime(l.receivedAt, tz).slice(0, 5)}
+                        {l.dlc && ` · DLC ${l.dlc.slice(8, 10)}/${l.dlc.slice(5, 7)}`}
+                      </span>
                     </button>
                   ))}
                   {draft.kind === 'prepared' && (
@@ -401,10 +462,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                       type="button"
                       className={chipClass(lot === internalLot(draft.madeAt, tz))}
                       aria-pressed={lot === internalLot(draft.madeAt, tz)}
-                      onClick={() => {
-                        setLot(internalLot(draft.madeAt, tz))
-                        setLotSource(null)
-                      }}
+                      onClick={() => chooseLot(internalLot(draft.madeAt, tz), null, undefined)}
                     >
                       Lot interne {internalLot(draft.madeAt, tz)}
                     </button>

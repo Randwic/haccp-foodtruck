@@ -227,6 +227,8 @@ export function buildLabels(records: readonly HaccpRecord[], wastes: readonly Wa
 }
 
 export const LABEL_RECORD_TYPES = ['label_printed', 'waste', 'correction', 'reception', 'thawing'] as const
+/** Achats relus plus loin (produits d'épicerie à longue DLC, ouverts des semaines après la livraison). */
+export const LABEL_RECEPTION_DAYS = 120
 
 export interface DueItem {
   entry: LabelEntry
@@ -310,6 +312,62 @@ export function recentLots(receptions: readonly ReceptionEntry[], productName: s
     }
   }
   return out
+}
+
+/** Une ligne acceptée aux Achats, proposée à l'ouverture (lot et DLC d'origine déjà saisis à la réception). */
+export interface ReceivedForOpening {
+  receptionId: string
+  receivedAt: string
+  /** Libellé saisi à la réception. */
+  product: string
+  /** Produit du catalogue correspondant (allergènes, durée après ouverture), s'il existe. */
+  catalog: Product | null
+  lot?: string
+  /** DLC d'origine du fabricant (AAAA-MM-JJ). */
+  dlc?: string
+}
+
+/**
+ * Achats récents à ouvrir : lignes acceptées avec un lot ou une DLC, hors surgelés (→ décongélation)
+ * et hors DLC d'origine dépassée (produit à ne pas ouvrir). Plus récents d'abord, sans doublon.
+ */
+export function receivedForOpening(receptions: readonly ReceptionEntry[], products: readonly Product[], now: Date, timeZone: string, max = 12): ReceivedForOpening[] {
+  const out: ReceivedForOpening[] = []
+  const seen = new Set<string>()
+  const norm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase()
+  for (const e of [...receptions].sort((a, b) => b.time.localeCompare(a.time))) {
+    for (const it of e.payload.items) {
+      if (out.length >= max) return out
+      if (!it.accepted || it.storage === 'freezer' || (!it.lot && !it.dlc)) continue
+      if (it.dlc && dlcFromDate(it.dlc, timeZone).getTime() <= now.getTime()) continue
+      const catalog = productForName(products, it.product)
+      const key = `${catalog?.id ?? productTokens(it.product).join(' ')}|${norm(it.lot)}|${it.dlc ?? ''}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ receptionId: e.id, receivedAt: e.time, product: it.product, catalog, lot: it.lot, dlc: it.dlc })
+    }
+  }
+  return out
+}
+
+/**
+ * DLC proposée après ouverture : la plus courte entre « ouverture + durée de la fiche » et la DLC d'origine
+ * du fabricant (fin de journée). Une DLC secondaire ne dépasse jamais la DLC d'origine.
+ */
+export function capByOriginalDlc(proposed: Date | null, originalDlc: string | undefined, timeZone: string): { dlc: Date | null; capped: boolean } {
+  if (!proposed || !originalDlc) return { dlc: proposed, capped: false }
+  const original = dlcFromDate(originalDlc, timeZone)
+  return original.getTime() < proposed.getTime() ? { dlc: original, capped: true } : { dlc: proposed, capped: false }
+}
+
+/** Contrôle par rapport à la DLC d'origine : produit périmé à l'ouverture, ou DLC après ouverture trop longue. */
+export function originalDlcProblem(madeAt: Date, dlc: Date | null, originalDlc: string | undefined, timeZone: string): string | null {
+  if (!originalDlc) return null
+  const original = dlcFromDate(originalDlc, timeZone)
+  const shown = formatLabelDate(original, timeZone)
+  if (original.getTime() <= madeAt.getTime()) return `DLC d’origine dépassée (${shown}) : ce produit ne doit pas être ouvert.`
+  if (dlc && dlc.getTime() > original.getTime()) return `La DLC après ouverture ne peut pas dépasser la DLC d’origine (${shown}).`
+  return null
 }
 
 /** Décongélations terminées récemment (avec DLC) — reprises pour une étiquette. */

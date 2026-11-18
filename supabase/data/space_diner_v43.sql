@@ -181,11 +181,11 @@ update public.recipes set active = false where id = '00000000-0000-4000-8000-000
 create temp table sd_recipe (id uuid primary key, name text not null unique) on commit drop;
 
 with v (id, name, ingredients, extra, may, storage, hours) as (values
-  -- 5 jours au frigo 0 à 4 °C, faite le mercredi soir (repos d'une nuit), jetée le samedi soir.
+  -- 3 jours au frigo 0 à 4 °C : faite le jeudi, jetée le samedi soir (ramené de 5 à 3 jours, validé par Cédric le 18/11/2026).
   ('5d000000-0000-4000-8000-000000000601'::uuid, 'Sauce UFO fumée-miel',
      array['Paprika fumé', 'Piment doux en poudre', 'Ail en poudre', 'Oignon en poudre', 'Sel fin', 'Poivre noir',
            'Sauce Worcestershire', 'Cornichons aigre-doux', 'Miel', 'Ketchup tomato Colona', 'Moutarde de Dijon', 'Mayo Real Colona'],
-     '{}'::text[], '{}'::text[], 'fridge', 120),
+     '{}'::text[], '{}'::text[], 'fridge', 72),
   -- 3 jours au frigo 0 à 4 °C (faite jeudi, jetée samedi soir).
   ('5d000000-0000-4000-8000-000000000602', 'Ranch',
      array['Jus de citron', 'Crème liquide entière', 'Mayo Real Colona', 'Ail en poudre', 'Persil frais', 'Sel fin', 'Poivre noir'],
@@ -196,9 +196,10 @@ with v (id, name, ingredients, extra, may, storage, hours) as (values
   -- 1 mois en pot fermé, à température ambiante.
   ('5d000000-0000-4000-8000-000000000604', 'Miel piquant',
      array['Miel', 'Piment doux en poudre', 'Vinaigre de cidre'], '{}', '{}', 'ambient', 720),
-  -- Jusqu'au lendemain soir au frigo 0 à 3 °C (30 h), jeté le samedi soir ; ne se congèle pas.
+  -- Chutney et bacon gardés séparés, mélangés au dernier moment ; le reste du mélange est jeté en fin de service (3 h).
+  -- Le pot de chutney ouvert garde sa propre durée (10 jours, étiquette du fabricant). Cédric, 18/11/2026.
   ('5d000000-0000-4000-8000-000000000605', 'Chutney d''oignons au bacon',
-     array['Bacon croustillant (Sol y Tapas Crispy)', 'Chutney d''oignons (pot 550 g)'], '{}', '{}', 'fridge', 30),
+     array['Bacon croustillant (Sol y Tapas Crispy)', 'Chutney d''oignons (pot 550 g)'], '{}', '{}', 'fridge', 3),
   -- Durée de l'étiquette du fournisseur après ouverture : 72 h retenues, À CONFIRMER.
   ('5d000000-0000-4000-8000-000000000606', 'Pommes cuites à la cannelle',
      array['Pommes cuites en cubes (Metro)', 'Cannelle en poudre'], '{}', '{}', 'fridge', 72),

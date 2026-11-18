@@ -8,7 +8,8 @@
 - Serveur vérifié : tous les produits actifs servent dans une recette ; les exemples du seed (Sauce burger, Steak haché surgelé, Salade iceberg, Sauce cheddar maison) sont désactivés depuis le 17/11. Aucun PMS enregistré sur le serveur : le PDF vu par Cédric (avec Sauce burger / steak haché) venait du serveur simulé ou d'un aperçu, pas de la vraie app.
 - Branche `claude/project-thread-d6aa7n` : suggestions par défaut des écrans Cuisson, Maintien, Refroidissement, Remise en température et Décongélation remplacées par ses produits (plus de chili, bolognaise, steak, saucisse…). **Pas mise en ligne** (accord requis).
 - Pain brioché : **4 jours après achat, 24 h après décongélation** — écrit sur le serveur le 18/11 03:45 UTC (accord de Cédric) et dans `space_diner_v43.sql`. Le PMS (`pms/model.ts`) ajoute une procédure pain (congélation du reste, décongélation à l'ambiante) si un produit « Pain… » existe — sur la branche, pas en ligne.
-- En attente de Cédric : durées des sauces maison (proposition : 3 jours max), crème pâtissière Ancel (durée du sachet), chutney au bacon (30 h actuellement ; chutney seul : 10 jours après ouverture).
+- Sauces validées par Cédric (18/11 03:47 UTC) et écrites sur le serveur : Sauce UFO 5 → **3 jours** ; Ranch, sauce piquante fumée, pommes cannelle 3 jours ; miel piquant 1 mois ; chutney au bacon **mélangé au dernier moment, reste jeté en fin de service (3 h)**.
+- En attente de Cédric : crème pâtissière Ancel (durée du sachet) ; accord pour la mise en ligne de la branche.
 
 ## 0 bis. Suite du 18/11/2026 (~03 h UTC) : clé publishable + fonctions
 - Fonctions Supabase **redéployées** (`deploy-supabase.sh … functions`, environnement « haccp-foodtruck » avec accès à api.supabase.com). Migrations : toutes déjà appliquées (16), rien relancé côté base, données réelles intactes.

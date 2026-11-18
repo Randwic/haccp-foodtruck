@@ -59,7 +59,7 @@ select tests.assert_eq((select allergens || may_contain from public.products whe
 -- ---------------------------------------------------------------------------
 select tests.assert_eq((select string_agg(name || ':' || shelf_life_hours || ':' || storage, ', ' order by name) from public.recipes
   where active and kind = 'preparation'),
-  'Chutney d''oignons au bacon:3:fridge, Crème pâtissière à l''amande:6:fridge, Miel piquant:720:ambient, Pommes cuites à la cannelle:72:fridge, '
+  'Chutney d''oignons au bacon:3:fridge, Crème pâtissière à l''amande:48:fridge, Miel piquant:720:ambient, Pommes cuites à la cannelle:72:fridge, '
   'Ranch:72:fridge, Sauce UFO fumée-miel:72:fridge, Sauce piquante fumée:72:fridge, Trio poivrons cuits:3:ambient',
   '8 préparations maison et leurs durées');
 select tests.assert(not (select active from public.recipes where id = '00000000-0000-4000-8000-000000000451'), 'recette d''exemple du seed désactivée');

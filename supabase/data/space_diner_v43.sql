@@ -203,9 +203,9 @@ with v (id, name, ingredients, extra, may, storage, hours) as (values
   -- Durée de l'étiquette du fournisseur après ouverture : 72 h retenues, À CONFIRMER.
   ('5d000000-0000-4000-8000-000000000606', 'Pommes cuites à la cannelle',
      array['Pommes cuites en cubes (Metro)', 'Cannelle en poudre'], '{}', '{}', 'fridge', 72),
-  -- Faite à 16 h, jetée en fin de service (6 h) ; le livre indique « 24 h maximum ».
+  -- Préparation en poudre Ancel + eau : 48 h au frigo 0 à 4 °C après préparation (conseil du sachet, validé par Cédric le 18/11/2026).
   ('5d000000-0000-4000-8000-000000000607', 'Crème pâtissière à l''amande',
-     array['Préparation crème pâtissière à froid (Ancel)', 'Arôme amande amère sans alcool'], '{}', '{}', 'fridge', 6),
+     array['Préparation crème pâtissière à froid (Ancel)', 'Arôme amande amère sans alcool'], '{}', '{}', 'fridge', 48),
   -- Tenu au chaud ≥ 63 °C au bain-marie, 3 h maximum, jeté en fin de service, jamais remis au
   -- frigo. Le maintien au chaud n'est pas un mode de conservation du contrat : « ambient » est
   -- le plus proche (hors froid) ; la règle réelle est le seuil hot_holding.

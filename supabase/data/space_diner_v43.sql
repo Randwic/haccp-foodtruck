@@ -73,7 +73,7 @@ on conflict on constraint thresholds_unique do update
 -- ---------------------------------------------------------------------------
 -- 3. Produits achetés
 --    shelf_life_opened_hours null = « selon l'étiquette du fabricant » (DLC saisie à la main).
---    shelf_life_thawed_hours null partout : aucune décongélation (cuisson directe).
+--    shelf_life_thawed_hours null partout (aucune décongélation, cuisson directe), sauf le pain brioché.
 --    storage : conservation du produit entamé (« frigo après ouverture » → fridge).
 -- ---------------------------------------------------------------------------
 -- Exemples du seed qui ne sont pas des produits de Space Diner.
@@ -95,7 +95,9 @@ with v (id, name, allergens, may_contain, storage, opened_h, cook_c) as (values
   ('00000000-0000-4000-8000-000000000405', 'Frites fraîches précuites', '{}', '{}', 'fridge', null, null), -- DLC 21 jours ; après ouverture : étiquette
   ('5d000000-0000-4000-8000-000000000404', 'Trio poivrons surgelés', '{}', '{}', 'freezer', null, null),
   -- Pain et fromages
-  ('00000000-0000-4000-8000-000000000401', 'Pain brioché', '{gluten,oeufs,lait}', '{}', 'ambient', null, null),
+  -- Pain du boulanger (pas de DLC fabricant) : gardé 4 jours après l'achat ; le reste peut être congelé,
+  -- décongelé à température ambiante et servi dans les 24 h (validé par Cédric le 18/11/2026).
+  ('00000000-0000-4000-8000-000000000401', 'Pain brioché', '{gluten,oeufs,lait}', '{}', 'ambient', 96, 24),
   ('00000000-0000-4000-8000-000000000402', 'Cheddar en tranche', '{lait}', '{}', 'fridge', null, null),
   ('5d000000-0000-4000-8000-000000000405', 'Emmental en tranche', '{lait}', '{}', 'fridge', null, null),
   ('5d000000-0000-4000-8000-000000000406', 'Chèvre en rondelles', '{lait}', '{}', 'fridge', null, null),
@@ -179,11 +181,11 @@ update public.recipes set active = false where id = '00000000-0000-4000-8000-000
 create temp table sd_recipe (id uuid primary key, name text not null unique) on commit drop;
 
 with v (id, name, ingredients, extra, may, storage, hours) as (values
-  -- 5 jours au frigo 0 à 4 °C, faite le mercredi soir (repos d'une nuit), jetée le samedi soir.
+  -- 3 jours au frigo 0 à 4 °C : faite le jeudi, jetée le samedi soir (ramené de 5 à 3 jours, validé par Cédric le 18/11/2026).
   ('5d000000-0000-4000-8000-000000000601'::uuid, 'Sauce UFO fumée-miel',
      array['Paprika fumé', 'Piment doux en poudre', 'Ail en poudre', 'Oignon en poudre', 'Sel fin', 'Poivre noir',
            'Sauce Worcestershire', 'Cornichons aigre-doux', 'Miel', 'Ketchup tomato Colona', 'Moutarde de Dijon', 'Mayo Real Colona'],
-     '{}'::text[], '{}'::text[], 'fridge', 120),
+     '{}'::text[], '{}'::text[], 'fridge', 72),
   -- 3 jours au frigo 0 à 4 °C (faite jeudi, jetée samedi soir).
   ('5d000000-0000-4000-8000-000000000602', 'Ranch',
      array['Jus de citron', 'Crème liquide entière', 'Mayo Real Colona', 'Ail en poudre', 'Persil frais', 'Sel fin', 'Poivre noir'],
@@ -194,15 +196,16 @@ with v (id, name, ingredients, extra, may, storage, hours) as (values
   -- 1 mois en pot fermé, à température ambiante.
   ('5d000000-0000-4000-8000-000000000604', 'Miel piquant',
      array['Miel', 'Piment doux en poudre', 'Vinaigre de cidre'], '{}', '{}', 'ambient', 720),
-  -- Jusqu'au lendemain soir au frigo 0 à 3 °C (30 h), jeté le samedi soir ; ne se congèle pas.
+  -- Chutney et bacon gardés séparés, mélangés au dernier moment ; le reste du mélange est jeté en fin de service (3 h).
+  -- Le pot de chutney ouvert garde sa propre durée (10 jours, étiquette du fabricant). Cédric, 18/11/2026.
   ('5d000000-0000-4000-8000-000000000605', 'Chutney d''oignons au bacon',
-     array['Bacon croustillant (Sol y Tapas Crispy)', 'Chutney d''oignons (pot 550 g)'], '{}', '{}', 'fridge', 30),
+     array['Bacon croustillant (Sol y Tapas Crispy)', 'Chutney d''oignons (pot 550 g)'], '{}', '{}', 'fridge', 3),
   -- Durée de l'étiquette du fournisseur après ouverture : 72 h retenues, À CONFIRMER.
   ('5d000000-0000-4000-8000-000000000606', 'Pommes cuites à la cannelle',
      array['Pommes cuites en cubes (Metro)', 'Cannelle en poudre'], '{}', '{}', 'fridge', 72),
-  -- Faite à 16 h, jetée en fin de service (6 h) ; le livre indique « 24 h maximum ».
+  -- Préparation en poudre Ancel + eau : 48 h au frigo 0 à 4 °C après préparation (conseil du sachet, validé par Cédric le 18/11/2026).
   ('5d000000-0000-4000-8000-000000000607', 'Crème pâtissière à l''amande',
-     array['Préparation crème pâtissière à froid (Ancel)', 'Arôme amande amère sans alcool'], '{}', '{}', 'fridge', 6),
+     array['Préparation crème pâtissière à froid (Ancel)', 'Arôme amande amère sans alcool'], '{}', '{}', 'fridge', 48),
   -- Tenu au chaud ≥ 63 °C au bain-marie, 3 h maximum, jeté en fin de service, jamais remis au
   -- frigo. Le maintien au chaud n'est pas un mode de conservation du contrat : « ambient » est
   -- le plus proche (hors froid) ; la règle réelle est le seuil hot_holding.
@@ -336,10 +339,10 @@ insert into public.checklists (id, name, kind, items, active) values
      {"id": "nuisibles",     "label": "Pas de nuisibles constatés", "required": true}
    ]'::jsonb, true),
   ('00000000-0000-4000-8000-000000000552', 'Fermeture (fin de service)', 'closing', '[
-     {"id": "restes",           "label": "Restes réchauffés et tenus au chaud jetés (viande, poivrons, sauce cheddar)", "required": true},
+     {"id": "restes",           "label": "Restes réchauffés et tenus au chaud jetés (viande, poivrons, sauce cheddar) et mélange chutney-bacon", "required": true},
      {"id": "flacons",          "label": "Flacons de sauce entamés jetés (jamais reversés dans le bac)", "required": true},
-     {"id": "creme_patissiere", "label": "Crème pâtissière restante jetée", "required": true},
-     {"id": "samedi",           "label": "Samedi : sauces maison froides et chutney au bacon restants jetés", "required": false},
+     {"id": "creme_patissiere", "label": "Crème pâtissière : étiquette vérifiée, jetée si plus de 48 h", "required": true},
+     {"id": "samedi",           "label": "Samedi : sauces maison froides restantes jetées", "required": false},
      {"id": "produits_entames", "label": "Produits entamés fermés, étiquetés (date d''ouverture), au frigo", "required": true},
      {"id": "vaisselle",        "label": "Vaisselle sale dans le bac fermé", "required": true},
      {"id": "temperatures",     "label": "Températures relevées en fin de service", "required": true},

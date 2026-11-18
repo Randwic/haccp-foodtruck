@@ -9,14 +9,14 @@ export const TIMED_LABELS: Record<TimedKind, { title: string; one: string; many:
     one: 'refroidissement en cours',
     many: 'refroidissements en cours',
     startHint: 'Mesurez à cœur dès la sortie de cuisson, avant la mise en cellule ou au froid.',
-    defaults: ['Chili con carne', 'Sauce bolognaise', 'Riz', 'Pommes de terre'],
+    defaults: [],
   },
   reheating: {
     title: 'Remise en température',
     one: 'remise en température en cours',
     many: 'remises en température en cours',
     startHint: 'Mesurez à cœur à la sortie du froid, juste avant de réchauffer.',
-    defaults: ['Chili con carne', 'Sauce bolognaise', 'Soupe'],
+    defaults: ['Porc BBQ cuit', 'Émincé de poulet cuit'],
   },
 }
 

@@ -44,23 +44,33 @@ export function StaffSection() {
     await load()
   }
 
-  const exportData = async (s: ManagedStaff) => {
+  // Deux temps : préparer le fichier (lecture de tout le registre), puis le partager d'un toucher
+  // (la feuille de partage de l'iPhone / iPad exige un geste direct de l'utilisateur).
+  const [ready, setReady] = useState<{ id: string; name: string; csv: string } | null>(null)
+  const prepare = async (s: ManagedStaff) => {
     setExporting(s.id)
     try {
-      const file = await buildStaffExport(core, manager, s)
-      const blob = new Blob([file.csv], { type: 'text/csv;charset=utf-8' })
-      await shareFile(blob, file.name, 'text/csv', `Données de ${s.display_name}`).catch(() => downloadFile(blob, file.name))
+      setReady({ id: s.id, ...(await buildStaffExport(core, manager, s)) })
     } catch (err) {
       toast(`Export impossible : ${errorText(err)}`, 'error')
     } finally {
       setExporting(null)
     }
   }
-  const exportButton = (s: ManagedStaff) => (
-    <Button variant="ghost" icon={<IconShare size={18} />} onClick={() => void exportData(s)} disabled={exporting !== null} aria-label={`Exporter ses données – ${s.display_name}`}>
-      {exporting === s.id ? 'Préparation…' : 'Exporter ses données'}
-    </Button>
-  )
+  const share = (s: ManagedStaff, file: { name: string; csv: string }) => {
+    const blob = new Blob([file.csv], { type: 'text/csv;charset=utf-8' })
+    void shareFile(blob, file.name, 'text/csv', `Données de ${s.display_name}`).catch(() => downloadFile(blob, file.name))
+  }
+  const exportButton = (s: ManagedStaff) =>
+    ready?.id === s.id ? (
+      <Button variant="secondary" icon={<IconShare size={18} />} onClick={() => share(s, ready)} aria-label={`Partager le fichier – ${s.display_name}`}>
+        Partager le fichier
+      </Button>
+    ) : (
+      <Button variant="ghost" onClick={() => void prepare(s)} disabled={exporting !== null} aria-label={`Exporter ses données – ${s.display_name}`}>
+        {exporting === s.id ? 'Préparation…' : 'Exporter ses données'}
+      </Button>
+    )
 
   const card = (s: ManagedStaff) => {
     const me = s.id === meId
@@ -163,7 +173,10 @@ export function StaffSection() {
           confirmLabel="Effacer son nom"
           danger
           onClose={close}
-          onConfirm={() => run(() => manager.forgetStaff(dialog.s.id), 'Nom effacé : ses saisies restent dans le registre').then(load)}
+          onConfirm={() => run(() => manager.forgetStaff(dialog.s.id), 'Nom effacé : ses saisies restent dans le registre').then(() => {
+            setReady(null)
+            return load()
+          })}
         >
           <p>
             Le nom <strong>{dialog.s.display_name}</strong> sera remplacé partout par « Ancien membre … » et son code PIN ne fonctionnera plus. Ses saisies restent dans le registre HACCP (obligation légale de traçabilité).

@@ -164,6 +164,26 @@ describe('Gestion – équipe', () => {
     expect(await screen.findByRole('button', { name: 'Réactiver – Équipier' })).toBeInTheDocument()
     expect(manager.simulate.state().staff.find((s) => s.display_name === 'Équipier')?.active).toBe(false)
   })
+
+  it('RGPD : efface le nom d’un ancien membre (désactivé seulement), plus de réactivation', async () => {
+    const manager = await openManagement()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Équipe' }))
+    await screen.findByRole('button', { name: 'Désactiver – Équipier' })
+    expect(screen.queryByRole('button', { name: 'Effacer son nom – Équipier' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Exporter ses données – Équipier' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Désactiver – Équipier' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Effacer son nom – Équipier' }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/C’est définitif/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Effacer son nom' }))
+    expect(await screen.findByText('Nom effacé (RGPD)')).toBeInTheDocument()
+    const s = manager.simulate.state().staff.find((x) => x.id === DEMO_STAFF.find((d) => d.display_name === 'Équipier')!.id)!
+    expect(s.display_name).toMatch(/^Ancien membre [0-9A-F]{4}$/)
+    expect(s.active).toBe(false)
+    expect(screen.queryByRole('button', { name: /^Réactiver – Ancien membre/ })).toBeNull()
+    await expect(manager.updateStaff(s.id, { active: true })).rejects.toThrow()
+  })
 })
 
 describe('Gestion – réglages', () => {

@@ -4,6 +4,16 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
+## 0 septies. Lot 8 RGPD + frites (18/11/2026 ~07 h UTC), même branche `claude/project-thread-slew47` (PR n°9)
+- **Frites** : Cédric confirme la friteuse d'appoint séparée pour les nuggets → plus de trace de gluten propre aux 4 plats de frites (`space_diner_v43.sql`, démo, texte du tableau des allergènes et du PMS). Les Frites Roswell gardent un ○ gluten venant de la **sauce cheddar (achetée)** (trace supposée, à vérifier). **Serveur pas encore modifié** (écriture refusée sans accord explicite) : `update public.recipes set may_contain = array_remove(may_contain,'gluten') where id in ('5d…0710','5d…0711','5d…0712','5d…0713')` ou Gestion › Recettes.
+- **Bug corrigé** : `space_diner_v43.sql` échouait en le relançant (24 h du pain brioché mises dans la colonne `cook_min_c`). Tests SQL : 849 OK (`bash supabase/tests/run.sh` marche dans la session : PostgreSQL 16 installé).
+- **RGPD** :
+  - Migration `20261118000100_lot8_rgpd.sql` : `staff.forgotten_at`, RPC `staff_forget(id)` (gérant, membre désactivé ; nom → « Ancien membre XXXX », PIN aléatoire), garde : un membre effacé ne peut plus être réactivé/renommé. Test `99b_lot8_rgpd.sql`. Le journal d'audit garde l'ancien nom (append-only), c'est écrit dans le registre.
+  - Gestion › Équipe : « Exporter ses données » (CSV : identité + toutes ses saisies, `staffExport.ts`, en deux temps pour la feuille de partage iOS), « Effacer son nom » (membre désactivé). `ControlRow.authorId` ajouté.
+  - Documents & contrôle › onglet **RGPD** (`features/rgpd/`) : registre des traitements (art. 30) et note d'information de l'équipe (signature), PDF ; identité reprise des réponses de l'assistant PMS (`pms/saved.ts`, partagé avec `PmsTab`), durée = `settings.retention_years`.
+- **Mise en ligne** : d'abord `bash scripts/deploy-supabase.sh tnikuszcrmsmlictktsj db` (nouvelle migration ; seed idempotent), puis fusion de la PR. Pas de changement des fonctions.
+- Reste RGPD : sauvegardes GitHub non chiffrées au repos (dépôt privé) ; à envisager.
+
 ## 0 sexies. Petits bugs d'affichage (18/11/2026 ~06 h UTC), branche `claude/project-thread-slew47`
 Signalé par Cédric (capture iPhone) : dans Recettes › Modifier, le panneau « Allergènes calculés » (collant en bas, 30 % de l'écran) cachait la liste des ingrédients.
 - `ComputedAllergens` (`RecipeSection.tsx`) : bandeau collant d'**une ligne** (résumé « Gluten, Œufs… · traces : … ») + bouton « Détail » qui déplie la liste d'origine (max 45 % de l'écran, « Réduire » reste visible). Le détail reste dans le DOM (`hidden`), les tests le lisent toujours.

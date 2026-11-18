@@ -1,7 +1,6 @@
 // Assistant PMS : questionnaire en 4 étapes (pré-rempli), puis plan complet en PDF construit avec les données
 // de l'application, enregistré comme nouvelle version dans les documents (l'ancienne version est archivée).
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { DocumentRef } from '../../../../shared/payloads.ts'
 import { errorText, type ManagerApi } from '../../manager/api.ts'
 import { Button, Notice, TextField, useToast } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
@@ -9,30 +8,9 @@ import { IconCheck, IconChevronLeft, IconChevronRight, IconOk, IconShare, IconWa
 import { TextArea } from '../cleaning/parts.tsx'
 import { shareFile } from '../documents/files.ts'
 import { loadLabelFonts } from '../labels/fonts.ts'
-import { buildPmsDocument, defaultAnswers, missingAnswers, parseAnswers, PMS_STEPS, type PmsAnswers, type PmsAppData } from './model.ts'
+import { buildPmsDocument, defaultAnswers, missingAnswers, PMS_STEPS, type PmsAnswers, type PmsAppData } from './model.ts'
 import { answersFromPdf, buildPmsPdf } from './pdf.ts'
-
-const DRAFT_KEY = 'haccp.pms-draft.v1'
-/** Note des PDF générés par l'assistant (reconnaissance des versions). */
-export const PMS_NOTE = 'Généré par l’assistant PMS de l’application.'
-
-function readDraft(defaults: PmsAnswers): PmsAnswers | null {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY)
-    return raw ? parseAnswers(JSON.parse(raw), defaults) : null
-  } catch {
-    return null
-  }
-}
-function writeDraft(a: PmsAnswers) {
-  try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(a))
-  } catch {
-    /* stockage plein : sans importance, le brouillon reste à l'écran */
-  }
-}
-
-const isAssistantPms = (d: DocumentRef) => d.category === 'pms' && d.mime_type === 'application/pdf' && (d.notes ?? '').startsWith(PMS_NOTE)
+import { clearDraft, isAssistantPms, PMS_NOTE, readDraft, writeDraft } from './saved.ts'
 
 export function PmsTab({ manager, timeZone, onSaved }: { manager: ManagerApi | null; timeZone: string; onSaved?: () => void }) {
   const core = useCore()
@@ -151,7 +129,7 @@ export function PmsTab({ manager, timeZone, onSaved }: { manager: ManagerApi | n
         notes: `${PMS_NOTE} À relire au plus tard dans un an.`,
       })
       for (const d of previous) await manager.updateDocument(d.id, { active: false }).catch(() => {})
-      localStorage.removeItem(DRAFT_KEY)
+      clearDraft()
       toast(`Version ${version} du plan enregistrée dans les documents`, 'ok')
       setPdf(null)
       await load()

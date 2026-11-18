@@ -1,4 +1,4 @@
-// « Documents & PMS » (gérant) : documents du contrôle sanitaire, assistant PMS, mode Contrôle et rappel produit.
+// « Documents & PMS » (gérant) : documents du contrôle sanitaire, assistant PMS, mode Contrôle, rappel produit et RGPD.
 // Documents : Internet + session gérant. PMS : rédaction hors-ligne possible, enregistrement connecté.
 // Contrôle : registre complet si connecté, sinon saisies de cet appareil.
 import { useEffect, useState, type ReactNode } from 'react'
@@ -6,20 +6,22 @@ import { ManagerProvider, useManager } from '../../manager/ManagerContext.tsx'
 import { Badge, Button } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
 import { useOnline } from '../../ui/hooks/useOnline.ts'
-import { IconChevronLeft, IconDocuments, IconOffline, IconRecall, IconSystemTest, IconTable, type IconProps } from '../../ui/icons.tsx'
+import { IconChevronLeft, IconDocuments, IconLock, IconOffline, IconRecall, IconSystemTest, IconTable, type IconProps } from '../../ui/icons.tsx'
 import { ControlTab } from '../control/ControlTab.tsx'
 import { ManagerReauth, useManagerSession } from '../management/useManagerSession.tsx'
 import { PmsTab } from '../pms/PmsTab.tsx'
 import { RecallTab } from '../recall/RecallTab.tsx'
+import { RgpdTab } from '../rgpd/RgpdTab.tsx'
 import { DEFAULT_TIMEZONE } from '../temperatures/schedule.ts'
 import { DocumentsTab } from './DocumentsTab.tsx'
 
-export type DocumentsView = 'control' | 'recall' | 'documents' | 'pms'
+export type DocumentsView = 'control' | 'recall' | 'documents' | 'pms' | 'rgpd'
 const TABS: { id: DocumentsView; label: string; Icon: (p: IconProps) => ReactNode }[] = [
   { id: 'control', label: 'Mode Contrôle', Icon: IconSystemTest },
   { id: 'recall', label: 'Rappel produit', Icon: IconRecall },
   { id: 'documents', label: 'Documents', Icon: IconDocuments },
   { id: 'pms', label: 'Plan (PMS)', Icon: IconTable },
+  { id: 'rgpd', label: 'RGPD', Icon: IconLock },
 ]
 
 export function DocumentsScreen({ onBack, initialTab = 'control' }: { onBack: () => void; initialTab?: DocumentsView }) {
@@ -65,6 +67,8 @@ export function DocumentsScreen({ onBack, initialTab = 'control' }: { onBack: ()
     body = <RecallTab key={connected ? 'on' : 'off'} manager={connected} timeZone={timeZone} onSignIn={online ? () => setLogin(true) : undefined} />
   } else if (tab === 'pms') {
     body = <PmsTab key={connected ? 'on' : 'off'} manager={connected} timeZone={timeZone} onSaved={() => setVersion((v) => v + 1)} />
+  } else if (tab === 'rgpd') {
+    body = <RgpdTab key={connected ? 'on' : 'off'} manager={connected} timeZone={timeZone} />
   } else {
     body = <ControlTab key={connected ? 'on' : 'off'} manager={connected} timeZone={timeZone} onSignIn={online ? () => setLogin(true) : undefined} />
   }

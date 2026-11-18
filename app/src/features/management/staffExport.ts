@@ -52,7 +52,7 @@ export function staffExportCsv(input: { staff: ManagedStaff; establishmentName: 
 }
 
 /** Charge tout le registre et construit le fichier d'un membre. */
-export async function buildStaffExport(core: CoreApi, manager: ManagerApi, staff: ManagedStaff, now = new Date()): Promise<{ name: string; csv: string }> {
+export async function buildStaffExport(core: CoreApi, manager: ManagerApi | null, staff: ManagedStaff, now = new Date()): Promise<{ name: string; csv: string }> {
   const data = await loadControlData(core, manager, { from: SINCE, to: now })
   const report = buildControlReport({ records: data.records, pendingIds: data.pendingIds, from: SINCE, to: now, refs: data.refs })
   const csv = staffExportCsv({ staff, establishmentName: data.establishmentName, report, timeZone: data.refs.timeZone, now, source: data.source })

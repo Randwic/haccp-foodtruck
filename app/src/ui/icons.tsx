@@ -4,6 +4,8 @@
 import type { ComponentType } from 'react'
 import {
   Bell,
+  BookOpen,
+  CircleQuestionMark,
   BellRing,
   Circle,
   ArrowDown,
@@ -114,6 +116,8 @@ export const IconChevronUp = make(ChevronUp, 'IconChevronUp')
 export const IconChevronDown = make(ChevronDown, 'IconChevronDown')
 export const IconDelete = make(Delete, 'IconDelete')
 export const IconLock = make(Lock, 'IconLock')
+export const IconHelp = make(CircleQuestionMark, 'IconHelp')
+export const IconGuide = make(BookOpen, 'IconGuide')
 export const IconLogOut = make(LogOut, 'IconLogOut')
 export const IconEye = make(Eye, 'IconEye')
 export const IconEyeOff = make(EyeOff, 'IconEyeOff')

@@ -341,8 +341,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     if (needSession && !state.session) throw new ManagerError('unauthorized', MESSAGES.unauthorized, 401)
   }
 
-  const forgotten = new Map<string, string>()
-  const toManaged = (s: StaffMember): ManagedStaff => ({ id: s.id, display_name: s.display_name, role: s.role, active: s.active, updated_at: s.updated_at, forgotten_at: forgotten.get(s.id) ?? null })
+  const toManaged = (s: StaffMember): ManagedStaff => ({ id: s.id, display_name: s.display_name, role: s.role, active: s.active, updated_at: s.updated_at })
   const requireName = (name: string, what: string, max = 100) => {
     const n = name.trim().replace(/\s+/g, ' ')
     if (!n) throw new ManagerError('validation', `${what} est obligatoire.`, 400)
@@ -487,7 +486,6 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       await gate(true)
       const s = state.staff.find((x) => x.id === id)
       if (!s) throw new ManagerError('validation', 'Membre de l’équipe introuvable.', 404)
-      if (forgotten.has(id)) throw new ManagerError('validation', 'Valeur refusée par le serveur : vérifiez la saisie.', 400)
       if (patch.display_name !== undefined) s.display_name = requireName(patch.display_name, 'Le nom')
       if (patch.active !== undefined) s.active = patch.active
       if (patch.pin_salt !== undefined && patch.pin_hash !== undefined) {
@@ -497,22 +495,6 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       s.updated_at = nowIso()
       pushStaff(s)
       save()
-      return toManaged(s)
-    },
-    async forgetStaff(id) {
-      await gate(true)
-      const s = state.staff.find((x) => x.id === id)
-      if (!s) throw new ManagerError('validation', 'Membre de l’équipe introuvable.', 404)
-      if (s.active) throw new ManagerError('validation', 'Désactivez d’abord ce membre avant d’effacer son nom.', 400)
-      if (!forgotten.has(id)) {
-        s.display_name = `Ancien membre ${id.replace(/-/g, '').slice(0, 4).toUpperCase()}`
-        s.pin_salt = 'AAAAAAAAAAAAAAAAAAAAAA=='
-        s.pin_hash = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-        s.updated_at = nowIso()
-        forgotten.set(id, nowIso())
-        pushStaff(s)
-        save()
-      }
       return toManaged(s)
     },
 

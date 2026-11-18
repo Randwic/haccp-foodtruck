@@ -30,7 +30,7 @@ export interface SupabaseManagerOptions {
 
 const EQUIPMENT_COLS = 'id,name,kind,active,updated_at'
 const THRESHOLD_COLS = 'id,equipment_id,check_type,min_c,max_c,tolerance_minutes,updated_at'
-const STAFF_COLS = 'id,display_name,role,active,updated_at,forgotten_at'
+const STAFF_COLS = 'id,display_name,role,active,updated_at'
 const SUPPLIER_COLS = 'id,name,phone,email,active,updated_at'
 const PRODUCT_COLS = 'id,name,allergens,storage,shelf_life_opened_hours,shelf_life_thawed_hours,may_contain,cook_min_c,active,updated_at'
 const RECIPE_COLS = 'id,name,kind,category,ingredient_product_ids,ingredient_recipe_ids,extra_allergens,may_contain,storage,shelf_life_hours,active,updated_at'
@@ -248,15 +248,6 @@ export function createSupabaseManagerApi(opts: SupabaseManagerOptions): ManagerA
       const p: Record<string, unknown> = { ...patch }
       if (patch.display_name !== undefined) p.display_name = patch.display_name.trim()
       return run<ManagedStaff>(sb.from('staff').update(p).eq('id', id).select(STAFF_COLS).single())
-    },
-    async forgetStaff(id) {
-      const { data, error, status } = await sb.rpc('staff_forget', { p_staff_id: id })
-      if (error) {
-        if (/désactivez d'abord/.test(error.message ?? '')) throw new ManagerError('validation', 'Désactivez d’abord ce membre avant d’effacer son nom.', status)
-        throw fromPg({ ...error, status }, status)
-      }
-      if (!Array.isArray(data) || !data[0]) throw new ManagerError('server', MESSAGES.server, status)
-      return run<ManagedStaff>(sb.from('staff').select(STAFF_COLS).eq('id', id).single())
     },
 
     async getSettings(): Promise<ManagerSettings> {

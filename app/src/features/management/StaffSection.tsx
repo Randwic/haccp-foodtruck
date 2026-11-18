@@ -2,23 +2,17 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { hashPin } from '../../core/index.ts'
 import { errorText, type ManagedStaff } from '../../manager/api.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
-import { Badge, Button, Modal, Notice, PinSetup, TextField, useToast } from '../../ui/components/index.ts'
-import { useCore } from '../../ui/CoreContext.tsx'
+import { Badge, Button, Modal, Notice, PinSetup, TextField } from '../../ui/components/index.ts'
 import { initials } from '../../ui/format.ts'
-import { IconChevronLeft, IconPlus, IconShare } from '../../ui/icons.tsx'
-import { downloadFile, shareFile } from '../documents/files.ts'
+import { IconChevronLeft, IconPlus } from '../../ui/icons.tsx'
 import { ConfirmModal, SectionTitle, useManagement } from './common.tsx'
-import { buildStaffExport } from './staffExport.ts'
 
-type Dialog = { kind: 'add' } | { kind: 'pin'; s: ManagedStaff } | { kind: 'deactivate'; s: ManagedStaff } | { kind: 'reactivate'; s: ManagedStaff } | { kind: 'forget'; s: ManagedStaff } | null
+type Dialog = { kind: 'add' } | { kind: 'pin'; s: ManagedStaff } | { kind: 'deactivate'; s: ManagedStaff } | { kind: 'reactivate'; s: ManagedStaff } | null
 
-/** Gestion › Équipe : liste, ajout avec PIN, désactivation/réactivation, changement de PIN ; RGPD : export des données, effacement du nom. */
+/** Gestion › Équipe : liste, ajout avec PIN, désactivation/réactivation, changement de PIN. */
 export function StaffSection() {
   const manager = useManager()
-  const core = useCore()
-  const toast = useToast()
   const { run, meId } = useManagement()
-  const [exporting, setExporting] = useState<string | null>(null)
   const [items, setItems] = useState<ManagedStaff[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -44,34 +38,6 @@ export function StaffSection() {
     await load()
   }
 
-  // Deux temps : préparer le fichier (lecture de tout le registre), puis le partager d'un toucher
-  // (la feuille de partage de l'iPhone / iPad exige un geste direct de l'utilisateur).
-  const [ready, setReady] = useState<{ id: string; name: string; csv: string } | null>(null)
-  const prepare = async (s: ManagedStaff) => {
-    setExporting(s.id)
-    try {
-      setReady({ id: s.id, ...(await buildStaffExport(core, manager, s)) })
-    } catch (err) {
-      toast(`Export impossible : ${errorText(err)}`, 'error')
-    } finally {
-      setExporting(null)
-    }
-  }
-  const share = (s: ManagedStaff, file: { name: string; csv: string }) => {
-    const blob = new Blob([file.csv], { type: 'text/csv;charset=utf-8' })
-    void shareFile(blob, file.name, 'text/csv', `Données de ${s.display_name}`).catch(() => downloadFile(blob, file.name))
-  }
-  const exportButton = (s: ManagedStaff) =>
-    ready?.id === s.id ? (
-      <Button variant="secondary" icon={<IconShare size={18} />} onClick={() => share(s, ready)} aria-label={`Partager le fichier – ${s.display_name}`}>
-        Partager le fichier
-      </Button>
-    ) : (
-      <Button variant="ghost" onClick={() => void prepare(s)} disabled={exporting !== null} aria-label={`Exporter ses données – ${s.display_name}`}>
-        {exporting === s.id ? 'Préparation…' : 'Exporter ses données'}
-      </Button>
-    )
-
   const card = (s: ManagedStaff) => {
     const me = s.id === meId
     const lastManager = s.role === 'manager' && activeManagers <= 1
@@ -88,8 +54,7 @@ export function StaffSection() {
             </h3>
             <div className="mt-1 flex flex-wrap gap-2">
               <Badge tone={s.role === 'manager' ? 'info' : 'neutral'}>{s.role === 'manager' ? 'Gérant' : 'Équipier'}</Badge>
-              {!s.active && !s.forgotten_at && <Badge tone="warn">Désactivé</Badge>}
-              {s.forgotten_at && <Badge tone="neutral">Nom effacé (RGPD)</Badge>}
+              {!s.active && <Badge tone="warn">Désactivé</Badge>}
             </div>
           </div>
         </div>
@@ -104,20 +69,11 @@ export function StaffSection() {
                   Désactiver
                 </Button>
               )}
-              {exportButton(s)}
             </>
-          ) : s.forgotten_at ? (
-            exportButton(s)
           ) : (
-            <>
-              <Button variant="secondary" onClick={() => setDialog({ kind: 'reactivate', s })} aria-label={`Réactiver – ${s.display_name}`}>
-                Réactiver
-              </Button>
-              {exportButton(s)}
-              <Button variant="ghost" onClick={() => setDialog({ kind: 'forget', s })} aria-label={`Effacer son nom – ${s.display_name}`} className="text-danger">
-                Effacer son nom
-              </Button>
-            </>
+            <Button variant="secondary" onClick={() => setDialog({ kind: 'reactivate', s })} aria-label={`Réactiver – ${s.display_name}`}>
+              Réactiver
+            </Button>
           )}
         </div>
       </li>
@@ -130,7 +86,7 @@ export function StaffSection() {
         <h2 id="staff-title" className="sr-only">
           Équipe
         </h2>
-        <p className="max-w-xl text-[17px] text-fg-muted">Chaque personne déverrouille l’app avec son code PIN : ses saisies portent son nom. Au départ d’un employé : désactivez son compte, donnez-lui ses données s’il les demande, puis effacez son nom.</p>
+        <p className="max-w-xl text-[17px] text-fg-muted">Chaque personne déverrouille l’app avec son code PIN : ses saisies portent son nom.</p>
         <Button onClick={() => setDialog({ kind: 'add' })} icon={<IconPlus size={20} />}>
           Ajouter un employé
         </Button>
@@ -164,24 +120,6 @@ export function StaffSection() {
           <p>
             <strong>{dialog.s.display_name}</strong> ne pourra plus déverrouiller l’app. Ses saisies passées restent dans le registre, à son nom. Vous pourrez le réactiver.
           </p>
-        </ConfirmModal>
-      )}
-      {dialog?.kind === 'forget' && (
-        <ConfirmModal
-          open
-          title="Effacer le nom de cet ancien membre ?"
-          confirmLabel="Effacer son nom"
-          danger
-          onClose={close}
-          onConfirm={() => run(() => manager.forgetStaff(dialog.s.id), 'Nom effacé : ses saisies restent dans le registre').then(() => {
-            setReady(null)
-            return load()
-          })}
-        >
-          <p>
-            Le nom <strong>{dialog.s.display_name}</strong> sera remplacé partout par « Ancien membre … » et son code PIN ne fonctionnera plus. Ses saisies restent dans le registre HACCP (obligation légale de traçabilité).
-          </p>
-          <p className="mt-3 font-semibold">C’est définitif : le compte ne pourra plus être réactivé. Pensez à exporter ses données avant s’il les a demandées.</p>
         </ConfirmModal>
       )}
       {dialog?.kind === 'reactivate' && (

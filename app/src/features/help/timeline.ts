@@ -91,7 +91,7 @@ export function helpTimeline(o: HelpOptions = {}): HelpPeriod[] {
       id: 'month',
       title: days === 30 ? 'Chaque mois' : `Tous les ${days} jours`,
       steps: [
-        { when: `Tous les ${days} jours`, what: `Vérifier chaque thermomètre dans l’eau glacée (0 °C). Écart admis : ${fmtC(tol)}. Sinon, le régler ou le remplacer`, where: 'Thermomètres' },
+        { when: `Tous les ${days} jours`, what: `Vérifier chaque thermomètre (eau glacée à 0 °C, eau bouillante ou thermomètre de référence). Écart admis : ${fmtC(tol)}. Sinon, le régler ou le remplacer`, where: 'Thermomètres' },
         { when: 'Chaque mois', what: 'Regarder les documents qui arrivent à échéance (prévenu 30 jours avant)', where: 'Documents & PMS › Documents (gérant)' },
       ],
     },
@@ -115,6 +115,6 @@ export const AUTOMATIC: readonly string[] = [
   'Chaque saisie est enregistrée tout de suite sur l’iPad, même sans Internet, puis envoyée au serveur dès qu’il y a du réseau.',
   'Le serveur est sauvegardé chaque nuit (registres, photos et réglages).',
   'À chaque ouverture, l’application vérifie s’il existe une nouvelle version et propose « Mettre à jour ».',
-  'Après l’ouverture du camion : alerte si un relevé est oublié ou hors seuil, même application fermée (notifications activées).',
+  'Après l’ouverture du camion : alerte si un relevé est oublié, un procédé pas clôturé ou une action corrective manquante, même application fermée (notifications activées).',
   'La date limite d’une étiquette ne dépasse jamais la DLC du fabricant.',
 ]

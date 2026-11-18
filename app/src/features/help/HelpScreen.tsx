@@ -1,7 +1,6 @@
 // Écran « Aide » : ouvert depuis le bouton Aide de l'en-tête ou la tuile des Outils. Timeline de ce qu'il faut
 // faire dans l'application (avant l'ouverture, chaque jour, chaque semaine, chaque mois) + lien vers le guide PDF.
 import { useState } from 'react'
-import { Button } from '../../ui/components/index.ts'
 import { IconChevronDown, IconChevronUp, IconGuide, IconOk } from '../../ui/icons.tsx'
 import { BackButton, PageTitle, SectionLabel } from '../processes/common.tsx'
 import { AUTOMATIC, helpTimeline, type HelpOptions, type HelpPeriod } from './timeline.ts'
@@ -62,15 +61,15 @@ function Period({ period, open, onToggle }: { period: HelpPeriod; open: boolean;
   return (
     <section aria-labelledby={headId} className="rounded-2xl border border-line bg-surface shadow-card">
       <h2 id={headId} className="m-0">
-        <Button
-          variant="ghost"
+        <button
+          type="button"
           onClick={onToggle}
           aria-expanded={open}
-          className="w-full justify-between rounded-2xl px-5 py-4 text-left text-[19px] font-bold tracking-[-0.01em] text-fg"
-          icon={open ? <IconChevronUp size={22} /> : <IconChevronDown size={22} />}
+          className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl px-5 py-4 text-left text-[19px] font-bold tracking-[-0.01em] text-fg active:bg-pressed"
         >
-          {period.title}
-        </Button>
+          <span>{period.title}</span>
+          {open ? <IconChevronUp size={22} className="shrink-0 text-fg-muted" /> : <IconChevronDown size={22} className="shrink-0 text-fg-muted" />}
+        </button>
       </h2>
       <div hidden={!open} className="px-5 pb-5">
         {period.intro && <p className="mb-4 text-[16px] text-fg-muted">{period.intro}</p>}

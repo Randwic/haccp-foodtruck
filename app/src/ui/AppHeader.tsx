@@ -45,8 +45,8 @@ export function AppHeader({ establishmentName, timeZone, staff, onLock, onHelp, 
           </span>
         </span>
         {onHelp && (
-          <Button variant="secondary" onClick={onHelp} icon={<IconHelp size={20} />} aria-label="Aide" className="order-2 px-4 sm:order-4 sm:px-5">
-            <span className="hidden sm:inline">Aide</span>
+          <Button variant="secondary" onClick={onHelp} icon={<IconHelp size={20} />} aria-label="Aide" className="order-2 px-4 sm:order-4 lg:px-5">
+            <span className="hidden lg:inline">Aide</span>
           </Button>
         )}
         <Button variant="secondary" onClick={onLock} icon={<IconLock size={20} />} aria-label="Verrouiller" className="order-2 px-4 sm:order-4 sm:px-5">

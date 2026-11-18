@@ -138,7 +138,7 @@ export function thermometerStatuses(input: { checks: readonly ThermometerCheckEn
     const dueAt = startOfLocalDay(lastDay, input.timeZone, -input.rules.days)
     const daysLeft = Math.round((dueAt.getTime() - today) / 86_400_000)
     out.push({
-      name: last.payload.thermometer.trim(),
+      name: last.payload.thermometer.replace(/\s+/g, ' ').trim(),
       key,
       last,
       out: !last.payload.in_range,
@@ -148,7 +148,7 @@ export function thermometerStatuses(input: { checks: readonly ThermometerCheckEn
       missingActions: sorted.filter((c) => c.missingAction),
     })
   }
-  return out.sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+  return out.sort((a, b) => a.key.localeCompare(b.key, 'fr'))
 }
 
 export interface ThermometerSummary {

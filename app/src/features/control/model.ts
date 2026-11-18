@@ -11,6 +11,7 @@ import { CHECKLIST_KIND_LABELS, asChecklistDone, asCleaningDone, itemLabel } fro
 import { correctiveActionLabel } from '../corrective-action/actions.ts'
 import { KIND_TITLES, asLabel } from '../labels/model.ts'
 import { asOilChange, asOilCheck, formatPercent } from '../oil/model.ts'
+import { asThermometerCheck, describeCheck } from '../thermometer/model.ts'
 import { buildEntries, buildSpotChecks, buildThawBatches, buildTimedBatches, type Entry } from '../processes/entries.ts'
 import { STORAGE_LABELS, WASTE_REASON_LABELS, asReception, asWaste, isOutOfRange, receptionPhotoPaths } from '../reception/model.ts'
 import { asCorrectiveAction, asTemperatureCheck } from '../temperatures/readings.ts'
@@ -28,6 +29,7 @@ export type ControlModule =
   | 'cleaning'
   | 'checklists'
   | 'oil'
+  | 'thermometers'
   | 'alerts'
 
 export const MODULES: readonly { id: ControlModule; title: string; short: string }[] = [
@@ -42,6 +44,7 @@ export const MODULES: readonly { id: ControlModule; title: string; short: string
   { id: 'cleaning', title: 'Plan de nettoyage et désinfection', short: 'Nettoyage' },
   { id: 'checklists', title: 'Checklists (ouverture, fermeture, nuisibles)', short: 'Checklists' },
   { id: 'oil', title: 'Huiles de friture', short: 'Huiles' },
+  { id: 'thermometers', title: 'Vérification des thermomètres', short: 'Thermomètres' },
   { id: 'alerts', title: 'Alertes prises en compte', short: 'Alertes' },
 ]
 
@@ -445,6 +448,19 @@ export function buildControlReport(input: ControlInput): ControlReport {
     rows.push(rowOf('oil', e, (p) => ({ subject: refs.equipmentName(p.equipment_id), detail: `Huile changée${p.comment ? ` — ${p.comment}` : ''}`, status: 'info' })))
   }
 
+  // Thermomètres
+  for (const e of buildEntries(records, ['thermometer_check'], asThermometerCheck)) {
+    if (!inPeriod(e.time)) continue
+    rows.push(
+      rowOf('thermometers', e, (p) => ({
+        subject: p.thermometer,
+        detail: (describeCheck(p) + (p.comment ? ` — ${p.comment}` : '')).replace(/\u00a0/g, ' '),
+        status: p.in_range ? 'ok' : 'ko',
+        statusLabel: 'Hors tolérance',
+      })),
+    )
+  }
+
   // Alertes prises en compte
   const asAck = (p: unknown) => (isObj(p) && typeof p.alert_id === 'string' ? { alert_id: p.alert_id, comment: typeof p.comment === 'string' ? p.comment : '' } : null)
   for (const e of buildEntries(records, ['alert_ack'], asAck)) {
@@ -551,6 +567,7 @@ const TEST_TYPE_LABELS: Partial<Record<RecordType, string>> = {
   thawing: 'Décongélation',
   oil_check: 'Contrôle de l’huile',
   oil_change: 'Changement d’huile',
+  thermometer_check: 'Vérification du thermomètre',
   reception: 'Achat / réception',
   label_printed: 'Étiquette',
   waste: 'Produit jeté',

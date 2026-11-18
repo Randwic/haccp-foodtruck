@@ -28,6 +28,7 @@ import {
   referencedChecklistId,
   referencedAlertId,
   requiredEquipmentKind,
+  isThermometerInRange,
   validatePayload,
   validateRecordSemantics,
   validateRecordShape,
@@ -875,5 +876,53 @@ describe('validatePayload — lot 6 : alert_ack', () => {
   it('referencedAlertId', () => {
     expect(referencedAlertId('alert_ack', { alert_id: A })).toBe(A)
     expect(referencedAlertId('temperature_check', { alert_id: A })).toBeNull()
+  })
+})
+
+describe('lot 9 : vérification des thermomètres', () => {
+  const ice = { thermometer: 'Sonde cuisine', method: 'ice_water', reference_c: 0, measured_c: 0.4, tolerance_c: 1, in_range: true }
+  const v = (p: unknown) => validatePayload('thermometer_check', p)
+
+  it('type pris en charge, payload conforme accepté (avec ou sans commentaire)', () => {
+    expect(SUPPORTED_RECORD_TYPES as readonly string[]).toContain('thermometer_check')
+    expect(v(ice)).toEqual({ ok: true })
+    expect(v({ ...ice, comment: 'Pile changée' }).ok).toBe(true)
+    expect(v({ ...ice, method: 'boiling_water', reference_c: 100, measured_c: 99.2 }).ok).toBe(true)
+    expect(v({ ...ice, method: 'reference', reference_c: 21.5, measured_c: 22.5 }).ok).toBe(true)
+  })
+
+  it('in_range revérifié : |mesure − référence| ≤ tolérance, au dixième près', () => {
+    expect(isThermometerInRange(1, 0, 1)).toBe(true)
+    expect(isThermometerInRange(-1.1, 0, 1)).toBe(false)
+    expect(isThermometerInRange(22.6, 22.3, 0.3)).toBe(true) // 22.6 − 22.3 = 0.3000…04 en binaire
+    expectFail(v({ ...ice, measured_c: 1.1 }), 'invalid_payload', /in_range : doit valoir false/)
+    expect(v({ ...ice, measured_c: 1.1, in_range: false }).ok).toBe(true)
+    expectFail(v({ ...ice, measured_c: 0.2, in_range: false }), 'invalid_payload', /in_range : doit valoir true/)
+  })
+
+  it('eau glacée = 0 °C ; bornes, une décimale, champs obligatoires et inconnus', () => {
+    expectFail(v({ ...ice, reference_c: 0.5 }), 'invalid_payload', /reference_c : 0 °C attendu/)
+    expectFail(v({ ...ice, method: 'four' }), 'invalid_payload', /method/)
+    expectFail(v({ ...ice, thermometer: '  ' }), 'invalid_payload', /thermometer : ne doit pas être vide/)
+    expectFail(v({ ...ice, thermometer: 'x'.repeat(41) }), 'invalid_payload', /thermometer : 40 caractères/)
+    expectFail(v({ ...ice, measured_c: 0.45 }), 'invalid_payload', /measured_c : une décimale/)
+    expectFail(v({ ...ice, measured_c: 131, in_range: false }), 'invalid_payload', /measured_c : entre/)
+    expectFail(v({ ...ice, tolerance_c: 0 }), 'invalid_payload', /tolerance_c : entre 0.1 et 2/)
+    expectFail(v({ ...ice, tolerance_c: 2.5 }), 'invalid_payload', /tolerance_c/)
+    expectFail(v({ ...ice, comment: 'x'.repeat(301) }), 'invalid_payload', /comment/)
+    expectFail(v({ ...ice, equipment_id: '00000000-0000-4000-8000-0000000000aa' }), 'invalid_payload', /champ inconnu/)
+    for (const k of ['thermometer', 'method', 'reference_c', 'measured_c', 'tolerance_c', 'in_range']) {
+      const p: Record<string, unknown> = { ...ice }
+      delete p[k]
+      expectFail(v(p), 'invalid_payload', new RegExp(`${k} : obligatoire`))
+    }
+  })
+
+  it('accepté en remplacement d’une correction ; aucun équipement référencé', () => {
+    const c = (replacement: unknown) => validatePayload('correction', { reason: 'Erreur de frappe', replacement }, { supersededType: 'thermometer_check' })
+    expect(c(ice).ok).toBe(true)
+    expectFail(c({ ...ice, measured_c: 3 }), 'invalid_payload', /replacement\.in_range/)
+    expect(referencedEquipmentId('thermometer_check', ice)).toBeNull()
+    expect(requiredEquipmentKind('thermometer_check')).toBeNull()
   })
 })

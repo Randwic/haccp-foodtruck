@@ -78,6 +78,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2,wasm,ttf}'],
         // ort-wasm* : copie du moteur émise par le bundler, inutilisée (chargé depuis /ocr/ort/).
         globIgnores: ['ocr/**', 'assets/ort-wasm*'],
+        // Lot 6 : affichage des notifications d'alerte envoyées par le serveur (Web Push).
+        importScripts: ['push-sw.js'],
         runtimeCaching: [
           {
             urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/ocr/'),

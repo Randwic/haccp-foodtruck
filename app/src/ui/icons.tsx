@@ -3,6 +3,8 @@
 // Aucun emoji ni pictogramme Unicode dans les écrans : on passe toujours par ce fichier.
 import type { ComponentType } from 'react'
 import {
+  Bell,
+  BellRing,
   Circle,
   ArrowDown,
   ArrowLeft,
@@ -131,6 +133,8 @@ export const IconSyncPending = make(CloudUpload, 'IconSyncPending')
 export const IconSyncError = make(CloudExclamationPoint, 'IconSyncError')
 export const IconOffline = make(WifiOff, 'IconOffline')
 export const IconDue = make(Clock, 'IconDue')
+export const IconAlert = make(BellRing, 'IconAlert')
+export const IconBell = make(Bell, 'IconBell')
 
 // Actions correctives
 export const IconDiscard = make(Trash2, 'IconDiscard')

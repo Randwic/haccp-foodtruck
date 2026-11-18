@@ -11,19 +11,19 @@ export function newlyOverdue(batches: readonly TimedBatch[], rule: TimedRule, no
   return batches.filter((b) => b.running && !alreadyNotified.has(b.batchId) && countdown(b.startedAt, rule, now).urgency === 'overdue')
 }
 
-export function loadNotified(): Set<string> {
+export function loadNotified(key: string = STORAGE_KEY): Set<string> {
   try {
-    const v = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
+    const v = JSON.parse(localStorage.getItem(key) ?? '[]')
     return new Set(Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [])
   } catch {
     return new Set()
   }
 }
 
-export function saveNotified(ids: ReadonlySet<string>) {
+export function saveNotified(ids: ReadonlySet<string>, key: string = STORAGE_KEY) {
   try {
     // Garde les 200 derniers : suffisant, la liste ne grossit pas indéfiniment.
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids].slice(-200)))
+    localStorage.setItem(key, JSON.stringify([...ids].slice(-200)))
   } catch {
     /* stockage plein ou interdit : sans conséquence */
   }

@@ -38,6 +38,7 @@ import { formatPercent } from '../oil/model.ts'
 import { wastesThisWeek } from '../reception/wasteModel.ts'
 import { IconChecklist, IconWaste } from '../../ui/icons.tsx'
 import { useDocumentReminders, type DocumentReminders } from '../documents/useDocumentReminders.ts'
+import { AlertsPanel } from '../alerts/AlertsPanel.tsx'
 
 const ICON = 22
 
@@ -299,6 +300,8 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-10 sm:px-6 sm:pt-8">
       <h1 className="mb-6 text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">Aujourd’hui</h1>
+
+      <AlertsPanel onOpenTemperatures={onOpenTemperatures} onOpenProcess={onOpenProcess} />
 
       {summary && summary.missingActions > 0 && (
         <div role="alert" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-danger/35 bg-danger-soft px-4 py-3.5 sm:px-5">

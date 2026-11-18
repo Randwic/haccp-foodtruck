@@ -4,6 +4,13 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
+## 0 decies. Aide dans l'app + guide à jour (18/11/2026 ~19 h UTC), branche `claude/project-thread-cn75ab`
+Cédric ne trouvait pas d'aide dans l'app (il n'y en avait pas : le guide PDF n'existait que sur la branche `p781co`, non fusionnée).
+- **App** : bouton « Aide » (point d'interrogation) dans l'en-tête, à côté de Verrouiller (libellé visible à partir de 1024 px), + tuile « Aide et guide » dans les Outils. Écran `features/help/` : « Ce que l'application fait toute seule » + timeline repliable (avant l'ouverture / chaque jour de service / courses / semaine / mois / au besoin), reprend `settings.opening_date`, `thermometer_check_days`, `thermometer_tolerance_c`. Lien « Guide complet (PDF) » → `app/public/guide/…pdf` (exclu du `navigateFallback`, mis en cache `haccp-guide` à la 1re ouverture, pas dans le précache).
+- **Guide** : `docs/guide/guide.html` → PDF A4 29 pages, 21 chapitres : ch. 4 timeline, ch. 5 alertes + pause « Pas encore ouvert », ch. 8 thermomètres, ch. 10 « Produits reçus aux Achats » et durée après ouverture (règle 3 j « à consommer rapidement »), ch. 17 sauvegarde chaque nuit, mise à jour vérifiée à chaque ouverture. Captures prises en `?demo=` avec les noms remplacés (script hors dépôt). **Régénérer** : Playwright `page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true })` puis **copier le PDF dans `app/public/guide/`** et dans les fichiers du projet (`guide/`).
+- **Si un écran ou un horaire change** : mettre à jour `features/help/timeline.ts` ET `docs/guide/guide.html` (même contenu).
+- Mise en ligne : fusion de la PR seulement (aucune fonction Supabase ni SQL).
+
 ## 0 nonies. Vérification des thermomètres (18/11/2026 ~17 h 30 UTC), branche `claude/project-thread-qtbcup` (lot 9)
 Manque HACCP repéré à l'état des lieux : aucun enregistrement de la vérification des sondes.
 - **Contrat** : nouveau type `thermometer_check` (`shared/types.ts`, `payloads.ts` `ThermometerCheckPayload`, `validation.ts`) : nom du thermomètre (texte libre, 1..40, pas un équipement), méthode `ice_water` (référence 0 °C imposée) | `boiling_water` | `reference`, `reference_c`, `measured_c`, `tolerance_c` (écart admis enregistré avec la mesure), `in_range` **revérifié** par le validateur (`isThermometerInRange`, au dixième), commentaire facultatif.

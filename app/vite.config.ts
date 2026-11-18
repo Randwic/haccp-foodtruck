@@ -80,7 +80,14 @@ export default defineConfig({
         globIgnores: ['ocr/**', 'assets/ort-wasm*'],
         // Lot 6 : affichage des notifications d'alerte envoyées par le serveur (Web Push).
         importScripts: ['push-sw.js'],
+        // Guide PDF (public/guide/) : vrai fichier, jamais remplacé par la page de l'app ; gardé en cache après la 1re ouverture.
+        navigateFallbackDenylist: [/^\/guide\//],
         runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/guide/'),
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'haccp-guide', expiration: { maxEntries: 4 } },
+          },
           {
             urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/ocr/'),
             handler: 'CacheFirst',

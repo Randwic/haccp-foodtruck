@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Guide d’utilisation — Application HACCP Space Diner</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: #1c2230; font-size: 11pt; line-height: 1.45; margin: 0; }
+  h1 { font-size: 30pt; line-height: 1.1; margin: 0 0 6mm; letter-spacing: -0.02em; }
+  h2 { font-size: 19pt; margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 3px solid #e2357a; letter-spacing: -0.01em; }
+  h3 { font-size: 13.5pt; margin: 6mm 0 2mm; color: #0d5c63; }
+  p { margin: 0 0 2.5mm; }
+  .chap { page-break-before: always; }
+  .cover { height: 260mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .bar { height: 6px; background: linear-gradient(90deg,#e2357a,#2bb3c0); margin: 8mm 0; width: 70mm; }
+  .cover .sub { font-size: 15pt; color: #4a5468; }
+  ol.steps { margin: 0 0 3mm; padding-left: 0; list-style: none; counter-reset: s; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 1.2mm 0 1.2mm 10mm; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 1mm; width: 7mm; height: 7mm; border-radius: 50%; background: #0d5c63; color: #fff; font-weight: 700; font-size: 10pt; text-align: center; line-height: 7mm; }
+  ul { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  b, strong { font-weight: 700; }
+  .btn { display: inline-block; border: 1.2px solid #0d5c63; color: #0d5c63; border-radius: 4px; padding: 0 1.6mm; font-weight: 600; font-size: 10pt; white-space: nowrap; }
+  .row { display: flex; gap: 6mm; align-items: flex-start; margin: 2mm 0 4mm; page-break-inside: avoid; }
+  .row > .txt { flex: 1 1 55%; }
+  .row > figure { flex: 0 0 42%; }
+  figure { margin: 0; page-break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid #c9ced8; border-radius: 3mm; display: block; max-height: 105mm; object-fit: cover; object-position: top; }
+  figure.small img { max-height: 85mm; }
+  figcaption { font-size: 8.5pt; color: #5d6679; margin-top: 1.2mm; text-align: center; }
+  .box { border-radius: 3mm; padding: 3mm 4mm; margin: 3mm 0; page-break-inside: avoid; }
+  .ok { background: #e7f5ef; border-left: 5px solid #1f8a5b; }
+  .warn { background: #fdf3e2; border-left: 5px solid #c77d0a; }
+  .danger { background: #fdecef; border-left: 5px solid #c92a45; }
+  .info { background: #e8f3f5; border-left: 5px solid #0d5c63; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0 4mm; font-size: 10pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #c9ced8; padding: 1.6mm 2.2mm; text-align: left; vertical-align: top; }
+  th { background: #eef1f5; }
+  .check td:first-child { width: 7mm; text-align: center; font-size: 13pt; }
+  .toc li { margin-bottom: 1.6mm; font-size: 12pt; }
+  .muted { color: #5d6679; font-size: 9.5pt; }
+  .two { display: flex; gap: 5mm; }
+  .two > figure { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ============================ COUVERTURE ============================ -->
+<section class="cover">
+  <div class="muted">SPACE DINER · Food truck</div>
+  <h1>Guide d’utilisation<br>de l’application HACCP</h1>
+  <div class="bar"></div>
+  <p class="sub">Ce qu’il faut faire à chaque service, écran par écran,<br>pour quelqu’un qui n’a jamais utilisé l’application.</p>
+  <p class="muted" style="margin-top:14mm">Version du 18 novembre 2026 (mise à jour du soir : timeline, alertes, thermomètres, sauvegarde chaque nuit). Les images sont des exemples : les heures, les chiffres et certaines lignes sont fictifs.
+  Sur votre iPad, vous verrez vos vrais équipements, produits et checklists.</p>
+</section>
+
+<!-- ============================ SOMMAIRE ============================ -->
+<section class="chap">
+  <h2>Sommaire</h2>
+  <ol class="toc">
+    <li><b>À faire une seule fois</b> : installer l’application sur l’iPad</li>
+    <li><b>Ouvrir l’application</b> : choisir son nom, taper son code</li>
+    <li><b>Lire l’écran « Aujourd’hui »</b> : les couleurs et les tuiles</li>
+    <li><b>La timeline : quoi faire, et quand</b> (avant l’ouverture, chaque jour, chaque semaine, chaque mois)</li>
+    <li><b>Les alertes</b> et la pause « Pas encore ouvert »</li>
+    <li><b>Relever les températures</b> (16 h 30 et 21 h)</li>
+    <li><b>Quand une température n’est pas bonne</b> : l’action corrective</li>
+    <li><b>Vérifier les thermomètres</b> (chaque mois)</li>
+    <li><b>Les achats</b> (Metro, boulangerie…) avec la photo de l’étiquette</li>
+    <li><b>Les étiquettes DLC</b> : produit ouvert, sauce maison, pain décongelé</li>
+    <li><b>Réchauffer, cuire, tenir au chaud</b> (porc, poulet, nuggets, bain-marie)</li>
+    <li><b>Les huiles de friture</b></li>
+    <li><b>Les checklists</b> Ouverture et Fermeture</li>
+    <li><b>Le nettoyage</b></li>
+    <li><b>Un produit jeté</b></li>
+    <li><b>Se tromper n’est pas grave</b> : corriger une saisie, marquer une saisie de test</li>
+    <li><b>Internet, la synchronisation et la sauvegarde</b></li>
+    <li><b>Le jour d’un contrôle</b> : Mode Contrôle, Documents, PMS (gérant)</li>
+    <li><b>Un rappel produit</b> (gérant)</li>
+    <li><b>Gestion</b> (réservé au gérant)</li>
+    <li><b>L’aide-mémoire</b> à afficher dans le camion</li>
+  </ol>
+  <div class="box info">
+    <p><b>Trois choses à retenir avant de commencer</b></p>
+    <ul>
+      <li>Le bouton <b>Aide</b> (le point d’interrogation, en haut de l’écran) montre à tout moment <b>quoi faire, et quand</b>.</li>
+      <li>L’application <b>enregistre tout de suite sur l’iPad</b>, même sans Internet. Elle envoie ensuite au serveur toute seule.</li>
+      <li><b>Rien ne s’efface jamais.</b> Une erreur se <b>corrige</b> : l’ancienne valeur reste visible, barrée. C’est normal et c’est ce que demande un contrôle.</li>
+      <li><b>Rouge = il faut agir</b>, orange = à faire bientôt, vert = tout va bien. La couleur est toujours accompagnée d’un texte.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================ 1. INSTALLER ============================ -->
+<section class="chap">
+  <h2>1. À faire une seule fois : installer l’application</h2>
+  <div class="row">
+    <div class="txt">
+      <p>L’application s’ouvre dans <b>Safari</b>, puis on la pose sur l’écran d’accueil de l’iPad comme une vraie app. C’est <b>indispensable</b> : sinon Safari peut effacer des saisies pas encore envoyées.</p>
+      <ol class="steps">
+        <li>Ouvrez l’adresse de l’application dans <b>Safari</b> (pas Chrome).</li>
+        <li>Touchez le bouton <b>Partager</b> (le carré avec une flèche vers le haut), en haut à droite sur iPad.</li>
+        <li>Choisissez <b>« Sur l’écran d’accueil »</b> (faites défiler la liste si besoin).</li>
+        <li>Touchez <b>« Ajouter »</b> en haut à droite.</li>
+        <li>À partir de maintenant, ouvrez <b>toujours l’application depuis son icône</b>, jamais depuis l’onglet Safari.</li>
+      </ol>
+      <p>Tant que ce n’est pas fait, un bandeau en haut de l’écran le rappelle. Le bouton <span class="btn">Comment faire ?</span> montre ces mêmes étapes.</p>
+      <div class="box warn"><p><b>Attention :</b> l’icône et Safari comptent comme deux appareils différents. Utilisez toujours la même (l’icône).</p></div>
+      <p>La toute première ouverture sur un nouvel appareil demande Internet et le <b>mot de passe du compte gérant</b> (email + mot de passe). Ensuite, plus jamais.</p>
+    </div>
+    <figure><img src="img/install.jpg"><figcaption>Le bouton « Comment faire ? » ouvre cette aide.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 2. OUVRIR ============================ -->
+<section class="chap">
+  <h2>2. Ouvrir l’application</h2>
+  <div class="row">
+    <div class="txt">
+      <ol class="steps">
+        <li>Touchez l’icône de l’application.</li>
+        <li>L’écran <b>« Qui êtes-vous ? »</b> s’affiche. Touchez <b>votre nom</b>.</li>
+        <li>Tapez votre <b>code à 6 chiffres</b> (PIN). L’application s’ouvre sur <b>« Aujourd’hui »</b>.</li>
+      </ol>
+      <p>Chaque saisie est signée avec le nom de la personne connectée. Si quelqu’un d’autre prend l’iPad, il doit d’abord toucher <span class="btn">Verrouiller</span> (en haut à droite), puis choisir <b>son</b> nom.</p>
+      <ul>
+        <li>L’application se <b>verrouille toute seule</b> après quelques minutes sans toucher l’écran (5 min par défaut). Il suffit de retaper le code.</li>
+        <li>Après 5 codes faux, elle se bloque quelques minutes : attendez, puis réessayez.</li>
+        <li><span class="btn">Changer d’équipier</span> sous le pavé permet de revenir à la liste des noms.</li>
+      </ul>
+    </div>
+    <figure><img src="img/pin.jpg"><figcaption>Choisir son nom, puis taper son code.</figcaption></figure>
+  </div>
+  <div class="box info"><p><b>Mises à jour :</b> à chaque ouverture (et chaque fois que vous revenez sur l’application), elle vérifie s’il existe une nouvelle version. Si le bandeau <b>« Nouvelle version disponible »</b> apparaît, touchez <span class="btn">Mettre à jour</span>. L’application redémarre en quelques secondes ; rien n’est perdu.</p></div>
+</section>
+
+<!-- ============================ 3. AUJOURD'HUI ============================ -->
+<section class="chap">
+  <h2>3. Lire l’écran « Aujourd’hui »</h2>
+  <div class="row">
+    <div class="txt">
+      <p>C’est l’écran principal. Il vous dit <b>ce qu’il reste à faire</b>. Revenez-y avec <span class="btn">‹ Accueil</span> en haut à gauche de chaque écran.</p>
+      <h3>En haut</h3>
+      <ul>
+        <li>Le nom du camion, la date et l’heure.</li>
+        <li>La pastille de <b>synchronisation</b> (voir chapitre 17) : « Tout est synchronisé » ou « 2 photos en attente »…</li>
+        <li>Vos initiales, le bouton <span class="btn">? Aide</span> (voir chapitre 4) et <span class="btn">Verrouiller</span>.</li>
+      </ul>
+      <h3>Les rappels</h3>
+      <p>Tout en haut, le bloc <b>Alertes</b> (chapitre 5) s’il y en a. Puis les checklists à faire, un produit en train d’être réchauffé avec le temps qui reste… Touchez un rappel pour y aller directement.</p>
+      <h3>Les tuiles « Registres HACCP »</h3>
+      <p>Une tuile par sujet. Sous chaque titre, une ligne dit où vous en êtes :</p>
+      <ul>
+        <li><b style="color:#1f8a5b">vert</b> « Tout est fait », « Aucune DLC proche » : rien à faire ;</li>
+        <li><b style="color:#c77d0a">orange</b> « 3 relevés à faire », « 1 produit à DLC aujourd’hui » : à faire ;</li>
+        <li><b style="color:#c92a45">rouge</b> « Action corrective manquante », « 1 DLC dépassée » : <b>à régler tout de suite</b>.</li>
+      </ul>
+      <p>En bas, les <b>Outils</b> : Gestion (gérant), Tableau des allergènes, <b>Aide et guide</b>, Test d’enregistrement.</p>
+    </div>
+    <figure><img src="img/home.jpg"><figcaption>L’écran « Aujourd’hui ».</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 4. TIMELINE ============================ -->
+<section class="chap">
+  <h2>4. La timeline : quoi faire, et quand</h2>
+  <div class="row">
+    <div class="txt">
+      <p>La même liste est dans l’application : touchez <span class="btn">? Aide</span> en haut de l’écran, ou la tuile <b>Aide et guide</b> dans les Outils. Chaque partie se replie d’un toucher.</p>
+      <h3>Ce que l’application fait toute seule</h3>
+      <ul>
+        <li>Chaque saisie est enregistrée tout de suite sur l’iPad, même sans Internet, puis envoyée au serveur.</li>
+        <li>Le serveur est <b>sauvegardé chaque nuit</b> (registres, photos, réglages).</li>
+        <li>À chaque ouverture, elle vérifie s’il existe une <b>nouvelle version</b>.</li>
+        <li>Après l’ouverture du camion : <b>alerte</b> si un relevé est oublié, un procédé pas clôturé ou une action corrective manquante.</li>
+        <li>La date d’une étiquette ne dépasse jamais la DLC du fabricant.</li>
+      </ul>
+    </div>
+    <figure><img src="img/help.jpg"><figcaption>L’écran Aide, ouvert avec le bouton « ? ».</figcaption></figure>
+  </div>
+  <h3>Avant l’ouverture (jusqu’au 1er mars 2027)</h3>
+  <p>Tant que le camion n’est pas ouvert, l’application ne lance <b>aucune alerte</b> et met les rappels en pause (chapitre 5). Vous pouvez vous entraîner.</p>
+  <table class="check">
+    <tr><th></th><th>Quand</th><th>Quoi</th><th>Où dans l’app</th></tr>
+    <tr><td>☐</td><td>Une fois</td><td>Installer l’application sur l’iPad, puis toujours l’ouvrir depuis son icône</td><td>Bandeau « Comment faire ? » (ch. 1)</td></tr>
+    <tr><td>☐</td><td>Une fois</td><td>Vérifier équipements froids, produits (durée après ouverture), recettes, équipe</td><td>Gestion (ch. 20)</td></tr>
+    <tr><td>☐</td><td>Une fois</td><td>Ranger la déclaration DDPP, l’attestation de formation hygiène, les contrats d’entretien</td><td>Documents &amp; PMS › Documents (ch. 18)</td></tr>
+    <tr><td>☐</td><td>Une fois</td><td>Faire et enregistrer le Plan de Maîtrise Sanitaire</td><td>Documents &amp; PMS › Plan (PMS) (ch. 18)</td></tr>
+    <tr><td>☐</td><td>Quand vous voulez</td><td>S’entraîner sur chaque écran ; une saisie d’essai se marque ensuite « saisie de test »</td><td>Mode Contrôle (ch. 16)</td></tr>
+    <tr><td>☐</td><td>Le jour J</td><td>Vérifier la date d’ouverture (ou décocher « Pas encore ouvert »), puis activer les notifications</td><td>Gestion › Réglages, puis Alertes (ch. 5)</td></tr>
+  </table>
+</section>
+
+<section class="chap">
+  <h3 style="margin-top:0">Chaque jour de service (jeudi à samedi)</h3>
+  <p>Prépa 16 h – 18 h 30, service 18 h 30 – 21 h. Chaque ligne renvoie au chapitre qui l’explique.</p>
+  <table class="check">
+    <tr><th></th><th>Quand</th><th>Quoi</th><th>Où dans l’app</th></tr>
+    <tr><td>☐</td><td>16 h, en arrivant</td><td>Ouvrir l’application, nom + code. « Nouvelle version disponible » ? Toucher Mettre à jour</td><td>Écran de verrouillage (ch. 2)</td></tr>
+    <tr><td>☐</td><td>16 h</td><td>Lire les alertes, régler le problème, toucher « Vu »</td><td>Aujourd’hui › Alertes (ch. 5)</td></tr>
+    <tr><td>☐</td><td>16 h 30</td><td>Relever les 3 températures : frigo inox 350 L, desserte réfrigérée 226 L, congélateur 120 L</td><td>Températures (ch. 6)</td></tr>
+    <tr><td>☐</td><td>Prépa</td><td>Étiqueter chaque produit ouvert : un produit acheté se choisit dans « Produits reçus aux Achats » (lot et DLC repris tout seuls)</td><td>Étiquettes DLC (ch. 10)</td></tr>
+    <tr><td>☐</td><td>Prépa</td><td>Étiqueter les préparations maison (sauces, crème pâtissière) et le pain décongelé</td><td>Étiquettes DLC (ch. 10)</td></tr>
+    <tr><td>☐</td><td>Prépa</td><td>Jeter ce qui a dépassé sa DLC (bouton « Jeté »)</td><td>Étiquettes DLC (ch. 10 et 15)</td></tr>
+    <tr><td>☐</td><td>Prépa</td><td>Réchauffer la viande (porc 63 °C, poulet 74 °C à cœur, en 1 h max)</td><td>Remise en température (ch. 11)</td></tr>
+    <tr><td>☐</td><td>Avant 18 h 30</td><td>Contrôler l’huile des deux friteuses</td><td>Huiles de friture (ch. 12)</td></tr>
+    <tr><td>☐</td><td>Avant 18 h 30</td><td>Faire la checklist <b>Ouverture</b></td><td>Nettoyage › Checklists (ch. 13)</td></tr>
+    <tr><td>☐</td><td>18 h 30 – 21 h</td><td>Mesurer à cœur les nuggets (≥ 74 °C) ; contrôler le bain-marie (≥ 63 °C, 3 h max)</td><td>Cuisson &amp; maintien (ch. 11)</td></tr>
+    <tr><td>☐</td><td>21 h</td><td>Relever de nouveau les 3 températures</td><td>Températures (ch. 6)</td></tr>
+    <tr><td>☐</td><td>Après le service</td><td>Cocher le nettoyage fait (plancha, friteuses, machine à sceller, plan de travail, sonde, vaisselle)</td><td>Nettoyage (ch. 14)</td></tr>
+    <tr><td>☐</td><td>Après le service</td><td>Faire la checklist <b>Fermeture</b> (restes du bain-marie jetés)</td><td>Nettoyage › Checklists (ch. 13)</td></tr>
+    <tr><td>☐</td><td>Avant de partir</td><td>Vérifier que la pastille dit « Tout est synchronisé »</td><td>En haut de l’écran (ch. 17)</td></tr>
+  </table>
+  <div class="box ok"><p><b>Astuce :</b> pas besoin de retenir cette liste. Faites ce que l’écran « Aujourd’hui » montre en orange ou en rouge, jusqu’à ce que tout soit vert.</p></div>
+</section>
+
+<section class="chap">
+  <h3 style="margin-top:0">Le jour des courses</h3>
+  <table class="check">
+    <tr><th></th><th>Quand</th><th>Quoi</th><th>Où dans l’app</th></tr>
+    <tr><td>☐</td><td>Au retour</td><td>Enregistrer les achats en rangeant : magasin, photo de l’étiquette, température des produits frais et surgelés</td><td>Achats &amp; réception (ch. 9)</td></tr>
+  </table>
+  <h3>Chaque semaine</h3>
+  <table class="check">
+    <tr><th></th><th>Quand</th><th>Quoi</th><th>Où dans l’app</th></tr>
+    <tr><td>☐</td><td>Jeudi</td><td>Faire les sauces maison froides et les étiqueter (3 jours)</td><td>Étiquettes DLC › Préparation maison (ch. 10)</td></tr>
+    <tr><td>☐</td><td>1 fois</td><td>Checklist <b>Contrôle nuisibles</b></td><td>Nettoyage › Checklists (ch. 13)</td></tr>
+    <tr><td>☐</td><td>1 fois</td><td>Nettoyer les frigos et la desserte</td><td>Nettoyage (ch. 14)</td></tr>
+    <tr><td>☐</td><td>Samedi soir</td><td>Jeter les sauces maison froides restantes</td><td>Checklist Fermeture (ch. 13)</td></tr>
+  </table>
+  <h3>Chaque mois</h3>
+  <table class="check">
+    <tr><th></th><th>Quand</th><th>Quoi</th><th>Où dans l’app</th></tr>
+    <tr><td>☐</td><td>Tous les 30 jours</td><td>Vérifier chaque thermomètre (eau glacée 0 °C, eau bouillante ou thermomètre de référence). Écart admis : ± 1 °C</td><td>Thermomètres (ch. 8)</td></tr>
+    <tr><td>☐</td><td>Chaque mois</td><td>Regarder les documents qui arrivent à échéance (prévenu 30 jours avant)</td><td>Documents &amp; PMS (ch. 18)</td></tr>
+  </table>
+  <h3>Seulement quand il le faut</h3>
+  <table>
+    <tr><th>Quand</th><th>Quoi</th><th>Où dans l’app</th></tr>
+    <tr><td>Température pas bonne</td><td>Dire ce que vous avez fait, puis refaire une mesure</td><td>S’ouvre tout seul (ch. 7)</td></tr>
+    <tr><td>Produit jeté</td><td>Le déclarer avec son motif</td><td>Produits jetés (ch. 15)</td></tr>
+    <tr><td>Erreur de saisie</td><td>Corriger : l’ancienne valeur reste visible, barrée</td><td>Historique › Corriger (ch. 16)</td></tr>
+    <tr><td>Rappel produit</td><td>Chercher le lot, retirer, noter le retrait</td><td>Documents &amp; PMS › Rappel produit (ch. 19)</td></tr>
+    <tr><td>Contrôle sanitaire</td><td>Période, Vérifier, dossier PDF</td><td>Documents &amp; PMS › Mode Contrôle (ch. 18)</td></tr>
+    <tr><td>Recette ou produit changé</td><td>Mettre à jour la fiche, refaire le PMS et le tableau des allergènes</td><td>Gestion, puis Documents &amp; PMS (ch. 20 et 18)</td></tr>
+  </table>
+</section>
+
+<!-- ============================ 5. ALERTES ============================ -->
+<section class="chap">
+  <h2>5. Les alertes et la pause « Pas encore ouvert »</h2>
+  <div class="row">
+    <div class="txt">
+      <h3>Avant l’ouverture du camion</h3>
+      <p>Le camion ouvre en <b>mars 2027</b>. D’ici là, l’écran « Aujourd’hui » affiche le bandeau <b>« Pas encore ouvert : alertes et rappels en pause jusqu’au 1er mars 2027 »</b>.</p>
+      <ul>
+        <li>Aucune alerte, aucune notification.</li>
+        <li>Les tuiles Températures, Nettoyage et Thermomètres disent « Rappels en pause ».</li>
+        <li>Vous pouvez quand même tout essayer : les saisies sont enregistrées normalement.</li>
+      </ul>
+      <p>Pour changer la date : <b>Gestion › Réglages › Pas encore ouvert</b> (gérant). Le jour de l’ouverture, tout redémarre tout seul ; rien d’avant cette date n’est compté comme « oublié ».</p>
+    </div>
+    <figure><img src="img/pause.jpg"><figcaption>Le bandeau « Pas encore ouvert ».</figcaption></figure>
+  </div>
+  <div class="row">
+    <div class="txt">
+      <h3>Après l’ouverture : les alertes</h3>
+      <p>Le serveur surveille toutes les 5 minutes : relevé de température oublié, refroidissement ou réchauffage pas clôturé à temps, action corrective manquante. Les alertes s’affichent en rouge tout en haut de « Aujourd’hui ».</p>
+      <ol class="steps">
+        <li>Lisez l’alerte. Touchez <span class="btn">Ouvrir</span> pour aller directement au bon écran.</li>
+        <li>Réglez le problème (faire le relevé, l’action corrective…).</li>
+        <li>Touchez <span class="btn">Vu</span>. <span class="btn">Tout marquer comme vu</span> les range toutes d’un coup.</li>
+      </ol>
+      <p><b>Notifications</b> : touchez une fois <span class="btn">Activer les notifications</span> dans le bloc Alertes, puis <b>Autoriser</b>. L’iPad sonnera même application fermée. Cela ne marche qu’avec l’application installée sur l’écran d’accueil (chapitre 1).</p>
+    </div>
+    <figure><img src="img/alerts.jpg"><figcaption>Le bloc Alertes : Ouvrir, puis Vu.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 6. TEMPÉRATURES ============================ -->
+<section class="chap">
+  <h2>6. Relever les températures (16 h 30 et 21 h)</h2>
+  <div class="row">
+    <div class="txt">
+      <p>Deux fois par jour de service, à <b>16 h 30</b> et à <b>21 h</b>, on note la température affichée par chaque enceinte froide.</p>
+      <ol class="steps">
+        <li>Sur « Aujourd’hui », touchez la tuile <b>Températures</b>.</li>
+        <li>Vous voyez les 3 enceintes. Celles marquées <b>« À faire »</b> attendent un relevé.</li>
+        <li>Touchez une enceinte (par exemple <b>Frigo inox 350 L</b>).</li>
+        <li>Lisez le thermomètre, <b>porte fermée</b>.</li>
+        <li>Tapez la valeur sur le pavé, par exemple <b>3</b> <b>,</b> <b>2</b>. Pour une valeur négative (congélateur), touchez d’abord <b>−</b> : <b>− 1 8 , 5</b>.</li>
+        <li>Touchez <span class="btn">Enregistrer le relevé</span>.</li>
+        <li>Recommencez pour les deux autres enceintes. La tuile passe à <b>« Tout est fait »</b>.</li>
+      </ol>
+      <table>
+        <tr><th>Enceinte</th><th>Bon si…</th></tr>
+        <tr><td>Frigo inox 350 L (viande)</td><td>3 °C ou moins</td></tr>
+        <tr><td>Desserte réfrigérée 226 L</td><td>4 °C ou moins</td></tr>
+        <tr><td>Congélateur inox 120 L</td><td>−18 °C ou plus froid</td></tr>
+      </table>
+      <p class="muted">Avant même d’enregistrer, l’écran affiche « Conforme » (vert) ou « Hors seuil » (rouge).</p>
+    </div>
+    <figure><img src="img/temp-entry.jpg"><figcaption>Saisie d’un relevé : on tape la valeur et on enregistre.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 7. ACTION CORRECTIVE ============================ -->
+<section class="chap">
+  <h2>7. Quand une température n’est pas bonne : l’action corrective</h2>
+  <div class="row">
+    <div class="txt">
+      <p>Si une valeur est <b>hors seuil</b> (trop chaud au frigo, pas assez chaud au bain-marie, cuisson insuffisante…), l’application ouvre tout de suite l’écran <b>« Action corrective obligatoire »</b>. Il faut dire ce que vous avez fait.</p>
+      <ol class="steps">
+        <li>Choisissez ce que vous avez fait :
+          <ul>
+            <li><b>Équipement réglé</b> (porte refermée, thermostat…)</li>
+            <li><b>Produits transférés</b> (dans une autre enceinte froide)</li>
+            <li><b>Produits jetés</b></li>
+            <li><b>Produits remis en température</b> (réchauffés jusqu’à la bonne température)</li>
+            <li><b>Technicien appelé</b></li>
+            <li><b>Autre action</b> (commentaire obligatoire)</li>
+          </ul>
+        </li>
+        <li>Si utile, écrivez un commentaire (ex. : « porte mal fermée, recontrôlé à 18 h 40 : 3,5 °C »).</li>
+        <li>Touchez <span class="btn">Enregistrer l’action corrective</span>.</li>
+      </ol>
+      <div class="box danger"><p>Tant qu’aucune action n’est enregistrée, l’écran « Aujourd’hui » affiche en rouge <b>« Action corrective manquante »</b>. Un inspecteur le verrait aussi.</p></div>
+      <div class="box ok"><p><b>Bon réflexe :</b> après avoir réglé le problème, refaites un relevé quelques minutes plus tard. Un nouveau relevé est toujours possible.</p></div>
+    </div>
+    <figure><img src="img/t-hs.jpg"><figcaption>Après une valeur hors seuil.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 8. THERMOMÈTRES ============================ -->
+<section class="chap">
+  <h2>8. Vérifier les thermomètres (chaque mois)</h2>
+  <div class="row">
+    <div class="txt">
+      <p>Un thermomètre faux rend tous les relevés faux. On vérifie donc <b>chaque sonde au moins tous les 30 jours</b>. L’écart admis est de <b>± 1 °C</b> (réglable par le gérant).</p>
+      <ol class="steps">
+        <li>Tuile <b>Thermomètres</b>. Chaque sonde montre sa dernière vérification et la prochaine (orange : bientôt ; rouge : en retard).</li>
+        <li>Touchez <span class="btn">Vérifier</span> sous la sonde (ou <span class="btn">Vérifier un thermomètre</span> pour une nouvelle sonde, en tapant son nom).</li>
+        <li>Choisissez la méthode : <b>eau glacée</b> (verre plein de glaçons + un peu d’eau, attendre 2 minutes : on doit lire 0 °C), <b>eau bouillante</b> ou <b>thermomètre de référence</b>.</li>
+        <li>Tapez la valeur lue, puis enregistrez. L’écran dit <b>Conforme</b> ou <b>Hors tolérance</b>.</li>
+      </ol>
+      <div class="box danger"><p><b>Hors tolérance ?</b> L’action corrective s’ouvre : « Thermomètre réglé » (puis revérifier), « Thermomètre remplacé » ou autre. Ne vous servez plus de cette sonde tant qu’elle n’est pas réglée ou remplacée.</p></div>
+      <p class="muted">Ne pas oublier de changer la pile quand l’écran du thermomètre faiblit.</p>
+    </div>
+    <figure><img src="img/thermo.jpg"><figcaption>Une carte par sonde, avec la prochaine vérification.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 9. ACHATS ============================ -->
+<section class="chap">
+  <h2>9. Les achats (Metro, boulangerie…)</h2>
+  <p>À faire <b>au retour des courses, en rangeant</b>. Cela sert à prouver que la marchandise est arrivée en bon état et à retrouver un lot en cas de rappel.</p>
+  <div class="row">
+    <div class="txt">
+      <h3>Étape 1 — Approvisionnement</h3>
+      <ol class="steps">
+        <li>Touchez la tuile <b>Achats &amp; réception</b>, puis <span class="btn">Nouvel approvisionnement</span>.</li>
+        <li>Touchez le <b>magasin</b> (ex. Metro). Absent ? <span class="btn">Nouveau fournisseur / magasin</span> (gérant).</li>
+        <li>N° de ticket et photo du ticket : <b>facultatifs</b>.</li>
+        <li>Répondez <b>Oui</b> ou <b>Non</b> : « Transport conforme (glacière / caisson isotherme, trajet court) ? » et « Emballages intacts ? ».</li>
+        <li>Touchez <span class="btn">Continuer : produits</span>.</li>
+      </ol>
+    </div>
+    <figure><img src="img/rec1.jpg"><figcaption>Étape 1 : le magasin et les deux contrôles.</figcaption></figure>
+  </div>
+  <div class="box info"><p><b>La lecture automatique</b> fonctionne sur l’iPad, sans Internet. La toute première fois, l’iPad doit être connecté pour télécharger le « moteur de lecture » (une seule fois). Si le message « pas encore prêt » apparaît, saisissez à la main cette fois-ci.</p></div>
+</section>
+
+<section class="chap">
+  <h3 style="margin-top:0">Étape 2 — Les produits (un par un)</h3>
+  <div class="row">
+    <div class="txt">
+      <ol class="steps">
+        <li>Touchez <span class="btn">Ajouter le premier produit acheté</span> (puis <span class="btn">Ajouter un produit</span> pour les suivants).</li>
+        <li><b>Produit</b> : tapez les premières lettres (« por » → Porc BBQ cuit) ou touchez <span class="btn">Choisir dans mes produits</span>. La conservation se remplit seule.</li>
+        <li><b>Photo de l’étiquette</b> : touchez <span class="btn">Photo</span> et photographiez l’étiquette, <b>lot et date bien visibles</b>, de face si possible. L’application lit seule le <b>n° de lot</b> et la <b>DLC</b> et remplit les cases vides.</li>
+        <li><b>Vérifiez</b> ce qui a été lu (message « Lu sur l’étiquette… Vérifiez avant de valider »). Corrigez si besoin. Si rien n’est lu, tapez le lot et la date à la main.</li>
+        <li>Choisissez <b>DLC</b> (« à consommer jusqu’au ») ou <b>DDM</b> (« à consommer de préférence avant »).</li>
+        <li><b>Température à réception</b> pour les produits frais ou surgelés : piquez la sonde entre deux paquets et tapez la valeur (frais : 4 °C ou moins ; surgelé : −18 °C ou plus froid). Pas de température pour l’ambiant.</li>
+        <li><b>Décision</b> : <b>Accepté</b> ou <b>Refusé</b> (motif obligatoire si refusé).</li>
+        <li><span class="btn">Valider ce produit</span>. Recommencez pour chaque produit.</li>
+      </ol>
+      <p class="muted">Vous pouvez aussi toucher <span class="btn">Scanner le code-barres</span> : un produit déjà acheté est alors reconnu tout seul.</p>
+    </div>
+    <figure class="small"><img src="img/rec3.jpg"><figcaption>Fiche d’un produit acheté.</figcaption></figure>
+  </div>
+  <h3>Étape 3 — Validation</h3>
+  <ol class="steps">
+    <li>Touchez <span class="btn">Continuer : validation</span>, relisez le récapitulatif.</li>
+    <li>Touchez <span class="btn">Enregistrer l’approvisionnement</span>. Les photos partent au serveur dès qu’il y a du réseau.</li>
+  </ol>
+  <div class="box warn"><p><b>Produit accepté trop chaud ?</b> L’application propose « Refuser ce produit » ou « Accepter avec action corrective ». En cas de doute, ne gardez pas le produit.</p></div>
+</section>
+
+<!-- ============================ 10. ÉTIQUETTES ============================ -->
+<section class="chap">
+  <h2>10. Les étiquettes DLC</h2>
+  <p>Tout ce qui est <b>ouvert</b>, <b>préparé</b> ou <b>décongelé</b> doit porter une étiquette avec sa date limite. L’application calcule la date et imprime sur la Brother (rouleau 62 mm).</p>
+  <div class="row">
+    <div class="txt">
+      <ol class="steps">
+        <li>Touchez la tuile <b>Étiquettes DLC</b>. Choisissez :
+          <ul>
+            <li><b>Ouverture d’un produit</b> (sachet, pot, conditionnement entamé) ;</li>
+            <li><b>Préparation maison</b> (sauces, crème pâtissière, pommes cannelle…) ;</li>
+            <li><b>Décongélation</b> (produit sorti du congélateur, ex. pain brioché).</li>
+          </ul></li>
+        <li>Touchez le produit ou la préparation. L’aperçu de l’étiquette s’affiche avec la date <b>« À consommer jusqu’au »</b> déjà calculée.</li>
+        <li>Si vous connaissez le lot, touchez la pastille du lot acheté (ex. « CH0921 reçu 16/11 »).</li>
+        <li>Choisissez le <b>nombre d’étiquettes</b> (un par bac ou par flacon).</li>
+        <li>Touchez <span class="btn">Imprimer (PDF)</span>, puis dans la fenêtre de l’iPad : <b>Imprimer</b> → l’imprimante Brother → <b>Imprimer</b>.</li>
+        <li>L’application demande <b>« Étiquette imprimée ? »</b> : touchez <span class="btn">Oui, enregistrer</span> seulement si l’étiquette est bien sortie.</li>
+      </ol>
+      <p class="muted">Si l’impression par la fenêtre de l’iPad ne marche pas, essayez <span class="btn">Impression directe</span>.</p>
+    </div>
+    <figure><img src="img/lab-prev.jpg"><figcaption>Aperçu de l’étiquette avant impression.</figcaption></figure>
+  </div>
+</section>
+
+<section class="chap">
+  <div class="row">
+    <div class="txt">
+      <h3 style="margin-top:0">Ouvrir un produit acheté : rien à retaper</h3>
+      <p>Dans <b>Étiquettes DLC › Ouverture d’un produit</b>, la première partie s’appelle <b>« Produits reçus aux Achats »</b>. On y retrouve chaque produit enregistré aux Achats, avec son <b>lot</b> et sa <b>DLC d’origine</b>.</p>
+      <ol class="steps">
+        <li>Touchez le produit que vous ouvrez (le bon lot).</li>
+        <li>L’étiquette est déjà remplie : lot, DLC du fabricant, allergènes, et la date « après ouverture » calculée.</li>
+        <li>Imprimez comme d’habitude.</li>
+      </ol>
+      <p>Pas d’achat enregistré pour ce produit ? Prenez-le plus bas, dans <b>« Autre produit »</b>.</p>
+      <h3>La durée après ouverture est toujours affichée</h3>
+      <p>Sous chaque produit, une ligne dit comment la date est calculée, par exemple <b>« DLC : ouverture + 3 jours · Frigo »</b> ou <b>« selon l’étiquette du fabricant »</b> (alors tapez la date écrite sur l’emballage).</p>
+      <div class="box info"><p>Quand l’emballage dit seulement <b>« à consommer rapidement après ouverture »</b>, sans nombre de jours : <b>3 jours au frigo</b> (0 à 4 °C). L’étiquette ne dépasse <b>jamais</b> la DLC du fabricant.</p></div>
+    </div>
+    <figure><img src="img/received.jpg"><figcaption>« Produits reçus aux Achats » en haut, puis les autres produits avec leur durée.</figcaption></figure>
+  </div>
+</section>
+
+<section class="chap">
+  <h3 style="margin-top:0">Les durées à connaître (déjà réglées dans l’application)</h3>
+  <table>
+    <tr><th>Produit</th><th>Durée</th><th>À savoir</th></tr>
+    <tr><td>Sauces maison froides (Sauce UFO, Ranch, sauce piquante fumée)</td><td><b>3 jours</b> au froid (0 à 4 °C)</td><td>Faites le jeudi, jetées au plus tard le samedi soir. Les flacons restés en saladette froide sont jetés à la DLC du bac.</td></tr>
+    <tr><td>Pommes cuites à la cannelle</td><td>3 jours</td><td>Au froid.</td></tr>
+    <tr><td>Miel piquant</td><td>1 mois</td><td>Pot fermé, à température ambiante.</td></tr>
+    <tr><td>Crème pâtissière à l’amande</td><td><b>48 h</b></td><td>Au froid. Jetée si plus de 48 h (vérifié à la checklist Fermeture).</td></tr>
+    <tr><td>Pain brioché</td><td><b>4 jours</b> après l’achat</td><td>Le reste peut être congelé (1 mois). Après décongélation : <b>24 h</b> (étiquette « Décongélation »).</td></tr>
+    <tr><td>Chutney et bacon</td><td>—</td><td>Gardés <b>séparés</b>, posés directement dans le Croq’Brioche. Le pot de chutney suit la durée de son étiquette.</td></tr>
+    <tr><td>Produits achetés ouverts</td><td>Selon la fiche</td><td>La durée est écrite sous le produit. Si « Selon l’étiquette du fabricant », tapez la date de l’étiquette du produit.</td></tr>
+    <tr><td>« À consommer rapidement après ouverture »</td><td><b>3 jours</b> au froid</td><td>Quand l’emballage ne donne pas de nombre de jours.</td></tr>
+  </table>
+  <div class="row">
+    <div class="txt">
+      <h3>Les produits qui arrivent à échéance</h3>
+      <p>L’écran Étiquettes DLC liste les produits dont la DLC est <b>dépassée</b> (rouge), <b>aujourd’hui</b> ou <b>demain</b>. Pour chacun :</p>
+      <ul>
+        <li><span class="btn">Jeté</span> : le produit part à la poubelle. Indiquez la quantité si vous voulez, puis <span class="btn">Enregistrer la perte</span>. La perte est reliée à l’étiquette.</li>
+        <li><span class="btn">Épuisé</span> : le produit a été entièrement utilisé. Il disparaît de la liste (rien n’est noté au registre).</li>
+      </ul>
+      <div class="box danger"><p>Un produit à <b>DLC dépassée</b> ne doit jamais être servi : retirez-le et touchez <b>Jeté</b>.</p></div>
+      <p>Le bouton <span class="btn">Tableau des allergènes</span> imprime le tableau A4 à afficher pour les clients.</p>
+    </div>
+    <figure><img src="img/waste-exp.jpg"><figcaption>« Jeté » sur un produit à DLC dépassée.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 11. CHAUD ============================ -->
+<section class="chap">
+  <h2>11. Réchauffer, cuire, tenir au chaud</h2>
+  <div class="box info">
+    <p><b>Les températures à atteindre à cœur</b> : <b>porc 63 °C</b> minimum ; <b>poulet et nuggets 74 °C</b> minimum. Bain-marie : <b>63 °C minimum</b>, <b>3 h maximum</b>, puis ce qui reste est jeté (jamais remis au frigo).</p>
+  </div>
+  <div class="row">
+    <div class="txt">
+      <h3>A. Réchauffer la viande : « Remise en température »</h3>
+      <p>Pour le <b>porc BBQ cuit</b> ou l’<b>émincé de poulet cuit</b> sortis du frigo. Il faut atteindre la bonne température <b>en 1 h maximum</b>.</p>
+      <ol class="steps">
+        <li>Tuile <b>Remise en température</b> → <span class="btn">Démarrer un lot</span>.</li>
+        <li>Touchez le produit, mesurez à cœur <b>à la sortie du froid</b>, tapez la valeur.</li>
+        <li><span class="btn">Démarrer le chronomètre</span>. Le temps restant s’affiche aussi sur « Aujourd’hui ».</li>
+        <li>Quand c’est chaud : touchez <span class="btn">Clôturer</span>, mesurez à cœur, tapez la valeur, enregistrez. (<span class="btn">Mesurer</span> sert à noter une mesure en cours de route, c’est facultatif.)</li>
+      </ol>
+      <p>L’objectif s’adapte au produit : 63 °C pour le porc, 74 °C pour le poulet. Pas atteint ou trop tard ? → action corrective (chapitre 7).</p>
+    </div>
+    <figure><img src="img/reheat-start.jpg"><figcaption>Démarrer une remise en température.</figcaption></figure>
+  </div>
+</section>
+
+<section class="chap">
+  <div class="row">
+    <div class="txt">
+      <h3 style="margin-top:0">B. Contrôle de cuisson et maintien au chaud : « Cuisson &amp; maintien »</h3>
+      <p>Deux boutons <span class="btn">Nouvelle mesure</span> :</p>
+      <ul>
+        <li><b>Cuisson à cœur</b> : par exemple les <b>nuggets</b> à la sortie de la friteuse (≥ 74 °C). Choisissez le produit dans <b>« Produit du catalogue »</b> : le seuil du produit s’applique tout seul.</li>
+        <li><b>Maintien au chaud</b> : la viande, les poivrons ou la sauce cheddar dans le <b>bain-marie</b> (≥ 63 °C). Faites une mesure au début du service, puis une ou deux pendant.</li>
+      </ul>
+      <ol class="steps">
+        <li>Touchez le bon <span class="btn">Nouvelle mesure</span>.</li>
+        <li>Choisissez le produit.</li>
+        <li>Sonde au cœur, tapez la valeur.</li>
+        <li><span class="btn">Enregistrer la mesure</span>. Hors seuil → action corrective.</li>
+      </ol>
+      <p class="muted">Pensez à nettoyer la sonde avec une lingette après chaque mesure.</p>
+    </div>
+    <figure><img src="img/hold.jpg"><figcaption>Mesure de maintien au chaud.</figcaption></figure>
+  </div>
+  <h3>C. Les autres tuiles</h3>
+  <ul>
+    <li><b>Décongélation</b> : seulement pour un produit décongelé <b>au frigo</b> (<span class="btn">Démarrer</span>, puis <span class="btn">Terminer la décongélation</span> avec la DLC). Le <b>pain brioché</b> se décongèle à l’air libre : pour lui, faites simplement une étiquette <b>Étiquettes DLC › Décongélation</b> (24 h).</li>
+    <li><b>Refroidissement</b> : pour refroidir vite un plat cuit (de 63 °C à 10 °C en 2 h). Normalement, vous n’en avez pas besoin : les restes tenus au chaud sont jetés.</li>
+  </ul>
+</section>
+
+<!-- ============================ 12. HUILES ============================ -->
+<section class="chap">
+  <h2>12. Les huiles de friture</h2>
+  <div class="row">
+    <div class="txt">
+      <p>Un panneau par friteuse : <b>Friteuse</b> (frites) et <b>Friteuse d’appoint (nuggets)</b>. On mesure les « composés polaires » avec le testeur ou une bandelette.</p>
+      <ol class="steps">
+        <li>Tuile <b>Huiles de friture</b>.</li>
+        <li>Sous la bonne friteuse, touchez <span class="btn">Contrôle</span>.</li>
+        <li>Tapez le pourcentage lu, choisissez <b>testeur</b> ou <b>bandelette</b>, enregistrez.</li>
+        <li>Quand vous changez l’huile : <span class="btn">Changer l’huile</span>.</li>
+      </ol>
+      <table>
+        <tr><th>Valeur</th><th>Ce qu’il faut faire</th></tr>
+        <tr><td>Moins de 22 %</td><td>Conforme, rien à faire.</td></tr>
+        <tr><td>22 à 25 %</td><td>« À surveiller » : prévoir le changement bientôt.</td></tr>
+        <tr><td>Plus de 25 %</td><td><b>Interdit</b> : l’application demande de changer l’huile (ou une autre action corrective).</td></tr>
+      </table>
+    </div>
+    <figure><img src="img/oil.jpg"><figcaption>Une jauge par friteuse.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 13. CHECKLISTS ============================ -->
+<section class="chap">
+  <h2>13. Les checklists Ouverture et Fermeture</h2>
+  <div class="row">
+    <div class="txt">
+      <ol class="steps">
+        <li>Touchez le rappel <b>« Checklist Ouverture »</b> sur « Aujourd’hui » (ou tuile <b>Nettoyage</b> › <b>Checklists</b> › <b>Ouverture</b>).</li>
+        <li>Pour chaque point, touchez <b>Oui</b> ou <b>Non</b>. Un <b>Non</b> demande un commentaire (ce qui ne va pas, ce que vous avez fait).</li>
+        <li>Quand tous les points sont renseignés, touchez <span class="btn">Enregistrer la checklist</span>.</li>
+      </ol>
+      <p>La checklist <b>Ouverture</b> se fait pendant la prépa, avant le service. La checklist <b>Fermeture</b> apparaît après le relevé de 21 h.</p>
+    </div>
+    <figure class="small"><img src="img/chk-open.jpg"><figcaption>Une checklist : Oui / Non pour chaque point.</figcaption></figure>
+  </div>
+  <div class="two">
+    <div>
+      <h3>Ouverture (prépa 16 h – 18 h 30)</h3>
+      <ul>
+        <li>Mains lavées, tenue propre, cheveux attachés</li>
+        <li>Lave-mains : savon, papier, réservoir d’eau propre rempli, eaux usées vidées</li>
+        <li>Températures relevées vers 16 h 30</li>
+        <li>Plan de travail nettoyé et désinfecté</li>
+        <li>DLC et dates d’ouverture vérifiées (porc, poulet, frites, sauces maison)</li>
+        <li>Préparations du jour faites, en bac fermé, étiquetées</li>
+        <li>Bain-marie à 63 °C minimum avant le service</li>
+        <li>Huile des friteuses contrôlée (couleur, odeur)</li>
+        <li>Sonde du thermomètre propre</li>
+        <li>Pas de nuisibles constatés</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Fermeture (fin de service)</h3>
+      <ul>
+        <li>Restes réchauffés et tenus au chaud jetés (viande, poivrons, sauce cheddar)</li>
+        <li>Flacons de sauce restés en saladette froide : bouchés, au frigo, jetés à la DLC du bac. Sinon jetés. Jamais reversés</li>
+        <li>Crème pâtissière : étiquette vérifiée, jetée si plus de 48 h</li>
+        <li>Samedi : sauces maison froides restantes jetées</li>
+        <li>Produits entamés fermés, étiquetés, au frigo</li>
+        <li>Vaisselle sale dans le bac fermé</li>
+        <li>Températures relevées en fin de service</li>
+        <li>Plancha, friteuses, machine à sceller et plan de travail nettoyés</li>
+        <li>Poubelles vidées, sol nettoyé</li>
+        <li>Frigo et desserte fermés</li>
+        <li>Gaz et appareils de cuisson coupés</li>
+      </ul>
+    </div>
+  </div>
+  <p class="muted">Le samedi, si vous n’avez plus de sauce froide, répondez simplement Oui au point « Samedi » (il n’est pas obligatoire). La checklist <b>Contrôle nuisibles</b> se fait une fois par semaine, de la même façon.</p>
+</section>
+
+<!-- ============================ 14. NETTOYAGE ============================ -->
+<section class="chap">
+  <h2>14. Le nettoyage</h2>
+  <div class="row">
+    <div class="txt">
+      <p>La tuile <b>Nettoyage</b> montre <b>« À faire maintenant »</b> (le plus urgent en premier), puis <b>« À jour »</b>, puis les <b>Checklists</b>.</p>
+      <ol class="steps">
+        <li>Faites le nettoyage.</li>
+        <li>Touchez la tâche (ex. <b>Plancha</b>). La fiche rappelle le produit et la méthode.</li>
+        <li>Commentaire et photos : facultatifs.</li>
+        <li>Touchez <span class="btn">Fait</span>.</li>
+      </ol>
+      <table>
+        <tr><th>Quand</th><th>Tâches</th></tr>
+        <tr><td>Après chaque service</td><td>Plancha · Friteuses · Machine à sceller · Plan de travail · Sonde du thermomètre · Vaisselle sale</td></tr>
+        <tr><td>Chaque jour</td><td>Lave-mains · Poubelles et sols</td></tr>
+        <tr><td>Chaque semaine</td><td>Frigos et desserte</td></tr>
+      </table>
+      <p class="muted">En retard : orange (1 service oublié) puis rouge (plusieurs).</p>
+    </div>
+    <figure><img src="img/clean-task.jpg"><figcaption>La fiche d’une tâche : on touche « Fait ».</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 15. PRODUIT JETÉ ============================ -->
+<section class="chap">
+  <h2>15. Un produit jeté</h2>
+  <div class="row">
+    <div class="txt">
+      <p>Chaque produit jeté pour une raison d’hygiène se note : date dépassée, trop chaud, abîmé, rappel…</p>
+      <ol class="steps">
+        <li>Tuile <b>Produits jetés</b> → <span class="btn">Déclarer un produit jeté</span>.</li>
+        <li><b>Produit</b> : touchez une suggestion ou tapez les premières lettres.</li>
+        <li>Lot et quantité : facultatifs (touchez le lot proposé si vous le connaissez).</li>
+        <li><b>Motif</b> : Date dépassée, Non conforme, Température, Abîmé, Rappel produit ou Autre (commentaire obligatoire pour « Autre »).</li>
+        <li>Photo : facultative.</li>
+        <li><span class="btn">Enregistrer le produit jeté</span>.</li>
+      </ol>
+      <p class="muted">Plus rapide : depuis Étiquettes DLC, le bouton <b>Jeté</b> d’un produit à échéance fait la même chose en un geste (chapitre 10).</p>
+      <p class="muted">Les restes du bain-marie jetés chaque soir sont déjà couverts par la checklist Fermeture : inutile de les déclarer un par un.</p>
+    </div>
+    <figure><img src="img/waste-new.jpg"><figcaption>Déclarer un produit jeté.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 16. ERREURS ============================ -->
+<section class="chap">
+  <h2>16. Se tromper n’est pas grave</h2>
+  <div class="row">
+    <div class="txt">
+      <h3 style="margin-top:0">Corriger une saisie (faute de frappe, mauvaise valeur)</h3>
+      <ol class="steps">
+        <li>Ouvrez la tuile concernée (Températures, Achats…), puis <span class="btn">Historique</span> en haut à droite.</li>
+        <li>Retrouvez la ligne et touchez <span class="btn">Corriger</span>.</li>
+        <li>Choisissez ou écrivez le <b>motif</b> (obligatoire), par ex. « Erreur de frappe ».</li>
+        <li>Tapez la <b>bonne valeur</b> et enregistrez la correction.</li>
+      </ol>
+      <p>L’ancienne valeur reste visible, <b>barrée</b>, avec le motif. C’est voulu : un registre HACCP ne s’efface pas.</p>
+    </div>
+    <figure><img src="img/corr.jpg"><figcaption>Corriger un relevé : motif + bonne valeur.</figcaption></figure>
+  </div>
+  <div class="row">
+    <div class="txt">
+      <h3 style="margin-top:0">Une saisie faite « pour essayer » : la marquer comme test</h3>
+      <p>Si vous avez enregistré quelque chose juste pour tester l’application (connecté en <b>gérant</b>) :</p>
+      <ol class="steps">
+        <li>Tuile <b>Documents &amp; PMS</b> → onglet <b>Mode Contrôle</b>.</li>
+        <li>Choisissez une période qui contient la saisie (ex. <b>30 derniers jours</b>).</li>
+        <li>Sous la saisie, touchez <span class="btn">Marquer comme saisie de test</span>.</li>
+        <li>Gardez ou modifiez le motif, puis <span class="btn">Confirmer : saisie de test</span>.</li>
+      </ol>
+      <p>La saisie reste dans le registre (rien n’est effacé), mais elle n’apparaît plus dans les écrans ni dans le dossier de contrôle.</p>
+      <div class="box warn"><p>À n’utiliser <b>que</b> pour de vrais essais. Une vraie mesure fausse se <b>corrige</b>, elle ne se marque pas comme test.</p></div>
+    </div>
+    <figure class="small"><img src="img/ctrl-test.jpg"><figcaption>Le motif, puis « Confirmer : saisie de test ».</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 17. SYNCHRO ============================ -->
+<section class="chap">
+  <h2>17. Internet, la synchronisation et la sauvegarde</h2>
+  <div class="row">
+    <div class="txt">
+      <p>Chaque saisie est <b>d’abord enregistrée sur l’iPad</b>, puis envoyée au serveur dès qu’il y a du réseau. Vous pouvez donc travailler <b>sans Internet</b> : un bandeau « Hors-ligne – vos saisies sont enregistrées sur l’appareil » s’affiche, c’est normal.</p>
+      <p>La pastille en haut de l’écran indique l’état :</p>
+      <ul>
+        <li><b>Tout est synchronisé</b> : tout est au serveur.</li>
+        <li><b>2 saisies en attente</b> / <b>2 photos en attente</b> : elles partiront toutes seules au retour du réseau.</li>
+        <li><b>Rouge</b> (erreur, en attente depuis plus de 24 h, saisie refusée) : touchez la pastille pour voir le détail.</li>
+      </ul>
+      <p>Touchez la pastille puis <span class="btn">Synchroniser maintenant</span> pour forcer l’envoi.</p>
+      <div class="box warn"><p><b>Ne supprimez jamais l’application</b> et n’effacez pas les données de Safari tant que des saisies sont « en attente » : elles seraient perdues.</p></div>
+      <div class="box ok"><p><b>Sauvegarde chaque nuit :</b> vers 3 h 40, le serveur est copié automatiquement (registres, photos, réglages) dans un coffre séparé. Rien à faire.</p></div>
+      <p class="muted">L’outil <b>Test d’enregistrement</b> (en bas de l’accueil) sert seulement à vérifier que tout fonctionne. Ces tests sont exclus du dossier de contrôle.</p>
+    </div>
+    <figure><img src="img/sync.jpg"><figcaption>Le détail de la synchronisation.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 18. CONTRÔLE ============================ -->
+<section class="chap">
+  <h2>18. Le jour d’un contrôle (gérant)</h2>
+  <div class="row">
+    <div class="txt">
+      <p>Restez calme : tout est dans l’application. Connecté avec le nom du <b>gérant</b>, ouvrez la tuile <b>Documents &amp; PMS</b> (elle n’apparaît que pour le gérant).</p>
+      <h3>Mode Contrôle (montrer les registres)</h3>
+      <ol class="steps">
+        <li>Onglet <b>Mode Contrôle</b>.</li>
+        <li>Choisissez la <b>période</b> demandée par l’inspecteur (7 derniers jours, 30 derniers jours, 3 derniers mois…).</li>
+        <li>Touchez <span class="btn">Vérifier</span> : l’application prouve qu’aucune saisie n’a été modifiée après coup.</li>
+        <li>Touchez <span class="btn">Préparer le dossier PDF</span> (cochez « Joindre les photos » si besoin). Vous pouvez le montrer à l’écran, l’imprimer ou l’envoyer par mail.</li>
+        <li><span class="btn">Tableau CSV (Excel)</span> si l’inspecteur veut un tableur.</li>
+      </ol>
+      <p>Plus bas, la liste <b>Écarts et actions correctives</b> montre chaque problème et ce qui a été fait.</p>
+      <h3>Documents</h3>
+      <p>Onglet <b>Documents</b> : rangez ici (photo ou PDF) le récépissé de déclaration DDPP, l’attestation de formation hygiène, les contrats d’entretien, les fiches techniques… avec <span class="btn">Ajouter un document</span>. L’application vous prévient <b>30 jours avant</b> une échéance.</p>
+      <h3>Plan (PMS)</h3>
+      <p>Onglet <b>Plan (PMS)</b> : un assistant en 5 étapes fabrique le PDF du Plan de Maîtrise Sanitaire avec vos équipements, produits, recettes et règles. Relisez, complétez, puis enregistrez-le.</p>
+    </div>
+    <figure><img src="img/ctrl.jpg"><figcaption>Mode Contrôle : période, vérification, dossier PDF.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 19. RAPPEL ============================ -->
+<section class="chap">
+  <h2>19. Un rappel produit (gérant)</h2>
+  <div class="row">
+    <div class="txt">
+      <p>Metro, un fournisseur ou le site RappelConso annonce qu’un produit est rappelé ?</p>
+      <ol class="steps">
+        <li>Tuile <b>Documents &amp; PMS</b> → onglet <b>Rappel produit</b> (ou carte « Rappel produit » dans Achats &amp; réception).</li>
+        <li>Tapez le <b>n° de lot</b> ou le <b>code-barres</b> indiqué dans l’avis, ou touchez <span class="btn">Scanner</span> sur l’emballage.</li>
+        <li>Touchez <span class="btn">Chercher</span>. L’application retrouve quand vous l’avez acheté, les étiquettes faites avec et ce qui a déjà été jeté.</li>
+        <li>Retirez le produit, puis touchez <span class="btn">Noter le retrait</span> : c’est enregistré comme produit jeté pour « rappel ».</li>
+        <li>Si besoin, imprimez la fiche de rappel (PDF).</li>
+      </ol>
+      <div class="box info"><p>C’est pour cela que la photo de l’étiquette et le n° de lot à l’achat sont utiles.</p></div>
+    </div>
+    <figure class="small"><img src="img/recall.jpg"><figcaption>Recherche d’un lot rappelé.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============================ 20. GESTION ============================ -->
+<section class="chap">
+  <h2>20. Gestion (réservé au gérant)</h2>
+  <p>La tuile <b>Gestion</b> (dans Outils) n’apparaît que pour le gérant. Elle demande Internet et, parfois, le mot de passe du compte. On y règle ce qui change rarement :</p>
+  <table>
+    <tr><th>Onglet</th><th>Pour…</th></tr>
+    <tr><td>Équipements</td><td>Ajouter, renommer ou retirer un frigo, un congélateur, une friteuse ; changer ses seuils.</td></tr>
+    <tr><td>Équipe</td><td>Ajouter une personne (ex. votre épouse) avec son code à 6 chiffres, changer un code, désactiver quelqu’un.</td></tr>
+    <tr><td>Fournisseurs</td><td>Ajouter un magasin ou un fournisseur.</td></tr>
+    <tr><td>Produits</td><td>Ajouter un produit acheté : allergènes, traces, conservation, durée après ouverture, température à cœur.</td></tr>
+    <tr><td>Recettes</td><td>Préparations maison et plats du menu (les allergènes se calculent seuls).</td></tr>
+    <tr><td>Nettoyage, Checklists</td><td>Modifier les tâches et les points des checklists.</td></tr>
+    <tr><td>Réglages</td><td>Heures des relevés (16:30 et 21:00), verrouillage automatique, limites des huiles, hauteur des étiquettes, <b>Pas encore ouvert</b> (date d’ouverture), <b>vérification des thermomètres</b> (tous les 30 jours, ± 1 °C).</td></tr>
+  </table>
+  <div class="box warn"><p>Chaque modification demande une confirmation. En cas de doute sur une règle d’hygiène (durée, température), demandez avant de changer : ces valeurs se retrouvent dans votre PMS.</p></div>
+</section>
+
+<!-- ============================ 21. AIDE-MÉMOIRE ============================ -->
+<section class="chap">
+  <h2>21. Aide-mémoire à afficher dans le camion</h2>
+  <style>.memo { line-height: 1.3; } .memo td, .memo th { padding-top: 0.8mm !important; padding-bottom: 0.8mm !important; } .memo .check td:first-child { font-size: 11pt; } .memo .box { margin: 1.5mm 0; padding: 2mm 3mm; } .memo table { margin: 1.5mm 0 2mm; }</style>
+  <div class="memo">
+  <table class="check" style="font-size:10pt">
+    <tr><th></th><th>Chaque jour de service</th><th>Tuile</th></tr>
+    <tr><td>☐</td><td>16 h : lire les alertes, puis « Vu »</td><td>Aujourd’hui</td></tr>
+    <tr><td>☐</td><td>16 h 30 : 3 températures (frigo ≤ 3 °C, desserte ≤ 4 °C, congélateur ≤ −18 °C)</td><td>Températures</td></tr>
+    <tr><td>☐</td><td>Étiquette sur tout ce qui est ouvert, préparé ou décongelé</td><td>Étiquettes DLC</td></tr>
+    <tr><td>☐</td><td>DLC dépassée → « Jeté »</td><td>Étiquettes DLC</td></tr>
+    <tr><td>☐</td><td>Viande réchauffée : porc ≥ 63 °C, poulet ≥ 74 °C, en 1 h max</td><td>Remise en température</td></tr>
+    <tr><td>☐</td><td>Huile contrôlée (≤ 25 %)</td><td>Huiles de friture</td></tr>
+    <tr><td>☐</td><td>Checklist Ouverture</td><td>Nettoyage</td></tr>
+    <tr><td>☐</td><td>Nuggets ≥ 74 °C à cœur ; bain-marie ≥ 63 °C (3 h max)</td><td>Cuisson &amp; maintien</td></tr>
+    <tr><td>☐</td><td>21 h : 3 températures</td><td>Températures</td></tr>
+    <tr><td>☐</td><td>Nettoyages « Fait »</td><td>Nettoyage</td></tr>
+    <tr><td>☐</td><td>Checklist Fermeture</td><td>Nettoyage</td></tr>
+  </table>
+  <div class="two">
+    <div class="box info"><p><b>Jour des courses</b><br>Achats &amp; réception → magasin → Oui/Oui → chaque produit (photo étiquette, vérifier lot + DLC, température, Accepté) → Enregistrer.</p></div>
+    <div class="box info"><p><b>Chaque semaine</b><br>Checklist Contrôle nuisibles · Nettoyage Frigos et desserte.<br><b>Chaque mois</b><br>Vérifier chaque thermomètre (eau glacée, ± 1 °C).</p></div>
+  </div>
+  <div class="two">
+    <div class="box danger"><p><b>Rouge à l’écran ?</b><br>Hors seuil → choisir l’action corrective et l’enregistrer. Jamais laisser « Action corrective manquante ».</p></div>
+    <div class="box ok"><p><b>Erreur ?</b><br>Historique → Corriger → motif → bonne valeur. Rien ne s’efface, c’est normal.</p></div>
+  </div>
+  <table>
+    <tr><th>Durées</th><th></th></tr>
+    <tr><td>Sauces maison froides, pommes cannelle</td><td>3 jours (jetées le samedi soir)</td></tr>
+    <tr><td>Crème pâtissière à l’amande</td><td>48 h</td></tr>
+    <tr><td>Pain brioché</td><td>4 jours après achat · 24 h après décongélation</td></tr>
+    <tr><td>Miel piquant</td><td>1 mois</td></tr>
+    <tr><td>Restes du bain-marie</td><td>Jetés en fin de service, jamais remis au frigo</td></tr>
+  </table>
+</div>
+</section>
+
+</body>
+</html>

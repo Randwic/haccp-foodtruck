@@ -28,7 +28,7 @@ import { plural, type TemperatureSummary } from '../temperatures/schedule.ts'
 import { useTemperatureStatus } from '../temperatures/useTemperatureData.ts'
 import { useReceptionStatus, type ReceptionStatus } from '../reception/useReceptionData.ts'
 import { whenLabel } from '../temperatures/format.ts'
-import { IconAllergen, IconBan, IconSyncPending, IconWarn } from '../../ui/icons.tsx'
+import { IconAllergen, IconBan, IconHelp, IconSyncPending, IconWarn } from '../../ui/icons.tsx'
 import { useLabelStatus } from '../labels/useLabelData.ts'
 import type { DueSummary } from '../labels/model.ts'
 import { useCleaningStatus, type CleaningStatus } from '../cleaning/useCleaningData.ts'
@@ -287,6 +287,8 @@ export type ProcessView = 'cooling' | 'reheating' | 'cooking' | 'thawing'
 
 export interface TodayScreenProps {
   onOpenSystemTest: () => void
+  /** Écran Aide (timeline de ce qu'il faut faire + guide PDF). */
+  onOpenHelp?: () => void
   onOpenManagement?: () => void
   onOpenTemperatures: () => void
   onOpenReception?: () => void
@@ -303,7 +305,7 @@ export interface TodayScreenProps {
 }
 
 /** Accueil « Aujourd'hui » : alertes, modules HACCP puis outils. */
-export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess, onOpenLabels, onOpenAllergens, onOpenCleaning, onOpenOil, onOpenThermometer, onOpenWaste, onOpenDocuments }: TodayScreenProps) {
+export function TodayScreen({ onOpenSystemTest, onOpenHelp, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess, onOpenLabels, onOpenAllergens, onOpenCleaning, onOpenOil, onOpenThermometer, onOpenWaste, onOpenDocuments }: TodayScreenProps) {
   const documents = documentLines(useDocumentReminders(!!onOpenDocuments))
   const pause = useOpeningPause()
   const { status: cleaningStatus } = useCleaningStatus(60_000)
@@ -517,6 +519,9 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
           )}
           {onOpenAllergens && (
             <Tile layout="row" title="Tableau des allergènes" icon={<IconAllergen size={ICON} />} description="Information clientèle, impression A4" onClick={onOpenAllergens} />
+          )}
+          {onOpenHelp && (
+            <Tile layout="row" title="Aide et guide" icon={<IconHelp size={ICON} />} description="Quoi faire, et quand : jour, semaine, mois" onClick={onOpenHelp} />
           )}
           <Tile layout="row" title="Test d’enregistrement" icon={<IconSystemTest size={ICON} />} description="Vérifier saisie et synchro" onClick={onOpenSystemTest} />
         </div>

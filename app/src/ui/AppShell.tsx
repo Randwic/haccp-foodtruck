@@ -19,6 +19,7 @@ import { OilScreen } from '../features/oil/OilScreen.tsx'
 import { ThermometerScreen } from '../features/thermometer/ThermometerScreen.tsx'
 import { WasteScreen } from '../features/reception/WasteScreen.tsx'
 import { DocumentsScreen } from '../features/documents/DocumentsScreen.tsx'
+import { HelpScreen } from '../features/help/HelpScreen.tsx'
 import { AppHeader } from './AppHeader.tsx'
 import { useCore } from './CoreContext.tsx'
 import { useAutoLock } from './hooks/useAutoLock.ts'
@@ -28,7 +29,7 @@ import { OfflineBanner } from './pwa/OfflineBanner.tsx'
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
 
 type Boot = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; device: DeviceInfo | null }
-type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | 'cleaning' | 'oil' | 'thermometer' | 'waste' | 'documents' | 'recall' | ProcessView
+type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | 'cleaning' | 'oil' | 'thermometer' | 'waste' | 'documents' | 'recall' | 'help' | ProcessView
 
 /** Enchaînement des écrans : première configuration → verrouillage (PIN) → accueil / Gestion. */
 export function AppShell() {
@@ -124,9 +125,14 @@ export function AppShell() {
   } else {
     content = (
       <>
-        <AppHeader establishmentName={establishment?.name} timeZone={tz} staff={staff} onLock={lock} persistentStorage={persistent} />
+        <AppHeader establishmentName={establishment?.name} timeZone={tz} staff={staff} onLock={lock} onHelp={() => setView('help')} persistentStorage={persistent} />
         <DeadlineWatcher />
-        {view === 'system_test' ? (
+        {view === 'help' ? (
+          <HelpScreen
+            onBack={() => setView('today')}
+            options={{ openingDate: settings?.opening_date, thermometerCheckDays: settings?.thermometer_check_days, thermometerToleranceC: settings?.thermometer_tolerance_c }}
+          />
+        ) : view === 'system_test' ? (
           <SystemTestPanel onBack={() => setView('today')} timeZone={tz} />
         ) : view === 'temperatures' ? (
           <TemperaturesScreen onBack={() => setView('today')} />
@@ -162,6 +168,7 @@ export function AppShell() {
         ) : (
           <TodayScreen
             onOpenSystemTest={() => setView('system_test')}
+            onOpenHelp={() => setView('help')}
             onOpenTemperatures={() => setView('temperatures')}
             onOpenReception={() => setView('reception')}
             onOpenLabels={() => setView('labels')}

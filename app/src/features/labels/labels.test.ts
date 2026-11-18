@@ -13,6 +13,7 @@ import { DEFAULT_LABEL_HEIGHT_MM, layoutLabel, mmToPt } from './layout.ts'
 import {
   allergenSources,
   buildLabels,
+  capByOriginalDlc,
   computeDlc,
   dlcFromDate,
   dlcProblem,
@@ -22,6 +23,8 @@ import {
   formatShelfLife,
   fromLocalInputs,
   internalLot,
+  originalDlcProblem,
+  receivedForOpening,
   recentLots,
   recipeAllergens,
   sameProduct,
@@ -181,6 +184,35 @@ describe('registre : étiquettes, pertes, échéances, lots', () => {
       ['CH02', r2.id],
       ['CH01', r1.id],
     ])
+  })
+})
+
+describe('achats repris à l’ouverture', () => {
+  const now = new Date('2026-11-15T09:30:00.000Z')
+  it('liste les achats acceptés à ouvrir (lot ou DLC), sans surgelés, refusés, périmés ni doublons', () => {
+    const items = [
+      { product: 'Sauce burger 1 L', lot: 'SB1', dlc: '2026-11-30', storage: 'fridge', accepted: true },
+      { product: 'Steak haché', lot: 'ST1', storage: 'freezer', accepted: true },
+      { product: 'Cheddar tranches', lot: 'CH9', storage: 'fridge', accepted: false, refusal_reason: 'Température' },
+      { product: 'Pain burger', lot: 'PB0', dlc: '2026-11-14', storage: 'ambient', accepted: true },
+      { product: 'Oignons', storage: 'ambient', accepted: true },
+    ]
+    const r1 = rec('reception', '2026-11-12T08:00:00.000Z', { supplier_id: 's', vehicle_ok: true, packaging_ok: true, items })
+    const r2 = rec('reception', '2026-11-13T08:00:00.000Z', { supplier_id: 's', vehicle_ok: true, packaging_ok: true, items: [{ product: 'Sauce burger', lot: 'SB1', dlc: '2026-11-30', storage: 'fridge', accepted: true }] })
+    const out = receivedForOpening(buildReceptions([r1, r2]), DEMO_PRODUCTS, now, TZ)
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ receptionId: r2.id, lot: 'SB1', dlc: '2026-11-30' })
+    expect(out[0].catalog?.id).toBe(SAUCE.id)
+  })
+
+  it('DLC après ouverture : jamais après la DLC d’origine', () => {
+    const proposed = new Date('2026-11-18T09:30:00.000Z')
+    expect(capByOriginalDlc(proposed, '2026-11-20', TZ)).toEqual({ dlc: proposed, capped: false })
+    expect(capByOriginalDlc(proposed, '2026-11-16', TZ)).toEqual({ dlc: new Date('2026-11-16T22:59:00.000Z'), capped: true })
+    expect(capByOriginalDlc(proposed, undefined, TZ).capped).toBe(false)
+    expect(originalDlcProblem(now, proposed, '2026-11-20', TZ)).toBeNull()
+    expect(originalDlcProblem(now, proposed, '2026-11-16', TZ)).toMatch(/ne peut pas dépasser la DLC d’origine \(16\/11\/2026\)/)
+    expect(originalDlcProblem(now, null, '2026-11-14', TZ)).toMatch(/ne doit pas être ouvert/)
   })
 })
 

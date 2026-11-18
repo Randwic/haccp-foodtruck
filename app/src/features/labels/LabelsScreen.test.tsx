@@ -93,6 +93,67 @@ describe('parcours', () => {
     expect(await screen.findByText(/2 étiquettes enregistrées : Sauce burger/)).toBeInTheDocument()
   })
 
+  const reception = (id: string, items: Record<string, unknown>[], at = '2026-11-13T08:00:00.000Z'): FakeRecordSeed => ({
+    id,
+    type: 'reception',
+    author_id: 'staff-equipier',
+    device_time: at,
+    payload: { supplier_id: '6f1c2a4e-0000-4000-8000-000000000503', vehicle_ok: true, packaging_ok: true, items },
+  })
+
+  it('ouverture d’un produit reçu aux Achats : lot et DLC d’origine repris, DLC raccourcie à la DLC d’origine', async () => {
+    const rec = reception('11111111-0000-4000-8000-000000000002', [{ product: 'Sauce burger', lot: 'SB2611', dlc: '2026-11-17', storage: 'fridge', temperature_c: 3, accepted: true }])
+    const core = setup({ initialRecords: [rec] })
+    await openLabels()
+    press(/^Ouverture d’un produit/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Ouvrir Sauce burger reçu .*, lot SB2611/ }))
+    expect(await screen.findByText('Ouvert le 15/11/2026 à 10:30')).toBeInTheDocument()
+    // Ouverture + 3 jours = 18/11 ; la DLC d'origine (17/11) est plus courte : elle l'emporte.
+    expect(screen.getByLabelText('Date limite de consommation')).toHaveValue('2026-11-17')
+    expect(screen.getByLabelText('Heure limite de consommation')).toHaveValue('23:59')
+    expect(screen.getByText(/DLC d’origine du fabricant \(plus courte que ouverture \+ 3/)).toBeInTheDocument()
+    expect(screen.getByLabelText('N° de lot (facultatif)')).toHaveValue('SB2611')
+    // Dépasser la DLC d'origine est refusé.
+    fireEvent.change(screen.getByLabelText('Date limite de consommation'), { target: { value: '2026-11-18' } })
+    expect(await screen.findByText(/ne peut pas dépasser la DLC d’origine \(17\/11\/2026\)/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Impression directe' })).toBeDisabled()
+    press('Rétablir')
+    await printAndConfirm()
+    const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
+    expect(p).toMatchObject({ kind: 'opened', product_id: SAUCE.id, dlc_at: '2026-11-17T22:59:00.000Z', lot: 'SB2611', source_record_ids: [rec.id] })
+    expect(validatePayload('label_printed', p).ok).toBe(true)
+  })
+
+  it('ouverture depuis le catalogue : lot unique pré-rempli ; DLC d’origine dépassée → impression bloquée', async () => {
+    setup({ initialRecords: [reception('11111111-0000-4000-8000-000000000003', [{ product: 'Sauce burger', lot: 'SB0911', dlc: '2026-11-14', storage: 'fridge', accepted: true }])] })
+    await openLabels()
+    press(/^Ouverture d’un produit/)
+    // Périmé : pas proposé dans les achats à ouvrir.
+    await screen.findByRole('button', { name: /^Sauce burger — DLC ouverture/ })
+    expect(screen.queryByRole('button', { name: /^Ouvrir Sauce burger/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Sauce burger — DLC ouverture/ }))
+    expect(await screen.findByLabelText('N° de lot (facultatif)')).toHaveValue('SB0911')
+    expect(await screen.findByText(/DLC d’origine dépassée \(14\/11\/2026\) : ce produit ne doit pas être ouvert/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Impression directe' })).toBeDisabled()
+  })
+
+  it('ouverture « selon l’étiquette » d’un produit reçu : la DLC d’achat se reprend en un toucher', async () => {
+    const core = setup({
+      products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS],
+      recipes: [...DEMO_RECIPES, ...MENU_RECIPES],
+      initialRecords: [reception('11111111-0000-4000-8000-000000000004', [{ product: 'Mayonnaise (seau)', lot: 'MY77', dlc: '2026-12-20', storage: 'fridge', accepted: true }])],
+    })
+    await openLabels()
+    press(/^Ouverture d’un produit/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Ouvrir Mayonnaise \(seau\) reçu .*, lot MY77/ }))
+    expect(await screen.findByLabelText('Date limite de consommation')).toHaveValue('')
+    press(/^Reprendre la DLC d’achat : 20\/12\/2026/)
+    expect(screen.getByLabelText('Date limite de consommation')).toHaveValue('2026-12-20')
+    await printAndConfirm()
+    const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
+    expect(p).toMatchObject({ product_id: MENU_PRODUCTS[4].id, dlc_at: '2026-12-20T22:59:00.000Z', lot: 'MY77', source_record_ids: ['11111111-0000-4000-8000-000000000004'] })
+  })
+
   it('préparation maison : recette → allergènes calculés, DLC modifiée avant impression, lot interne', async () => {
     const core = setup()
     await openLabels()

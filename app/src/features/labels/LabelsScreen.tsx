@@ -27,7 +27,7 @@ import { formatIsoDate } from '../processes/timing.ts'
 import { dayLabel, whenLabel } from '../temperatures/format.ts'
 import { localDayKey, plural, startOfLocalDay } from '../temperatures/schedule.ts'
 import { useLabelHeightMm, markConsumed } from './labelSettings.ts'
-import { CopiesStepper, DlcFields, draftFor, LabelEditor, PrintButtons, useLabelPdf, type LabelDraft } from './LabelEditor.tsx'
+import { CopiesStepper, DlcFields, draftFor, LabelEditor, MANUFACTURER_DLC_ORIGIN, PrintButtons, useLabelPdf, type LabelDraft } from './LabelEditor.tsx'
 import { LabelPaper, LabelPrintSheet } from './LabelPreview.tsx'
 import {
   ALLERGEN_SHORT,
@@ -41,6 +41,7 @@ import {
   KIND_MADE_LABEL,
   KIND_TITLES,
   productForName,
+  receivedForOpening,
   recipeAllergens,
   recipeTraces,
   STORAGE_LABELS,
@@ -48,6 +49,7 @@ import {
   type DueItem,
   type LabelEntry,
   type LabelKind,
+  type ReceivedForOpening,
 } from './model.ts'
 import { LABEL_HISTORY_DAYS, useLabelStatus, type LabelData } from './useLabelData.ts'
 
@@ -413,6 +415,7 @@ function Picker({ kind, data, now, onPick }: { kind: LabelKind; data: LabelData;
   const recipes = data.recipes.filter((r) => r.active && r.kind === 'preparation' && r.shelf_life_hours !== null)
   const dlcText = (p: Product) => (hoursOf(p) === null ? 'selon l’étiquette du fabricant' : `${kind === 'opened' ? 'ouverture' : 'décongélation'} + ${formatShelfLife(hoursOf(p))}`)
   const thaws = kind === 'thawed' ? finishedThaws(data.thaws, now) : []
+  const received = kind === 'opened' ? receivedForOpening(data.receptions, products, now, tz) : []
 
   const productCard = (p: Product) => (
     <li key={p.id}>
@@ -451,6 +454,17 @@ function Picker({ kind, data, now, onPick }: { kind: LabelKind; data: LabelData;
     onPick(draft)
   }
 
+  // Achat repris : lot et DLC d'origine déjà saisis à la réception, rien à rescanner.
+  const fromReception = (r: ReceivedForOpening) => {
+    const madeAt = new Date(Math.floor(Date.now() / 60_000) * 60_000)
+    const base: LabelDraft = r.catalog
+      ? draftFor('opened', r.catalog, madeAt)
+      : { kind: 'opened', madeAt, dlc: null, dlcOrigin: MANUFACTURER_DLC_ORIGIN, sourceIds: [], thawProductName: r.product }
+    onPick({ ...base, lot: r.lot, lotSource: r.lot ? r.receptionId : undefined, originalDlc: r.dlc, sourceIds: r.lot ? [] : [r.receptionId] })
+  }
+  const receivedLine = (r: ReceivedForOpening) =>
+    [r.lot && `Lot ${r.lot}`, r.dlc && `DLC d’origine ${r.dlc.slice(8, 10)}/${r.dlc.slice(5, 7)}/${r.dlc.slice(0, 4)}`].filter(Boolean).join(' · ')
+
   return (
     <>
       <PageTitle title={KIND_TITLES[kind]} subtitle={kind === 'prepared' ? 'Choisissez la préparation : la DLC et les allergènes sont calculés.' : 'Choisissez le produit : la DLC et les allergènes sont repris de sa fiche.'} />
@@ -472,6 +486,25 @@ function Picker({ kind, data, now, onPick }: { kind: LabelKind; data: LabelData;
           </ul>
         </section>
       )}
+      {received.length > 0 && (
+        <section className="mb-8" aria-labelledby="pk-received">
+          <SectionLabel id="pk-received">Produits reçus aux Achats (lot et DLC déjà enregistrés)</SectionLabel>
+          <ul className="grid gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {received.map((r) => (
+              <li key={`${r.receptionId}-${r.product}-${r.lot ?? ''}-${r.dlc ?? ''}`}>
+                <ChoiceCard
+                  title={r.catalog?.name ?? r.product}
+                  icon={<Icon size={20} />}
+                  ariaLabel={`Ouvrir ${r.catalog?.name ?? r.product} reçu ${whenLabel(r.receivedAt, now, tz)}${r.lot ? `, lot ${r.lot}` : ''}`}
+                  lines={[<span key="l" className="font-semibold text-fg">{receivedLine(r)}</span>, `Reçu ${whenLabel(r.receivedAt, now, tz)}`]}
+                  onClick={() => fromReception(r)}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {kind === 'opened' && received.length > 0 && <SectionLabel>Autre produit (sans achat enregistré)</SectionLabel>}
       {kind === 'prepared' ? (
         recipes.length === 0 ? (
           <EmptyCard>Aucune recette. Le gérant les ajoute dans Gestion › Recettes.</EmptyCard>

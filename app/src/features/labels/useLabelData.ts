@@ -7,7 +7,7 @@ import { buildThawBatches, type ThawBatch } from '../processes/entries.ts'
 import { buildReceptions, buildWastes, type ReceptionEntry } from '../reception/model.ts'
 import { DEFAULT_TIMEZONE } from '../temperatures/schedule.ts'
 import { getConsumed } from './labelSettings.ts'
-import { buildLabels, dueItems, LABEL_RECORD_TYPES, summarizeDue, type DueSummary, type LabelEntry } from './model.ts'
+import { buildLabels, dueItems, LABEL_RECEPTION_DAYS, LABEL_RECORD_TYPES, summarizeDue, type DueSummary, type LabelEntry } from './model.ts'
 
 /** Étiquettes chargées : 32 jours (échéances des produits à longue durée de vie, historique 7 jours). */
 export const LABEL_LOAD_DAYS = 32
@@ -33,12 +33,13 @@ export function useLabelData() {
   const reload = useCallback(async () => {
     try {
       const since = new Date(Date.now() - LABEL_LOAD_DAYS * 86_400_000).toISOString()
+      const receptionSince = new Date(Date.now() - LABEL_RECEPTION_DAYS * 86_400_000).toISOString()
       const [products, recipes, staff, establishment, ...lists] = await Promise.all([
         core.listProducts({ includeInactive: true }),
         core.listRecipes({ includeInactive: true }),
         core.listStaff(),
         core.getEstablishment(),
-        ...LABEL_RECORD_TYPES.map((type) => core.listRecords({ type, since })),
+        ...LABEL_RECORD_TYPES.map((type) => core.listRecords({ type, since: type === 'reception' ? receptionSince : since })),
       ])
       const records = lists.flat()
       const wastes = buildWastes(records)

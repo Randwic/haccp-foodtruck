@@ -29,7 +29,8 @@ import { recentProducts, type ThawBatch } from './entries.ts'
 import { defaultDlc, formatIsoDate, formatMinutes } from './timing.ts'
 import { PROCESS_HISTORY_DAYS, useProcessStatus, type ProcessData } from './useProcessData.ts'
 
-const DEFAULT_PRODUCTS = ['Steaks hachés', 'Pain burger', 'Frites']
+// Suggestions par défaut : uniquement des produits de Space Diner (aucun exemple de démonstration).
+const DEFAULT_PRODUCTS = ['Pain brioché']
 
 type Back = { name: 'list' } | { name: 'history' }
 type View = Back | { name: 'start' } | { name: 'end'; batchId: string } | { name: 'correct'; batchId: string; back: Back }

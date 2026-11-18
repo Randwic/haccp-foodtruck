@@ -4,6 +4,11 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
+## 0 ter. 18/11/2026 (~03 h 40 UTC) : relecture du PMS avec Cédric (fil « Corriger les durées et produits du PMS »)
+- Serveur vérifié : tous les produits actifs servent dans une recette ; les exemples du seed (Sauce burger, Steak haché surgelé, Salade iceberg, Sauce cheddar maison) sont désactivés depuis le 17/11. Aucun PMS enregistré sur le serveur : le PDF vu par Cédric (avec Sauce burger / steak haché) venait du serveur simulé ou d'un aperçu, pas de la vraie app.
+- Branche `claude/project-thread-d6aa7n` : suggestions par défaut des écrans Cuisson, Maintien, Refroidissement, Remise en température et Décongélation remplacées par ses produits (plus de chili, bolognaise, steak, saucisse…). **Pas mise en ligne** (accord requis).
+- En attente de Cédric : pain brioché du boulanger gardé **4 jours** (à saisir), durées des sauces maison (proposition : 3 jours max), crème pâtissière Ancel (durée du sachet), congélation du pain.
+
 ## 0 bis. Suite du 18/11/2026 (~03 h UTC) : clé publishable + fonctions
 - Fonctions Supabase **redéployées** (`deploy-supabase.sh … functions`, environnement « haccp-foodtruck » avec accès à api.supabase.com). Migrations : toutes déjà appliquées (16), rien relancé côté base, données réelles intactes.
 - `LABEL_TRACES_IN_REGISTRY = true` (traces imprimées enregistrées dans le registre).

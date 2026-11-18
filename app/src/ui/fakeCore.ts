@@ -1,7 +1,7 @@
 // Implémentation EN MÉMOIRE de CoreApi, pour les tests et la démo de l'interface.
 // Aucune persistance, aucun réseau, aucune cryptographie réelle : ne jamais l'utiliser en production.
 import type { CoreApi, DeviceInfo, PhotoStatus, SyncStatus, UnlockResult } from '../core/api.ts'
-import type { Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
+import type { Alert, Checklist, CleaningTask, Product, Recipe, Supplier } from '../../../shared/payloads.ts'
 import { referencedPhotoPaths } from '../../../shared/validation.ts'
 import { createBrowserPhotoEncoder, isWebp, type PhotoEncoder } from '../core/photoEncoder.ts'
 import {
@@ -50,6 +50,8 @@ export interface FakeCoreOptions {
   cleaningTasks?: CleaningTask[]
   /** Checklists (défaut : ouverture, fermeture, nuisibles du serveur ; désactivées comprises). */
   checklists?: Checklist[]
+  /** Lot 6 : alertes « reçues du serveur » (défaut : aucune). */
+  alerts?: Alert[]
   /** Équipements (défaut : ceux du serveur simulé, dont 2 bacs de friteuse). */
   equipment?: Equipment[]
   /** Compression des photos (défaut : encodeur du navigateur ; les tests injectent un encodeur simulé). */
@@ -135,6 +137,7 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
   const recipes: Recipe[] = structuredClone(options.recipes ?? DEMO_RECIPES)
   const cleaningTasks: CleaningTask[] = structuredClone(options.cleaningTasks ?? DEMO_CLEANING_TASKS)
   const checklists: Checklist[] = structuredClone(options.checklists ?? DEMO_CHECKLISTS)
+  const alerts: Alert[] = structuredClone(options.alerts ?? [])
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'fr')
   const upsert = <T extends { id: string }>(list: T[], item: T) => {
     const i = list.findIndex((x) => x.id === item.id)
@@ -366,6 +369,10 @@ export function createFakeCore(options: FakeCoreOptions = {}): FakeCore {
     async listChecklists(opts) {
       await wait()
       return structuredClone(checklists.filter((x) => opts?.includeInactive || x.active).sort(byName))
+    },
+    async listAlerts() {
+      await wait()
+      return structuredClone(alerts.filter((a) => a.resolved_at === null).sort((a, b) => b.opened_at.localeCompare(a.opened_at)))
     },
 
     async addPhoto(image) {

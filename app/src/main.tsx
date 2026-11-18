@@ -14,6 +14,7 @@ import { demoDocuments } from './features/documents/demoData.ts'
 import { createCore, createHttpTransport, createMockTransport, notifyActivity } from './core/index.ts'
 import { registerLabelScanning } from './features/reception/scan/register.tsx'
 import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, type ManagerApi } from './manager/index.ts'
+import { demoAlerts } from './features/alerts/demoData.ts'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POINT DE BRANCHEMENT DU CORE ET DE L'ESPACE GÉRANT — le seul endroit à modifier.
@@ -76,6 +77,7 @@ function createDemoCore(): FakeCore {
     // Lot 4 bis : catalogue réel (menu Space Diner) dans toute la démo, partagé avec l'espace gérant simulé.
     products: DEMO_MENU_PRODUCTS,
     recipes: DEMO_MENU_RECIPES,
+    alerts: params.get('alertes') === 'demo' ? demoAlerts(now) : undefined,
   })
 }
 const TRIAL_DB_PREFIX = 'haccp-essai-'

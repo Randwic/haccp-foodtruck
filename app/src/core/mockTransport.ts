@@ -15,7 +15,7 @@
 // dossier de l'appareil, signature RIFF/WEBP, ≤ PHOTO_MAX_BYTES ; absent → 201 created ; présent de même
 // taille → 200 already_present ; taille différente → 409 photo_conflict (jamais d'écrasement).
 import { computeRecordHash } from '../../../shared/canonical.ts'
-import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Checklist, type CleaningTask, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
+import { PHOTO_MAX_BYTES, PHOTO_PATH_RE, type Alert, type Checklist, type CleaningTask, type Product, type Recipe, type Supplier } from '../../../shared/payloads.ts'
 import {
   GENESIS_HASH,
   type DeviceEnrollResponse,
@@ -256,6 +256,8 @@ export interface MockTransport extends Transport {
   upsertRecipe(r: Omit<Recipe, 'updated_at'>): void
   upsertCleaningTask(t: Omit<CleaningTask, 'updated_at'>): void
   upsertChecklist(c: Omit<Checklist, 'updated_at'>): void
+  /** Lot 6 : ouvre / modifie une alerte (comme le moteur alerts-evaluate). */
+  upsertAlert(a: Alert): void
   enrollDevice(name: string): DeviceEnrollResponse
   revokeDevice(device_id: string): void
   /** Enregistrements acceptés par le serveur (copie). */
@@ -307,6 +309,7 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
   const deletedLog: { table: RefTable; id: string; at: string }[] = []
   const devicesByToken = new Map<string, ServerDevice>()
   const records = new Map<string, ServerRecord>()
+  const alerts = new Map<string, { alert: Alert; updated_at: string }>()
   let offline = false
   let dropNextPush = false
   let fail5xxNext = false
@@ -397,6 +400,9 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       const drift = Math.abs(Date.parse(server_time) - Date.parse(reference))
       const clock_suspect = !Number.isFinite(drift) || drift > settings.clock_suspect_minutes * 60_000
       records.set(r.id, { record: { ...r, server_time }, server_time, clock_suspect, rejected: contentReject })
+      // Lot 6 : comme le trigger records_alert_ack, la prise en compte est posée à l'insertion.
+      const acked = !contentReject && r.type === 'alert_ack' ? alerts.get(String(r.payload.alert_id)) : undefined
+      if (acked && acked.alert.acknowledged_at === null) alerts.set(acked.alert.id, { alert: { ...acked.alert, acknowledged_at: server_time }, updated_at: stamp() })
       if (contentReject) res.rejected.push({ id: r.id, reason: contentReject, quarantined: true })
       else res.accepted.push({ id: r.id, server_time, clock_suspect })
     }
@@ -430,7 +436,8 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
       cleaning_tasks: changed(refs.cleaning_tasks).filter((t) => t.active),
       checklists: changed(refs.checklists).filter((c) => c.active),
       sensors: [],
-      alerts: [],
+      // Lot 6 : alertes ouvertes, et celles modifiées depuis `since` (comme listAlerts du serveur).
+      alerts: [...alerts.values()].filter((a) => a.alert.resolved_at === null || Date.parse(a.updated_at) > sinceMs).map((a) => clone(a.alert)),
       settings,
       deleted: deletedLog.filter((d) => Date.parse(d.at) > sinceMs).map(({ table, id }) => ({ table, id })),
     })
@@ -469,6 +476,7 @@ export function createMockTransport(opts: MockTransportOptions = {}): MockTransp
     upsertRecipe: (r) => void refs.recipes.set(r.id, { ...clone(r), updated_at: stamp() }),
     upsertCleaningTask: (t) => void refs.cleaning_tasks.set(t.id, { ...clone(t), updated_at: stamp() }),
     upsertChecklist: (c) => void refs.checklists.set(c.id, { ...clone(c), updated_at: stamp() }),
+    upsertAlert: (a) => void alerts.set(a.id, { alert: clone(a), updated_at: stamp() }),
     setOffline: (v) => {
       offline = v
     },

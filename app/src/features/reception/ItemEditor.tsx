@@ -57,6 +57,7 @@ export function ItemEditor({ item, suggestions, knownGtins, remainingPhotos, tod
   const [readFrom, setReadFrom] = useState<{ fields: string[]; source: 'label' | 'barcode' } | null>(null)
   const [reading, setReading] = useState(false)
   const [nothingRead, setNothingRead] = useState(false)
+  const [readerNotReady, setReaderNotReady] = useState(false)
   const [scanning, setScanning] = useState(false)
 
   useEffect(() => {
@@ -125,9 +126,14 @@ export function ItemEditor({ item, suggestions, knownGtins, remainingPhotos, tod
     if (!ext.readLabel) return
     setReading(true)
     setNothingRead(false)
-    const r: LabelReading | null = await ext.readLabel(image).catch(() => null)
+    let notReady = false
+    const r: LabelReading | null = await ext.readLabel(image).catch(() => {
+      notReady = true // moteur de lecture pas encore téléchargé (première utilisation sans Internet)
+      return null
+    })
     setReading(false)
-    if (!r || !applyReading(r, 'label')) setNothingRead(!r)
+    setReaderNotReady(notReady)
+    if (!r || !applyReading(r, 'label')) setNothingRead(!r && !notReady)
   }
 
   const choiceClass = (active: boolean, tone: 'ok' | 'danger') =>
@@ -163,7 +169,14 @@ export function ItemEditor({ item, suggestions, knownGtins, remainingPhotos, tod
             <IconScanText size={20} className="animate-pulse text-accent" /> Lecture de l’étiquette (lot, date, code-barres)…
           </p>
         )}
-        {nothingRead && !reading && <p className="text-[14px] text-fg-subtle">Rien de lisible automatiquement sur cette photo : saisissez le lot et la date à la main.</p>}
+        {nothingRead && !reading && (
+          <p className="text-[14px] text-fg-subtle">Lot et date non trouvés sur cette photo : reprenez-la plus près, bien à plat et nette, ou saisissez-les à la main.</p>
+        )}
+        {readerNotReady && !reading && (
+          <p className="text-[14px] text-fg-subtle">
+            La lecture automatique se prépare à la première utilisation avec Internet (une seule fois). Saisissez le lot et la date à la main pour cette fois.
+          </p>
+        )}
 
         {readFrom && (
           <Notice tone="warn">

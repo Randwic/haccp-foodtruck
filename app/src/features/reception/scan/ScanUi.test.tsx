@@ -54,7 +54,15 @@ describe('Achats : lecture de l’étiquette et code-barres', () => {
     registerReceptionExtensions({ readLabel: async () => null })
     await openItemEditor()
     fireEvent.change(screen.getByLabelText('Prendre une photo — Photos de l’étiquette'), { target: { files: [new File([new Uint8Array(5000)], 'a.jpg', { type: 'image/jpeg' })] } })
-    expect(await screen.findByText(/Rien de lisible automatiquement/)).toBeInTheDocument()
+    expect(await screen.findByText(/Lot et date non trouvés sur cette photo/)).toBeInTheDocument()
+  })
+
+  it('moteur de lecture pas encore prêt (hors-ligne) : message dédié', async () => {
+    registerReceptionExtensions({ readLabel: async () => Promise.reject(new Error('non chargé')) })
+    await openItemEditor()
+    fireEvent.change(screen.getByLabelText('Prendre une photo — Photos de l’étiquette'), { target: { files: [new File([new Uint8Array(5000)], 'a.jpg', { type: 'image/jpeg' })] } })
+    expect(await screen.findByText(/se prépare à la première utilisation avec Internet/)).toBeInTheDocument()
+    expect(screen.queryByText(/Lot et date non trouvés/)).toBeNull()
   })
 
   it('scan d’un code GS1 : lot, date et produit déjà reçu avec ce code-barres ; enregistré dans la réception', async () => {

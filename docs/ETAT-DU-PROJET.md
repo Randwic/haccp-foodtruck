@@ -4,6 +4,15 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
+## 0 bis. Lecture d'étiquette fiable (18/11/2026 ~05 h UTC), branche `claude/project-thread-ks86le`
+Cédric : « Rien de lisible » sur de vraies étiquettes bien lisibles (DLC/lot en **jet d'encre à points**, en **relief** sur couvercle, photo **de côté**). Tesseract ne lit pas ça. **Exigence de Cédric : lecture sur l'iPad, sans abonnement, sans Internet, sans option à choisir** (lecture par Claude/serveur refusée).
+- **Moteur principal** : `scan/paddle.ts` = modèles PaddleOCR PP-OCRv4 (détection + lecture, paquet `@gutenye/ocr-models`) exécutés par `onnxruntime-web` (wasm, 1 thread hors crossOriginIsolated). Fichiers servis sous `/ocr/ort/` et `/ocr/paddle/` (≈ 30 Mo, plugin `ocrAssets`, cache `haccp-ocr` à la 1re utilisation, préchargés à l'ouverture de la saisie). Photo lue droite, puis tournée de 90° et 270° si aucune date trouvée.
+- **Secours** : Tesseract en plusieurs passages (`prepare.ts` éclairage/points, `vote.ts`), seulement si le moteur principal ne trouve rien ou n'est pas chargé.
+- `parseLabel.ts` : dates « 27 11 26 », « 27.1126 07:31 », « J0712 », 0 lu 8, mots-clés collés, lot sans mot-clé à côté de la date.
+- Résultat sur les 3 photos réelles de Cédric (Chromium) : DLC trouvée sur les 3, lot exact sur 1, lot à 1 lettre près sur 1 (« NC… » pour « MG… », points), pas de lot sur le pot de fromage blanc (normal). 1 à 4 s par photo sur PC.
+- Message « pas encore prêt » distinct si le moteur n'a jamais été téléchargé (1re utilisation hors-ligne).
+- **Mise en ligne** : seulement l'app (fusion de la PR → Cloudflare), aucune fonction Supabase ni SQL. À vérifier sur l'iPad après fusion : temps de lecture et mémoire.
+
 ## 0. Dernière session (18/11/2026 nuit) : lot 3 bis « Achats » + corrections techniques
 Branche `claude/project-thread-s0d29q` (poussée, **pas fusionnée** : la fusion met en ligne, accord de Cédric requis). Le lot 7 était déjà fusionné dans `main`.
 - **Lecture de l'étiquette** (`app/src/features/reception/scan/`) : à chaque photo d'étiquette, code-barres (ZXing) + texte (Tesseract, français, `parseLabel.ts`) lus **sur l'appareil** ; lot, DLC/DDM, code-barres pré-remplis dans les champs vides, bandeau « à vérifier ». Fichiers OCR copiés au build sous `/ocr/` (plugin `ocrAssets` de `vite.config.ts`, ≈ 4 Mo moteur + 0,7 Mo langue), cache `haccp-ocr` à la 1re utilisation, préchargés en arrière-plan à l'ouverture de la saisie. Testé dans Chromium : étiquette générée lue en ≈ 1 s.

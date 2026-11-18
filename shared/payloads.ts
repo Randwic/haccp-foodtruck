@@ -273,6 +273,27 @@ export interface OilChangePayload {
 /** Réglages huile (ajoutés à Settings) : limite 25 % (légale), alerte préventive 22 % (par défaut). */
 export const DEFAULT_OIL_SETTINGS = { oil_polar_max: 25, oil_polar_warn: 22 } as const
 
+// ───────────────────────────── Lot 9 : vérification des thermomètres ─────────────────────────────
+
+/**
+ * Vérification d'un thermomètre (sonde) — type 'thermometer_check'.
+ * Méthodes : eau glacée (0 °C), eau bouillante (100 °C au niveau de la mer) ou comparaison avec un
+ * thermomètre de référence (étalonné). `in_range` = |measured_c − reference_c| ≤ tolerance_c.
+ * La tolérance en vigueur est enregistrée avec la mesure (preuve lisible même si le réglage change).
+ */
+export interface ThermometerCheckPayload {
+  thermometer: string // nom du thermomètre, 1..40 (ex. « Sonde cuisine »)
+  method: 'ice_water' | 'boiling_water' | 'reference'
+  reference_c: number // valeur attendue : 0 (eau glacée), 100 (eau bouillante) ou lecture de la référence ; -20..110, 1 décimale
+  measured_c: number // valeur lue sur le thermomètre vérifié ; -30..130, 1 décimale
+  tolerance_c: number // écart admis au moment du contrôle ; 0,1..2, 1 décimale
+  in_range: boolean // calculé par l'app (et revérifié par le serveur)
+  comment?: string // 0..300
+}
+
+/** Réglages thermomètres (ajoutés à Settings) : écart admis ±1 °C, vérification au moins tous les 30 jours. */
+export const DEFAULT_THERMOMETER_SETTINGS = { thermometer_tolerance_c: 1, thermometer_check_days: 30 } as const
+
 // ───────────────────────────── Lot 6 : capteurs & alertes ─────────────────────────────
 
 export type SensorVendor = 'shelly_ht' | 'thermoworks_node' | 'tempstick' | 'generic'

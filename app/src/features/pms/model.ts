@@ -240,6 +240,8 @@ export function buildPmsDocument(a: PmsAnswers, app: PmsAppData, opts: { version
   const checkTimes = app.settings?.daily_check_times ?? []
   const oilMax = app.settings?.oil_polar_max ?? 25
   const oilWarn = app.settings?.oil_polar_warn ?? 22
+  const thermoTol = app.settings?.thermometer_tolerance_c ?? 1
+  const thermoDays = app.settings?.thermometer_check_days ?? 30
   const thawDays = app.settings?.thaw_dlc_days ?? 3
   const missing = missingAnswers(a).map((q) => q.label)
 
@@ -396,6 +398,7 @@ export function buildPmsDocument(a: PmsAnswers, app: PmsAppData, opts: { version
     ['Refroidissement (CCP)', 'Multiplication des microbes', 'Refroidissement rapide (bacs peu épais, cellule ou froid)', `De ${th(cooling.start ?? { min_c: 63, max_c: null })} à ${th(cooling.target)} en ${cooling.maxMinutes} min au plus`, 'Température au début et à la fin, durée calculée', 'Produit jeté si objectif non atteint', 'Refroidissement'],
     ['Remise en température (CCP)', 'Multiplication des microbes', 'Réchauffage rapide d’une préparation refroidie', `${th(reheating.target)} en ${reheating.maxMinutes} min au plus`, 'Température à cœur et durée', 'Poursuivre ou jeter', 'Remise en température'],
     ['Friture (PRPo)', 'Huile dégradée (composés polaires)', `Contrôle de l’huile${fryers.length ? ` (${fryers.map((f) => f.name).join(', ')})` : ''}, filtrage, changement`, `Au plus ${oilMax} % (alerte à ${oilWarn} %)`, 'Testeur ou bandelette', 'Changement de l’huile', 'Huiles de friture'],
+    ['Thermomètres (PRP)', 'Mesures fausses : un écart de température passe inaperçu', 'Vérification de chaque sonde (eau glacée à 0 °C, eau bouillante ou thermomètre de référence), pile changée', `Écart au plus ${t(thermoTol)}`, `Au moins tous les ${thermoDays} jours`, 'Thermomètre réglé ou remplacé, puis revérifié ; dernières mesures revues', 'Thermomètres'],
     ['Information allergènes (PRPo)', 'Réaction allergique d’un client', 'Recettes à jour, tableau affiché, fiches techniques', 'Les 14 allergènes réglementaires déclarés', 'Tableau régénéré à chaque modification de recette', 'Retrait du plat, information du client', 'Tableau des allergènes'],
   ]
   B({

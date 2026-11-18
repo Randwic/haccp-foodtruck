@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText } from '../../manager/api.ts'
-import { oilSettingsError } from '../../manager/helpers.ts'
+import { oilSettingsError, thermometerSettingsError } from '../../manager/helpers.ts'
 import { useManager } from '../../manager/ManagerContext.tsx'
 import { formatNumber } from '../../ui/numberPad.ts'
 import { Button, Notice, TextField } from '../../ui/components/index.ts'
@@ -15,6 +15,11 @@ const MAX_DLC_DAYS = 30
 const OIL_MAX_MIN = 10
 const OIL_MAX_MAX = 30
 const OIL_STEP = 0.5
+const THERMO_TOL_MIN = 0.1
+const THERMO_TOL_MAX = 2
+const THERMO_TOL_STEP = 0.1
+/** Fréquences proposées pour la vérification des thermomètres (jours). */
+const THERMO_DAYS = [1, 7, 14, 30, 60, 90, 180, 365] as const
 const round1 = (v: number) => Math.round(v * 10) / 10
 
 /** Première heure ronde libre, pour « Ajouter une heure ». */
@@ -37,6 +42,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
   const [dlcDays, setDlcDays] = useState(3)
   const [oilMax, setOilMax] = useState(25)
   const [oilWarn, setOilWarn] = useState(22)
+  const [thermoTol, setThermoTol] = useState(1)
+  const [thermoDays, setThermoDays] = useState(30)
   const [timesError, setTimesError] = useState<string>()
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -57,6 +64,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
         setDlcDays(s.thaw_dlc_days)
         setOilMax(s.oil_polar_max)
         setOilWarn(s.oil_polar_warn)
+        setThermoTol(s.thermometer_tolerance_c)
+        setThermoDays(s.thermometer_check_days)
         setLoaded(true)
       },
       (e) => alive && setLoadError(errorText(e)),
@@ -75,6 +84,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
     if (new Set(times).size !== times.length) return setTimesError('Chaque heure ne doit apparaître qu’une fois.')
     const oilError = oilSettingsError(oilMax, oilWarn)
     if (oilError) return setError(oilError)
+    const thermoError = thermometerSettingsError({ thermometer_tolerance_c: thermoTol, thermometer_check_days: thermoDays })
+    if (thermoError) return setError(thermoError)
     setBusy(true)
     setError(null)
     try {
@@ -87,6 +98,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
             thaw_dlc_days: dlcDays,
             oil_polar_max: oilMax,
             oil_polar_warn: oilWarn,
+            thermometer_tolerance_c: thermoTol,
+            thermometer_check_days: thermoDays,
           }),
         'Réglages enregistrés',
       )
@@ -97,6 +110,8 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
       setDlcDays(s.thaw_dlc_days)
       setOilMax(s.oil_polar_max)
       setOilWarn(s.oil_polar_warn)
+      setThermoTol(s.thermometer_tolerance_c)
+      setThermoDays(s.thermometer_check_days)
     } catch (err) {
       setError(errorText(err))
     } finally {
@@ -115,6 +130,12 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
     if (oilWarn >= next) setOilWarn(round1(next - OIL_STEP))
   }
   const stepOilWarn = (d: number) => setOilWarn((w) => round1(Math.min(oilMax - OIL_STEP, Math.max(OIL_STEP, w + d))))
+  const stepThermoTol = (d: number) => setThermoTol((t) => round1(Math.min(THERMO_TOL_MAX, Math.max(THERMO_TOL_MIN, t + d))))
+  const stepThermoDays = (d: 1 | -1) =>
+    setThermoDays((cur) => {
+      if (d > 0) return THERMO_DAYS.find((x) => x > cur) ?? cur
+      return [...THERMO_DAYS].reverse().find((x) => x < cur) ?? cur
+    })
   const stepBtn = 'flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-line-strong bg-elevated text-fg shadow-card transition-transform active:scale-[0.96] active:bg-pressed disabled:opacity-40'
 
   return (
@@ -277,6 +298,52 @@ export function SettingsSection({ onSignedOut }: { onSignedOut: () => void }) {
               <Notice tone="warn">Une limite au-delà de 25 % dépasse la limite réglementaire.</Notice>
             </div>
           )}
+        </div>
+        <div>
+          <p id="thermo-label" className="mb-1.5 text-[15px] font-semibold text-fg">
+            Vérification des thermomètres
+          </p>
+          <p className="mb-3 text-[15px] text-fg-muted">
+            Chaque sonde est contrôlée (eau glacée à 0 °C, eau bouillante ou thermomètre de référence). Au-delà de l’écart admis, le thermomètre est jugé « hors tolérance » et une action corrective est exigée.
+          </p>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div role="group" aria-labelledby="thermo-tol-label">
+              <p id="thermo-tol-label" className="mb-2 text-[15px] text-fg">
+                Écart admis
+              </p>
+              <div className="flex items-center gap-3">
+                <button type="button" className={stepBtn} onClick={() => stepThermoTol(-THERMO_TOL_STEP)} disabled={thermoTol <= THERMO_TOL_MIN} aria-label="Diminuer l’écart admis">
+                  <IconMinus size={22} />
+                </button>
+                <output aria-live="polite" aria-label={`Écart admis : ${formatNumber(thermoTol)} °C`} className="min-w-24 text-center text-[28px] font-semibold tracking-[-0.02em] text-fg tabular-nums">
+                  ± {formatNumber(thermoTol)} °C
+                </output>
+                <button type="button" className={stepBtn} onClick={() => stepThermoTol(THERMO_TOL_STEP)} disabled={thermoTol >= THERMO_TOL_MAX} aria-label="Augmenter l’écart admis">
+                  <IconPlus size={22} />
+                </button>
+              </div>
+              <p className="mt-2 text-[14px] text-fg-subtle">
+                Entre {formatNumber(THERMO_TOL_MIN)} et {THERMO_TOL_MAX} °C.
+              </p>
+            </div>
+            <div role="group" aria-labelledby="thermo-days-label">
+              <p id="thermo-days-label" className="mb-2 text-[15px] text-fg">
+                Fréquence
+              </p>
+              <div className="flex items-center gap-3">
+                <button type="button" className={stepBtn} onClick={() => stepThermoDays(-1)} disabled={thermoDays <= THERMO_DAYS[0]} aria-label="Vérifier plus souvent">
+                  <IconMinus size={22} />
+                </button>
+                <output aria-live="polite" aria-label={`Fréquence : tous les ${thermoDays} jours`} className="min-w-24 text-center text-[22px] font-semibold tracking-[-0.02em] text-fg tabular-nums">
+                  {thermoDays === 1 ? 'chaque jour' : `${thermoDays} jours`}
+                </output>
+                <button type="button" className={stepBtn} onClick={() => stepThermoDays(1)} disabled={thermoDays >= THERMO_DAYS[THERMO_DAYS.length - 1]} aria-label="Vérifier moins souvent">
+                  <IconPlus size={22} />
+                </button>
+              </div>
+              <p className="mt-2 text-[14px] text-fg-subtle">Au moins une vérification par thermomètre sur cette durée.</p>
+            </div>
+          </div>
         </div>
         <div>
           <p id="lock-label" className="mb-1.5 text-[15px] font-semibold text-fg">

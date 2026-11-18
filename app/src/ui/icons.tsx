@@ -67,6 +67,7 @@ import {
   Share,
   SlidersHorizontal,
   Snowflake,
+  Target,
   SprayCan,
   Store,
   Truck,
@@ -165,6 +166,7 @@ export const IconCalendar = make(CalendarDays, 'IconCalendar')
 // Équipements
 export const IconFridge = make(Refrigerator, 'IconFridge')
 export const IconSnowflake = make(Snowflake, 'IconSnowflake')
+export const IconThermometerCheck = make(Target, 'IconThermometerCheck')
 export const IconFryer = make(CookingPot, 'IconFryer')
 export const IconFlame = make(Flame, 'IconFlame')
 export const IconBox = make(Box, 'IconBox')

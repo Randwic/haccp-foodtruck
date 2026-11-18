@@ -359,7 +359,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ok
 }
 
 /** Modules dont une ligne = une saisie (les lots chronométrés regroupent plusieurs saisies). */
-const TEST_MARKABLE = new Set<ControlRow['module']>(['temperatures', 'reception', 'cooking', 'labels', 'waste', 'cleaning', 'checklists', 'oil'])
+const TEST_MARKABLE = new Set<ControlRow['module']>(['temperatures', 'reception', 'cooking', 'labels', 'waste', 'cleaning', 'checklists', 'oil', 'thermometers'])
 const DEFAULT_TEST_REASON = 'Saisie de test (mise en route de l’application)'
 
 function RowCard({

@@ -11,6 +11,7 @@ import { demoReceptions } from './features/reception/demoData.ts'
 import { DEMO_MENU_PRODUCTS, DEMO_MENU_RECIPES, demoLabels } from './features/labels/demoData.ts'
 import { demoCleaningRecords, demoOilRecords, demoWasteRecords } from './features/cleaning/demoData.ts'
 import { demoDocuments } from './features/documents/demoData.ts'
+import { demoThermometerRecords } from './features/thermometer/demoData.ts'
 import { createCore, createHttpTransport, createMockTransport, notifyActivity } from './core/index.ts'
 import { registerLabelScanning } from './features/reception/scan/register.tsx'
 import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, type ManagerApi } from './manager/index.ts'
@@ -30,6 +31,7 @@ import { demoAlerts } from './features/alerts/demoData.ts'
 //    &nettoyage=demo : 10 jours de nettoyages (tâches à jour, à faire, en retard), checklists (dont un « Non »), correction ;
 //    &huiles=demo : contrôles depuis le dernier changement (bac 2 à surveiller) ; &huiles=alerte : bac 2 hors limite sans action ;
 //    &pertes=demo : produits jetés de la semaine.
+//    &thermometres=demo : vérifications des sondes (dont une en retard) ; &thermometres=alerte : sonde hors tolérance sans action.
 //    + espace gérant simulé, déjà connecté (gerant@demo.fr / demo-demo-demo).
 //  • VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY définis → vrai core + vrai Supabase (fonctions + REST/RLS).
 //  • sinon → vrai core + serveur simulé en mémoire ; espace gérant simulé branché sur ce serveur :
@@ -46,6 +48,7 @@ function createDemoCore(): FakeCore {
   const receptions = params.get('receptions')
   const etiquettes = params.get('etiquettes') === 'demo'
   const huiles = params.get('huiles')
+  const thermometres = params.get('thermometres')
   const now = new Date()
   const rc = receptions === 'demo' || receptions === 'alerte' ? demoReceptions(now, receptions) : null
   const seeds = [
@@ -57,6 +60,7 @@ function createDemoCore(): FakeCore {
     ...(params.get('nettoyage') === 'demo' ? demoCleaningRecords(now) : []),
     ...(huiles === 'demo' || huiles === 'alerte' ? demoOilRecords(now, huiles) : []),
     ...(params.get('pertes') === 'demo' ? demoWasteRecords(now) : []),
+    ...(thermometres === 'demo' || thermometres === 'alerte' ? demoThermometerRecords(now, thermometres) : []),
   ].sort((a, b) => a.device_time.localeCompare(b.device_time))
   const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
   const syncPresets = {

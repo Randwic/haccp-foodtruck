@@ -16,6 +16,7 @@ import { AllergenTableScreen } from '../features/labels/AllergenTableScreen.tsx'
 import { LabelsScreen } from '../features/labels/LabelsScreen.tsx'
 import { CleaningScreen } from '../features/cleaning/CleaningScreen.tsx'
 import { OilScreen } from '../features/oil/OilScreen.tsx'
+import { ThermometerScreen } from '../features/thermometer/ThermometerScreen.tsx'
 import { WasteScreen } from '../features/reception/WasteScreen.tsx'
 import { DocumentsScreen } from '../features/documents/DocumentsScreen.tsx'
 import { AppHeader } from './AppHeader.tsx'
@@ -27,7 +28,7 @@ import { OfflineBanner } from './pwa/OfflineBanner.tsx'
 export const DEFAULT_AUTO_LOCK_MINUTES = 5
 
 type Boot = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; device: DeviceInfo | null }
-type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | 'cleaning' | 'oil' | 'waste' | 'documents' | 'recall' | ProcessView
+type View = 'today' | 'system_test' | 'management' | 'temperatures' | 'reception' | 'labels' | 'allergens' | 'cleaning' | 'oil' | 'thermometer' | 'waste' | 'documents' | 'recall' | ProcessView
 
 /** Enchaînement des écrans : première configuration → verrouillage (PIN) → accueil / Gestion. */
 export function AppShell() {
@@ -141,6 +142,8 @@ export function AppShell() {
           <CleaningScreen key={checklistToOpen ?? 'home'} onBack={() => setView('today')} openChecklistId={checklistToOpen} />
         ) : view === 'oil' ? (
           <OilScreen onBack={() => setView('today')} />
+        ) : view === 'thermometer' ? (
+          <ThermometerScreen onBack={() => setView('today')} />
         ) : view === 'waste' ? (
           <WasteScreen onBack={() => setView('today')} />
         ) : view === 'labels' ? (
@@ -167,6 +170,7 @@ export function AppShell() {
               setView('cleaning')
             }}
             onOpenOil={() => setView('oil')}
+            onOpenThermometer={() => setView('thermometer')}
             onOpenWaste={() => setView('waste')}
             onOpenAllergens={() => openAllergens('today')}
             onOpenProcess={setView}

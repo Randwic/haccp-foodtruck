@@ -147,6 +147,7 @@ export const RECORD_LABELS: Record<RecordType, string> = {
   thawing: 'Décongélation',
   oil_check: 'Contrôle de l’huile',
   oil_change: 'Changement d’huile',
+  thermometer_check: 'Vérification du thermomètre',
   reception: 'Achat / réception',
   label_printed: 'Étiquette imprimée',
   waste: 'Produit jeté',

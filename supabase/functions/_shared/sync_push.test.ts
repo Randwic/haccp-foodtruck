@@ -1045,6 +1045,16 @@ describe('sync-push — lot 5 (nettoyage, checklists, huiles)', () => {
     const r = await new ChainBuilder().next({ type: 'temperature_check', payload: { equipment_id: FRYER_ID, value_c: 175, source: 'probe', in_range: true } })
     expect((await push([r])).rejected).toEqual([])
   })
+  it('thermomètres (lot 9) : vérification conforme acceptée, in_range incohérent → quarantaine, correction acceptée', async () => {
+    const ice = { thermometer: 'Sonde cuisine', method: 'ice_water', reference_c: 0, measured_c: 1.6, tolerance_c: 1, in_range: false }
+    const chain = new ChainBuilder()
+    const ok = await chain.next({ type: 'thermometer_check', payload: ice })
+    const lie = await chain.next({ type: 'thermometer_check', payload: { ...ice, in_range: true } })
+    const fix = await chain.next({ type: 'correction', supersedes_id: ok.id, payload: { reason: 'Erreur de frappe', replacement: { ...ice, measured_c: 0.6, in_range: true } } })
+    const out = await push([ok, lie, fix])
+    expect(out.accepted.map((a) => a.id)).toEqual([ok.id, fix.id])
+    expect(out.rejected).toEqual([{ id: lie.id, reason: 'invalid_payload', detail: expect.stringMatching(/in_range : doit valoir false/), quarantined: true }])
+  })
   it('n’évalue pas in_range contre les réglages d’huile (choix : réglages changeants hors réseau)', async () => {
     const r = await new ChainBuilder().next({ type: 'oil_check', payload: oilCheck({ polar_percent: 28, in_range: true }) })
     expect((await push([r])).rejected).toEqual([])

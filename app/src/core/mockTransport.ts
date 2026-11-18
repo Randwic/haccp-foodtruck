@@ -93,6 +93,8 @@ export const DEMO_SETTINGS: Settings = {
   thaw_dlc_days: 3,
   oil_polar_max: 25,
   oil_polar_warn: 22,
+  thermometer_tolerance_c: 1,
+  thermometer_check_days: 30,
   sensor_silent_minutes: 60,
   alert_repeat_minutes: 15,
     retention_years: 3,

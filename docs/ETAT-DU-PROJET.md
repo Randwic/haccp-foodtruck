@@ -4,6 +4,14 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
+## 0 sexies. Petits bugs d'affichage (18/11/2026 ~06 h UTC), branche `claude/project-thread-slew47`
+Signalé par Cédric (capture iPhone) : dans Recettes › Modifier, le panneau « Allergènes calculés » (collant en bas, 30 % de l'écran) cachait la liste des ingrédients.
+- `ComputedAllergens` (`RecipeSection.tsx`) : bandeau collant d'**une ligne** (résumé « Gluten, Œufs… · traces : … ») + bouton « Détail » qui déplie la liste d'origine (max 45 % de l'écran, « Réduire » reste visible). Le détail reste dans le DOM (`hidden`), les tests le lisent toujours.
+- Lignes « Aujourd'hui / Terminées aujourd'hui » (cuisson, décongélation, refroidissement, étiquettes, refus d'achat, contrôle, documents, rappel, accueil, checklist) : le texte avait une largeur nulle sur téléphone (« Chili / con / carne » un mot par ligne). Ajout de `basis-48` : la pastille passe à la ligne en dessous.
+- Champ produit sans catalogue : exemple « chili, bolognaise » remplacé par « Nom du produit ».
+- Audit fait sur iPhone (390 px, clair et sombre, mode démo) : tous les écrans d'accueil, Gestion (8 onglets + fenêtres Modifier), formulaires de saisie. Aucun débordement horizontal, aucune erreur dans la console. `tsc` OK, 799 tests OK, `deno check` OK, build OK. `oxlint` : 0 erreur, 53 avertissements de style React (pas de bug).
+- Mise en ligne : seulement l'app (fusion de la PR), aucune fonction Supabase ni SQL.
+
 ## 0 bis. Lecture d'étiquette fiable (18/11/2026 ~05 h UTC), branche `claude/project-thread-ks86le`
 Cédric : « Rien de lisible » sur de vraies étiquettes bien lisibles (DLC/lot en **jet d'encre à points**, en **relief** sur couvercle, photo **de côté**). Tesseract ne lit pas ça. **Exigence de Cédric : lecture sur l'iPad, sans abonnement, sans Internet, sans option à choisir** (lecture par Claude/serveur refusée).
 - **Moteur principal** : `scan/paddle.ts` = modèles PaddleOCR PP-OCRv4 (détection + lecture, paquet `@gutenye/ocr-models`) exécutés par `onnxruntime-web` (wasm, 1 thread hors crossOriginIsolated). Fichiers servis sous `/ocr/ort/` et `/ocr/paddle/` (≈ 30 Mo, plugin `ocrAssets`, cache `haccp-ocr` à la 1re utilisation, préchargés à l'ouverture de la saisie). Photo lue droite, puis tournée de 90° et 270° si aucune date trouvée.

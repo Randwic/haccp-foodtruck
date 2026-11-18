@@ -141,7 +141,7 @@ export function ProductField({
       onChange={onChange}
       maxLength={LIMITS.productMax}
       autoCapitalize="sentences"
-      placeholder={catalog.length ? 'Tapez les premières lettres…' : 'Ex. : chili, bolognaise…'}
+      placeholder={catalog.length ? 'Tapez les premières lettres…' : 'Nom du produit'}
       below={
         <>
           {matches.length > 0 && (

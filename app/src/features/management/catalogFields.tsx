@@ -153,22 +153,23 @@ export function ShelfLifeField({
           {noneLabel}
         </label>
       )}
-      {!value.none && (
-        <>
+      {/* Toujours visibles : taper une durée décoche « selon l'étiquette » (sinon le champ semblait bloqué). */}
+      {(nullable || !value.none) && (
+        <div className={value.none ? 'opacity-60' : undefined}>
           <div className="flex items-stretch gap-2">
             <input
               aria-label={`${label} — nombre`}
               inputMode="numeric"
               value={value.value}
-              onChange={(e) => onChange({ ...value, value: e.target.value.replace(/[^\d,.]/g, '') })}
+              onChange={(e) => onChange({ ...value, none: false, value: e.target.value.replace(/[^\d,.]/g, '') })}
               placeholder="—"
               className={`min-h-14 w-24 shrink-0 rounded-xl border bg-elevated px-4 text-center text-[19px] font-semibold text-fg tabular-nums focus:border-accent ${error ? 'border-danger' : 'border-line-strong'}`}
             />
             <div role="radiogroup" aria-label={`${label} — unité`} className="flex flex-1 gap-1 rounded-xl bg-sunken p-1">
-              <button type="button" role="radio" aria-checked={value.unit === 'days'} className={seg(value.unit === 'days')} onClick={() => onChange({ ...value, unit: 'days' })}>
+              <button type="button" role="radio" aria-checked={value.unit === 'days'} className={seg(value.unit === 'days')} onClick={() => onChange({ ...value, none: false, unit: 'days' })}>
                 jours
               </button>
-              <button type="button" role="radio" aria-checked={value.unit === 'hours'} className={seg(value.unit === 'hours')} onClick={() => onChange({ ...value, unit: 'hours' })}>
+              <button type="button" role="radio" aria-checked={value.unit === 'hours'} className={seg(value.unit === 'hours')} onClick={() => onChange({ ...value, none: false, unit: 'hours' })}>
                 heures
               </button>
             </div>
@@ -189,7 +190,7 @@ export function ShelfLifeField({
               )
             })}
           </div>
-        </>
+        </div>
       )}
       <p id={`${id}-sum`} className={`mt-2 text-[15px] ${error ? 'font-medium text-danger' : 'text-fg-muted'}`}>
         {error ?? (value.none ? noneSummary : hours !== null && !Number.isNaN(hours) ? `Soit ${formatShelfLife(hours)}.` : '')}

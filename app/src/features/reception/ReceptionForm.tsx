@@ -13,7 +13,7 @@ import { PhotoGallery, PhotoPicker } from '../../ui/photos/Photos.tsx'
 import { formatTemperature } from '../../ui/temperature.ts'
 import { ErrorNotice, ReasonField, useRecordSaver } from '../processes/common.tsx'
 import { ItemEditor, StorageIcon, type DraftItem } from './ItemEditor.tsx'
-import { frenchDate, isOutOfRange, PHOTOS_PER_FIELD, RECEPTION_MAX_PHOTOS, STORAGE_LABELS, supplierProducts, todayIso, type ReceptionEntry } from './model.ts'
+import { frenchDate, isOutOfRange, PHOTOS_PER_FIELD, RECEPTION_MAX_PHOTOS, productsByGtin, STORAGE_LABELS, supplierProducts, todayIso, type ReceptionEntry } from './model.ts'
 import { NewSupplierModal } from './NewSupplierModal.tsx'
 import type { ReceptionData } from './useReceptionData.ts'
 
@@ -101,6 +101,7 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
   const total = countPhotos(draft)
   const today = todayIso(now, data.timeZone)
   const suggestions = useMemo(() => supplierProducts(data.receptions, draft.supplierId), [data.receptions, draft.supplierId])
+  const knownGtins = useMemo(() => productsByGtin(data.receptions), [data.receptions])
   const deliveryDone = draft.supplierId !== null && draft.vehicleOk !== null && draft.packagingOk !== null
   const reached = (s: Step) => s === 'delivery' || (s === 'items' && deliveryDone) || (s === 'review' && deliveryDone && draft.items.length > 0)
 
@@ -132,6 +133,7 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
       <ItemEditor
         item={current}
         suggestions={suggestions}
+        knownGtins={knownGtins}
         remainingPhotos={RECEPTION_MAX_PHOTOS - others}
         today={today}
         keepPhotos={[...kept, ...(current?.photo_paths ?? [])]}

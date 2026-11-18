@@ -78,6 +78,9 @@ import {
   WifiOff,
   Wrench,
   X,
+  ScanBarcode,
+  ScanText,
+  PackageSearch,
   type LucideProps,
 } from 'lucide-react'
 
@@ -165,6 +168,9 @@ export const IconSliders = make(SlidersHorizontal, 'IconSliders')
 
 // Réception & traçabilité (lot 3)
 export const IconCamera = make(Camera, 'IconCamera')
+export const IconBarcode = make(ScanBarcode, 'IconBarcode')
+export const IconScanText = make(ScanText, 'IconScanText')
+export const IconRecall = make(PackageSearch, 'IconRecall')
 export const IconImageOff = make(ImageOff, 'IconImageOff')
 export const IconSupplier = make(Store, 'IconSupplier')
 export const IconTruck = make(Truck, 'IconTruck')

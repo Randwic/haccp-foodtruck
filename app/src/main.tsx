@@ -12,6 +12,7 @@ import { DEMO_MENU_PRODUCTS, DEMO_MENU_RECIPES, demoLabels } from './features/la
 import { demoCleaningRecords, demoOilRecords, demoWasteRecords } from './features/cleaning/demoData.ts'
 import { demoDocuments } from './features/documents/demoData.ts'
 import { createCore, createHttpTransport, createMockTransport, notifyActivity } from './core/index.ts'
+import { registerLabelScanning } from './features/reception/scan/register.tsx'
 import { createMockManagerApi, createSupabaseManagerApi, withEstablishmentName, type ManagerApi } from './manager/index.ts'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,6 +150,8 @@ function createApp(): { core: CoreApi; manager: ManagerApi } {
   return { core: createCore({ transport: named }), manager }
 }
 const { core, manager } = createApp()
+// Achats : lecture automatique de l'étiquette (lot, DLC/DDM) et scan du code-barres, sur l'appareil.
+registerLabelScanning()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

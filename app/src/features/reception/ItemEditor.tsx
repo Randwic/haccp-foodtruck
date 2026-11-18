@@ -1,10 +1,10 @@
 // Saisie d'une ligne de livraison : produit, lot, DLC/DDM, conservation, température, photos, décision.
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { ReceptionItem } from '../../../../shared/payloads.ts'
 import { LIMITS } from '../../../../shared/validation.ts'
 import { Button, Notice, TemperatureInput, TextField } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
-import { IconBan, IconCheck, IconFridge, IconOk, IconSnowflake, IconBox, IconWarn, type IconProps } from '../../ui/icons.tsx'
+import { IconBan, IconBarcode, IconCheck, IconScanText, IconFridge, IconOk, IconSnowflake, IconBox, IconWarn, type IconProps } from '../../ui/icons.tsx'
 import { PhotoPicker } from '../../ui/photos/Photos.tsx'
 import { describeThreshold, formatTemperature } from '../../ui/temperature.ts'
 import { chipClass, ProductField, StickyActions } from '../processes/common.tsx'
@@ -28,6 +28,8 @@ export function StorageIcon({ storage, ...p }: IconProps & { storage: Storage })
 interface Props {
   item: DraftItem | null
   suggestions: { product: string; storage: Storage }[]
+  /** Produits déjà reçus par code-barres (GTIN) : un scan pré-remplit le nom et la conservation. */
+  knownGtins?: ReadonlyMap<string, { product: string; storage: Storage }>
   /** Photos encore autorisées pour toute la réception, en plus de celles de cette ligne. */
   remainingPhotos: number
   /** Date du jour (AAAA-MM-JJ) : DLC dépassée signalée. */
@@ -38,7 +40,7 @@ interface Props {
   onCancel: () => void
 }
 
-export function ItemEditor({ item, suggestions, remainingPhotos, today, keepPhotos, onSave, onCancel }: Props) {
+export function ItemEditor({ item, suggestions, knownGtins, remainingPhotos, today, keepPhotos, onSave, onCancel }: Props) {
   const ext = receptionExtensions()
   const core = useCore()
   const [product, setProduct] = useState(item?.product ?? '')
@@ -52,7 +54,14 @@ export function ItemEditor({ item, suggestions, remainingPhotos, today, keepPhot
   const [decision, setDecision] = useState<'accepted' | 'refused' | null>(item ? (item.accepted ? 'accepted' : 'refused') : null)
   const [reason, setReason] = useState(item?.refusal_reason ?? '')
   const [confirmOut, setConfirmOut] = useState(false)
-  const [readFrom, setReadFrom] = useState<string[] | null>(null)
+  const [readFrom, setReadFrom] = useState<{ fields: string[]; source: 'label' | 'barcode' } | null>(null)
+  const [reading, setReading] = useState(false)
+  const [nothingRead, setNothingRead] = useState(false)
+  const [scanning, setScanning] = useState(false)
+
+  useEffect(() => {
+    ext.warmUp?.()
+  }, [ext])
 
   const threshold = storageThreshold(storage)
   const needsTemp = threshold !== null
@@ -82,13 +91,17 @@ export function ItemEditor({ item, suggestions, remainingPhotos, today, keepPhot
     onSave(build())
   }
 
-  const onLabelPhoto = async (_path: string, image: Blob) => {
-    if (!ext.readLabel) return
-    const r: LabelReading | null = await ext.readLabel(image).catch(() => null)
-    if (!r) return
+  /**
+   * Pré-remplit les champs ENCORE VIDES avec une lecture (photo d'étiquette ou code-barres) ; un scan
+   * explicite remplace le code-barres. Un GTIN déjà reçu donne le nom et la conservation.
+   */
+  const applyReading = (r: LabelReading, source: 'label' | 'barcode') => {
     const filled: string[] = []
-    if (r.product && !product.trim()) {
-      setProduct(r.product)
+    const known = r.gtin ? knownGtins?.get(r.gtin) : undefined
+    const name = r.product ?? known?.product
+    if (name && !product.trim()) {
+      setProduct(name)
+      if (known && !item) setStorage(known.storage)
       filled.push('produit')
     }
     if (r.lot && !lot.trim()) {
@@ -100,11 +113,21 @@ export function ItemEditor({ item, suggestions, remainingPhotos, today, keepPhot
       setDate((r.dlc ?? r.ddm)!)
       filled.push(r.dlc ? 'DLC' : 'DDM')
     }
-    if (r.gtin && !gtin) {
+    if (r.gtin && (source === 'barcode' || !gtin)) {
+      if (r.gtin !== gtin) filled.push('code-barres')
       setGtin(r.gtin)
-      filled.push('code-barres')
     }
-    if (filled.length) setReadFrom(filled)
+    setReadFrom(filled.length ? { fields: filled, source } : null)
+    return filled.length > 0
+  }
+
+  const onLabelPhoto = async (_path: string, image: Blob) => {
+    if (!ext.readLabel) return
+    setReading(true)
+    setNothingRead(false)
+    const r: LabelReading | null = await ext.readLabel(image).catch(() => null)
+    setReading(false)
+    if (!r || !applyReading(r, 'label')) setNothingRead(!r)
   }
 
   const choiceClass = (active: boolean, tone: 'ok' | 'danger') =>
@@ -125,7 +148,28 @@ export function ItemEditor({ item, suggestions, remainingPhotos, today, keepPhot
           }}
           suggestions={suggestions.map((s) => s.product)}
         />
-        {readFrom && <Notice tone="warn">Lu sur l’étiquette : {readFrom.join(', ')}. Vérifiez avant de valider.</Notice>}
+        <PhotoPicker
+          label="Photos de l’étiquette"
+          hint={ext.readLabel ? 'Lot et date bien lisibles : ils sont lus automatiquement. Facultatif.' : 'Lot et date bien lisibles. Facultatif.'}
+          paths={photos}
+          onChange={setPhotos}
+          max={PHOTOS_PER_FIELD}
+          remaining={remainingPhotos}
+          keep={keepPhotos}
+          onAdded={onLabelPhoto}
+        />
+        {reading && (
+          <p role="status" className="flex items-center gap-2 text-[15px] text-fg-muted">
+            <IconScanText size={20} className="animate-pulse text-accent" /> Lecture de l’étiquette (lot, date, code-barres)…
+          </p>
+        )}
+        {nothingRead && !reading && <p className="text-[14px] text-fg-subtle">Rien de lisible automatiquement sur cette photo : saisissez le lot et la date à la main.</p>}
+
+        {readFrom && (
+          <Notice tone="warn">
+            {readFrom.source === 'barcode' ? 'Lu sur le code-barres' : 'Lu sur l’étiquette'} : {readFrom.fields.join(', ')}. Vérifiez avant de valider.
+          </Notice>
+        )}
         <div className="grid gap-5 sm:grid-cols-2">
           <TextField label="N° de lot" value={lot} onChange={setLot} maxLength={LIMITS.lotMax} placeholder="Ex. : L2311A" autoCapitalize="characters" />
           <div>
@@ -147,13 +191,30 @@ export function ItemEditor({ item, suggestions, remainingPhotos, today, keepPhot
           </div>
         </div>
         {expired && <Notice>DLC dépassée ({frenchDate(date)}) : ce produit doit être refusé.</Notice>}
-        {ext.scanBarcode && (
+        {(ext.BarcodeScanner || gtin) && (
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" onClick={async () => setGtin((await ext.scanBarcode!().catch(() => null)) ?? gtin)}>
-              Scanner le code-barres
-            </Button>
-            {gtin && <span className="text-[15px] text-fg-muted tabular-nums">GTIN {gtin}</span>}
+            {ext.BarcodeScanner && (
+              <Button variant="secondary" icon={<IconBarcode size={20} />} onClick={() => setScanning(true)}>
+                Scanner le code-barres
+              </Button>
+            )}
+            {gtin && (
+              <span className="inline-flex items-center gap-2 text-[15px] text-fg-muted tabular-nums">
+                Code-barres {gtin}
+                <button type="button" className="min-h-9 rounded-md px-2 font-semibold text-accent active:bg-pressed" onClick={() => setGtin('')}>
+                  Effacer
+                </button>
+              </span>
+            )}
           </div>
+        )}
+        {scanning && ext.BarcodeScanner && (
+          <ext.BarcodeScanner
+            onResult={(r) => {
+              setScanning(false)
+              if (r) applyReading(r, 'barcode')
+            }}
+          />
         )}
 
         <div role="radiogroup" aria-label="Conservation">
@@ -167,17 +228,6 @@ export function ItemEditor({ item, suggestions, remainingPhotos, today, keepPhot
             ))}
           </div>
         </div>
-
-        <PhotoPicker
-          label="Photos de l’étiquette"
-          hint="Lot et date bien lisibles. Facultatif."
-          paths={photos}
-          onChange={setPhotos}
-          max={PHOTOS_PER_FIELD}
-          remaining={remainingPhotos}
-          keep={keepPhotos}
-          onAdded={onLabelPhoto}
-        />
 
         <div role="radiogroup" aria-label="Décision">
           <p className="mb-2 text-[15px] font-semibold text-fg">Décision</p>

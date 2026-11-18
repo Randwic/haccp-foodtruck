@@ -162,6 +162,16 @@ export function supplierProducts(entries: readonly ReceptionEntry[], supplierId:
   return out
 }
 
+/**
+ * Produit déjà reçu pour chaque code-barres (GTIN), réception la plus récente d'abord : un scan
+ * pré-remplit le nom et la conservation. Clé : GTIN tel qu'enregistré (8 à 14 chiffres).
+ */
+export function productsByGtin(entries: readonly ReceptionEntry[]): Map<string, { product: string; storage: Storage }> {
+  const out = new Map<string, { product: string; storage: Storage }>()
+  for (const e of entries) for (const it of e.payload.items) if (it.gtin && it.product.trim() && !out.has(it.gtin)) out.set(it.gtin, { product: it.product.trim(), storage: it.storage })
+  return out
+}
+
 /** Lignes reçues correspondant à un produit (et éventuellement un lot) : pour lier une perte à sa réception. */
 export function matchingReceptions(entries: readonly ReceptionEntry[], product: string, lot?: string): ReceptionEntry[] {
   const p = product.trim().toLocaleLowerCase('fr-FR')

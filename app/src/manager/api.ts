@@ -19,7 +19,10 @@ export interface BootstrapInput {
 }
 
 /** Membre de l'équipe vu par le gérant (sans le PIN haché). */
-export type ManagedStaff = Pick<StaffMember, 'id' | 'display_name' | 'role' | 'active' | 'updated_at'>
+export type ManagedStaff = Pick<StaffMember, 'id' | 'display_name' | 'role' | 'active' | 'updated_at'> & {
+  /** RGPD : nom remplacé par un pseudonyme (membre désactivé, saisies conservées). Absent = jamais effacé. */
+  forgotten_at?: string | null
+}
 
 export interface ThresholdInput {
   equipment_id: string
@@ -198,6 +201,8 @@ export interface ManagerApi {
   listStaff(): Promise<ManagedStaff[]> // actifs ET désactivés
   addStaff(input: { display_name: string; role: StaffRole; pin_salt: string; pin_hash: string }): Promise<ManagedStaff>
   updateStaff(id: string, patch: { display_name?: string; active?: boolean; pin_salt?: string; pin_hash?: string }): Promise<ManagedStaff>
+  /** RGPD : remplace le nom d'un membre désactivé par un pseudonyme et rend son PIN inutilisable (définitif). */
+  forgetStaff(id: string): Promise<ManagedStaff>
 
   // Réglages
   getSettings(): Promise<ManagerSettings>

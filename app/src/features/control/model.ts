@@ -61,6 +61,8 @@ export interface ControlRow {
   module: ControlModule
   time: string
   author: string
+  /** id de l'auteur (export RGPD des saisies d'un membre). */
+  authorId: string
   device: string
   /** Enceinte, produit, tâche, fournisseur… */
   subject: string
@@ -240,6 +242,7 @@ export function buildControlReport(input: ControlInput): ControlReport {
       module,
       time: e.time,
       author: refs.staffName(e.authorId),
+      authorId: e.authorId,
       device: refs.deviceName(e.original.device_id),
       subject: now.subject,
       detail: now.detail,
@@ -291,6 +294,7 @@ export function buildControlReport(input: ControlInput): ControlReport {
         module: kind,
         time: b.startedAt,
         author: refs.staffName(b.start.authorId),
+        authorId: b.start.authorId,
         device: refs.deviceName(b.start.original.device_id),
         subject: b.product,
         detail: [b.steps.map(stepText).join(', '), b.durationMin !== null ? `${b.durationMin} min` : ''].filter(Boolean).join(' — '),
@@ -336,6 +340,7 @@ export function buildControlReport(input: ControlInput): ControlReport {
       module: 'thawing',
       time: b.startedAt,
       author: refs.staffName(b.start.authorId),
+      authorId: b.start.authorId,
       device: refs.deviceName(b.start.original.device_id),
       subject: b.product,
       detail,

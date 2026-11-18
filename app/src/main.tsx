@@ -82,6 +82,8 @@ function createDemoCore(): FakeCore {
     products: DEMO_MENU_PRODUCTS,
     recipes: DEMO_MENU_RECIPES,
     alerts: params.get('alertes') === 'demo' ? demoAlerts(now) : undefined,
+    // ?ouverture=2027-03-01 : « Pas encore ouvert » (alertes et rappels en pause jusqu'à cette date).
+    settings: params.get('ouverture') ? { opening_date: params.get('ouverture') } : undefined,
   })
 }
 const TRIAL_DB_PREFIX = 'haccp-essai-'

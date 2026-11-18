@@ -13,6 +13,7 @@ import {
   summarizeReceptions,
   type ReceptionEntry,
   type ReceptionSummary,
+  type Storage,
   type WasteEntry,
 } from './model.ts'
 
@@ -27,6 +28,8 @@ export interface ReceptionData {
   wastes: WasteEntry[]
   /** État de chaque photo référencée (réceptions et pertes). */
   photoStatus: Record<string, PhotoStatus>
+  /** Produits actifs de Gestion (fiches produits) : proposés à la saisie d'un achat ou d'une perte. */
+  catalog: { product: string; storage: Storage }[]
 }
 
 export interface PhotoCounts {
@@ -54,10 +57,11 @@ export function useReceptionData() {
   const reload = useCallback(async () => {
     try {
       const since = new Date(Date.now() - LOAD_WINDOW_MS).toISOString()
-      const [suppliers, staff, establishment, ...lists] = await Promise.all([
+      const [suppliers, staff, establishment, products, ...lists] = await Promise.all([
         core.listSuppliers({ includeInactive: true }),
         core.listStaff(),
         core.getEstablishment(),
+        core.listProducts().catch(() => []),
         ...RECEPTION_RECORD_TYPES.map((type) => core.listRecords({ type, since })),
       ])
       const records = lists.flat()
@@ -65,7 +69,7 @@ export function useReceptionData() {
       const wastes = buildWastes(records)
       const paths = [...receptions.flatMap((r) => r.photos), ...wastes.flatMap((w) => w.versions.flatMap((v) => v.payload.photo_paths ?? []))]
       const photoStatus = paths.length ? await core.getPhotoStatuses([...new Set(paths)]) : {}
-      setData({ timeZone: establishment?.timezone || DEFAULT_TIMEZONE, suppliers, staff, receptions, wastes, photoStatus })
+      setData({ timeZone: establishment?.timezone || DEFAULT_TIMEZONE, suppliers, staff, receptions, wastes, photoStatus, catalog: products.filter((p) => p.active).map((p) => ({ product: p.name, storage: p.storage })) })
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

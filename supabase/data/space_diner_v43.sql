@@ -177,6 +177,9 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- Recette d'exemple du seed (Space Diner achète sa sauce cheddar toute prête).
 update public.recipes set active = false where id = '00000000-0000-4000-8000-000000000451';
+-- « Chutney d'oignons au bacon » : plus une préparation. Chutney et bacon restent séparés et sont posés
+-- directement dans le Croq'Brioche (Supernova) : désactivée (Cédric, 18/11/2026).
+update public.recipes set active = false where id = '5d000000-0000-4000-8000-000000000605';
 
 create temp table sd_recipe (id uuid primary key, name text not null unique) on commit drop;
 
@@ -196,10 +199,6 @@ with v (id, name, ingredients, extra, may, storage, hours) as (values
   -- 1 mois en pot fermé, à température ambiante.
   ('5d000000-0000-4000-8000-000000000604', 'Miel piquant',
      array['Miel', 'Piment doux en poudre', 'Vinaigre de cidre'], '{}', '{}', 'ambient', 720),
-  -- Chutney et bacon gardés séparés, mélangés au dernier moment ; le reste du mélange est jeté en fin de service (3 h).
-  -- Le pot de chutney ouvert garde sa propre durée (10 jours, étiquette du fabricant). Cédric, 18/11/2026.
-  ('5d000000-0000-4000-8000-000000000605', 'Chutney d''oignons au bacon',
-     array['Bacon croustillant (Sol y Tapas Crispy)', 'Chutney d''oignons (pot 550 g)'], '{}', '{}', 'fridge', 3),
   -- Durée de l'étiquette du fournisseur après ouverture : 72 h retenues, À CONFIRMER.
   ('5d000000-0000-4000-8000-000000000606', 'Pommes cuites à la cannelle',
      array['Pommes cuites en cubes (Metro)', 'Cannelle en poudre'], '{}', '{}', 'fridge', 72),
@@ -245,8 +244,9 @@ end $$;
 -- ---------------------------------------------------------------------------
 with v (id, name, category, products, preparations, may) as (values
   ('5d000000-0000-4000-8000-000000000701'::uuid, 'Supernova', 'Croq''Brioche',
-     array['Pain brioché', 'Porc BBQ cuit', 'Cheddar en tranche', 'Cornichons aigre-doux', 'Oignons frits'],
-     array['Sauce UFO fumée-miel', 'Chutney d''oignons au bacon'], '{}'::text[]),
+     array['Pain brioché', 'Porc BBQ cuit', 'Cheddar en tranche', 'Cornichons aigre-doux', 'Oignons frits',
+           'Chutney d''oignons (pot 550 g)', 'Bacon croustillant (Sol y Tapas Crispy)'],
+     array['Sauce UFO fumée-miel'], '{}'::text[]),
   ('5d000000-0000-4000-8000-000000000702', 'Houston', 'Croq''Brioche',
      array['Pain brioché', 'Maïs en conserve', 'Porc BBQ cuit', 'Emmental en tranche', 'Pickles d''oignons rouges'],
      array['Sauce piquante fumée', 'Trio poivrons cuits'], '{}'),
@@ -339,8 +339,8 @@ insert into public.checklists (id, name, kind, items, active) values
      {"id": "nuisibles",     "label": "Pas de nuisibles constatés", "required": true}
    ]'::jsonb, true),
   ('00000000-0000-4000-8000-000000000552', 'Fermeture (fin de service)', 'closing', '[
-     {"id": "restes",           "label": "Restes réchauffés et tenus au chaud jetés (viande, poivrons, sauce cheddar) et mélange chutney-bacon", "required": true},
-     {"id": "flacons",          "label": "Flacons de sauce entamés jetés (jamais reversés dans le bac)", "required": true},
+     {"id": "restes",           "label": "Restes réchauffés et tenus au chaud jetés (viande, poivrons, sauce cheddar)", "required": true},
+     {"id": "flacons",          "label": "Flacons de sauce restés en saladette froide : bouchés, au frigo, jetés à la DLC du bac. Sinon jetés. Jamais reversés", "required": true},
      {"id": "creme_patissiere", "label": "Crème pâtissière : étiquette vérifiée, jetée si plus de 48 h", "required": true},
      {"id": "samedi",           "label": "Samedi : sauces maison froides restantes jetées", "required": false},
      {"id": "produits_entames", "label": "Produits entamés fermés, étiquetés (date d''ouverture), au frigo", "required": true},

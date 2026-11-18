@@ -468,14 +468,18 @@ export function buildPmsDocument(a: PmsAnswers, app: PmsAppData, opts: { version
     columns: [
       { title: 'Produit', width: 2.2 },
       { title: 'Conservation', width: 1.1 },
-      { title: 'Après ouverture (ou achat)', width: 1.4 },
+      { title: 'Après ouverture', width: 1.4 },
       { title: 'Cuisson à cœur', width: 1.1 },
       { title: 'Allergènes (traces)', width: 2.6 },
     ],
     rows: products.map((p) => [
       p.name,
       storage[p.storage],
-      p.shelf_life_opened_hours === null ? 'DLC du fabricant' : formatShelfLife(p.shelf_life_opened_hours),
+      p === bread && p.shelf_life_opened_hours !== null
+        ? `${formatShelfLife(p.shelf_life_opened_hours)} après achat`
+        : p.shelf_life_opened_hours === null
+          ? 'Selon l’étiquette'
+          : formatShelfLife(p.shelf_life_opened_hours),
       p.cook_min_c === null ? '—' : `au moins ${t(p.cook_min_c)}`,
       `${allergenList(p.allergens)}${p.may_contain.length ? ` (traces : ${allergenList(p.may_contain)})` : ''}`,
     ]),
@@ -491,7 +495,13 @@ export function buildPmsDocument(a: PmsAnswers, app: PmsAppData, opts: { version
       { title: 'Durée de vie', width: 1.2 },
       { title: 'Allergènes', width: 3 },
     ],
-    rows: preparations.map((r) => [r.name, storage[r.storage], formatShelfLife(r.shelf_life_hours), allergenList(allergenProfile(r, catalog).present)]),
+    rows: preparations.map((r) => [
+      r.name,
+      // Préparation tenue au chaud (ex. poivrons au bain-marie) : « ambiant » au contrat, quelques heures au plus.
+      r.storage === 'ambient' && (r.shelf_life_hours ?? 0) <= 6 ? 'Au chaud (bain-marie)' : storage[r.storage],
+      formatShelfLife(r.shelf_life_hours),
+      allergenList(allergenProfile(r, catalog).present),
+    ]),
     empty: 'Aucune préparation maison enregistrée.',
     size: 8,
   })

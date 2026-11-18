@@ -4,6 +4,11 @@
 > Propriétaire : Cédric (food truck « Space Diner », remorque, services jeudi–samedi 18 h 30–21 h, prépa 16 h–18 h 30).
 > Il travaille seul (aide ponctuelle de son épouse). Il va lui-même chercher sa marchandise (Metro). Langue : **français**, utilisateur non développeur : expliquer simplement.
 
+## 0 quinquies. 18/11/2026 (~04 h 15 UTC) : PMS, suite des remarques de Cédric
+- « Chutney d'oignons au bacon » **désactivé** (chutney et bacon séparés, posés directement dans le Supernova) ; Supernova reprend les deux produits (allergènes inchangés). Serveur + `space_diner_v43.sql` + test `96c` (7 préparations). Test SQL non relancé (pas de base locale dans la session).
+- Checklist Fermeture (serveur + v43) : flacons gardés s'ils sont restés en saladette froide (jetés à la DLC du bac), sinon jetés ; « restes » sans le mélange chutney-bacon. Libellés ≤ 120 caractères (contrainte SQL).
+- PDF du PMS : colonne « Après ouverture » = « Selon l'étiquette » si pas de durée, « 4 jours après achat » pour le pain ; annexe 2 : préparation ambiante ≤ 6 h = « Au chaud (bain-marie) ».
+
 ## 0 quater. 18/11/2026 (~04 h UTC) : « Marquer comme saisie de test » (demandé par Cédric)
 - Registre append-only conservé : une **correction** `{ reason, replacement: valeur en vigueur, test: true }` marque la saisie. `shared/testMarks.ts` (`testMarkedRoots`, `withoutTestMarked`, `chainHead`) ; `buildEntries` et `buildReadings` écartent la saisie, sa chaîne et ses actions correctives ; le dossier de contrôle les compte avec les essais (`report.tests`, `report.testEntries`, note dans le PDF).
 - Bouton « Marquer comme saisie de test » sur chaque ligne du mode Contrôle (sauf lots chronométrés refroidissement / remise en T° / décongélation), avec motif.

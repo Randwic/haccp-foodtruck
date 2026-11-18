@@ -72,3 +72,58 @@ describe('texte d’étiquette (OCR)', () => {
     expect(parseLabelText('Ingrédients : farine, eau, sel', { today })).toBeNull()
   })
 })
+
+describe('étiquettes réelles (jet d’encre, relief)', () => {
+  it('date espacée et lot sans mot-clé sur la ligne suivante', () => {
+    expect(parseLabelText("À consommer jusqu'au :\n27 11 26 07:31\n22982629304", { today })).toEqual({ dlc: '2026-11-27', lot: '22982629304' })
+  })
+  it('lot collé à la date, heure à la ligne', () => {
+    expect(parseLabelText('MG26298R99A 27/11/26\n11:38', { today })).toEqual({ dlc: '2026-11-27', lot: 'MG26298R99A' })
+  })
+  it('« J07/12 » : jour et mois sans année', () => {
+    expect(parseLabelText('J07/12 17:06\nP7', { today })).toEqual({ dlc: '2026-12-07' })
+    expect(parseLabelText('J05/01', { today })).toEqual({ dlc: '2027-01-05' })
+  })
+  it('année mal lue en points (« 2826 »)', () => {
+    expect(parseLabelText("A CONS. JUSQU'AU 28/11/2826\nL:2326C 14:32", { today })).toEqual({ dlc: '2026-11-28', lot: 'L2326C' })
+  })
+  it('pas de lot inventé sans date', () => {
+    expect(parseLabelText('ABC123456 bonjour', { today })).toBeNull()
+  })
+})
+
+describe('sorties du moteur de lecture moderne', () => {
+  it('date collée à l’heure, mot-clé sans espaces', () => {
+    expect(parseLabelText('Aconsommerjusqu\n27.112607:31\n22982629304', { today })).toEqual({ dlc: '2026-11-27', lot: '22982629304' })
+  })
+  it('« J0712 » sans barre', () => {
+    expect(parseLabelText('J0712\nMILSANI\nFromage BLANC', { today })).toEqual({ dlc: '2026-12-07' })
+  })
+  it('une vraie date l’emporte sur un nombre qui ressemble à une date collée', () => {
+    expect(parseLabelText('Lot 271126\nDLC 30/11/2026', { today })).toEqual({ dlc: '2026-11-30', lot: '271126' })
+  })
+})
+
+describe('moteur moderne : zones de texte et décodage', () => {
+  it('trouve une ligne horizontale et une verticale', async () => {
+    const { boxesFromProbMap } = await import('./paddle.ts')
+    const w = 100
+    const h = 100
+    const prob = new Float32Array(w * h)
+    for (let y = 10; y < 18; y++) for (let x = 10; x < 70; x++) prob[y * w + x] = 0.9 // ligne horizontale
+    for (let y = 30; y < 95; y++) for (let x = 85; x < 92; x++) prob[y * w + x] = 0.9 // ligne verticale
+    const boxes = boxesFromProbMap(prob, w, h).sort((a, b) => a.cy - b.cy)
+    expect(boxes).toHaveLength(2)
+    expect(Math.abs(Math.sin(boxes[0].angle))).toBeLessThan(0.1)
+    expect(boxes[0].length).toBeGreaterThan(60)
+    expect(Math.abs(Math.sin(boxes[1].angle))).toBeGreaterThan(0.9)
+  })
+  it('décodage CTC : répétitions et vides retirés', async () => {
+    const { ctcDecode } = await import('./paddle.ts')
+    const chars = ['', 'A', 'B', ' ']
+    const steps = [1, 1, 0, 1, 2, 2, 3, 2] // A A _ A B B espace B
+    const data = new Float32Array(steps.length * 4)
+    steps.forEach((c, t) => (data[t * 4 + c] = 0.9))
+    expect(ctcDecode(data, steps.length, 4, chars).text).toBe('AAB B')
+  })
+})

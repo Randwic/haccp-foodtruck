@@ -34,6 +34,7 @@ import {
   normalizeSupplierInput,
   oilSettingsError,
   thermometerSettingsError,
+  openingDateError,
 } from './helpers.ts'
 
 /** Compte de démonstration (mode `seeded`). */
@@ -96,6 +97,7 @@ interface MockState {
   oil_polar_warn: number
   thermometer_tolerance_c?: number
   thermometer_check_days?: number
+  opening_date?: string | null
   staff: MockStaff[]
   equipment: Equipment[]
   thresholds: Threshold[]
@@ -256,6 +258,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
       oil_polar_warn: state.oil_polar_warn ?? DEMO_SETTINGS.oil_polar_warn,
       thermometer_tolerance_c: state.thermometer_tolerance_c ?? DEMO_SETTINGS.thermometer_tolerance_c,
       thermometer_check_days: state.thermometer_check_days ?? DEMO_SETTINGS.thermometer_check_days,
+      opening_date: state.opening_date ?? null,
     } satisfies Settings)
   const pushStaff = (s: MockStaff) => {
     if (!t) return
@@ -385,6 +388,7 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
     oil_polar_warn: state.oil_polar_warn ?? DEMO_SETTINGS.oil_polar_warn,
     thermometer_tolerance_c: state.thermometer_tolerance_c ?? DEMO_SETTINGS.thermometer_tolerance_c,
     thermometer_check_days: state.thermometer_check_days ?? DEMO_SETTINGS.thermometer_check_days,
+    opening_date: state.opening_date ?? null,
   })
 
   /** Registre simulé « du serveur » : transport simulé, ou saisies du core factice (démo). */
@@ -569,6 +573,11 @@ export function createMockManagerApi(opts: MockManagerOptions = {}): MockManager
         if (e) throw new ManagerError('validation', e, 400)
         if (patch.thermometer_tolerance_c !== undefined) state.thermometer_tolerance_c = patch.thermometer_tolerance_c
         if (patch.thermometer_check_days !== undefined) state.thermometer_check_days = patch.thermometer_check_days
+      }
+      if (patch.opening_date !== undefined) {
+        const e = openingDateError(patch.opening_date)
+        if (e) throw new ManagerError('validation', e, 400)
+        state.opening_date = patch.opening_date
       }
       pushSettings() // le nom d'établissement passe par withEstablishmentName()
       save()

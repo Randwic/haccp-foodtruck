@@ -42,6 +42,7 @@ import { wastesThisWeek } from '../reception/wasteModel.ts'
 import { IconChecklist, IconWaste } from '../../ui/icons.tsx'
 import { useDocumentReminders, type DocumentReminders } from '../documents/useDocumentReminders.ts'
 import { AlertsPanel } from '../alerts/AlertsPanel.tsx'
+import { useOpeningPause, type OpeningPause } from './useOpeningPause.ts'
 
 const ICON = 22
 
@@ -79,20 +80,24 @@ function StatusLines({ lines }: { lines: StatusLine[] | null }) {
 const missingLine = (n: number): StatusLine[] =>
   n > 0 ? [{ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: plural(n, 'action corrective manquante', 'actions correctives manquantes') }] : []
 
-function temperatureLines(s: TemperatureSummary | null): StatusLine[] | null {
+/** Ligne « en pause » (pas encore ouvert) qui remplace les rappels liés au planning. */
+const pauseLine = (p: OpeningPause): StatusLine => ({ tone: 'muted', icon: <IconDue size={17} className="shrink-0" />, text: `Rappels en pause jusqu’au ${p.until}` })
+
+function temperatureLines(s: TemperatureSummary | null, pause?: OpeningPause | null): StatusLine[] | null {
   if (!s) return null
   if (s.enclosures === 0) return [{ tone: 'muted', icon: <IconDue size={17} className="shrink-0" />, text: 'Aucune enceinte en service' }]
   const lines = missingLine(s.missingActions)
+  if (pause) return [...lines, pauseLine(pause)]
   if (s.due > 0) lines.push({ tone: 'warn', icon: <IconDue size={17} className="shrink-0" />, text: plural(s.due, 'relevé à faire', 'relevés à faire') })
   else if (s.missingActions === 0) lines.push({ tone: 'ok', icon: <IconOk size={17} className="shrink-0" />, text: 'Tout est fait' })
   return lines
 }
 
-function temperatureTileLabel(s: TemperatureSummary | null): string {
+function temperatureTileLabel(s: TemperatureSummary | null, pause?: OpeningPause | null): string {
   if (!s) return 'Températures'
   const parts = [
     s.missingActions > 0 ? plural(s.missingActions, 'action corrective manquante', 'actions correctives manquantes') : '',
-    s.due > 0 ? plural(s.due, 'relevé à faire', 'relevés à faire') : '',
+    pause ? `rappels en pause jusqu’au ${pause.until}` : s.due > 0 ? plural(s.due, 'relevé à faire', 'relevés à faire') : '',
   ].filter(Boolean)
   return `Températures : ${parts.length ? parts.join(', ') : s.enclosures ? 'tout est fait' : 'aucune enceinte'}`
 }
@@ -197,8 +202,9 @@ function labelLines(s: DueSummary | null): StatusLine[] | null {
 }
 
 /** Tuile Nettoyage : tâches en retard (rouge / ambre), à faire, checklists à faire. */
-function cleaningLines(s: CleaningStatus | null): StatusLine[] | null {
+function cleaningLines(s: CleaningStatus | null, pause?: OpeningPause | null): StatusLine[] | null {
   if (!s) return null
+  if (pause) return [pauseLine(pause)]
   const { summary: m } = s
   const lines: StatusLine[] = []
   if (m.overdue > 0) lines.push({ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: plural(m.overdue, 'tâche très en retard', 'tâches très en retard') })
@@ -228,8 +234,14 @@ function oilLines(s: OilSummary | null, statuses: readonly VatStatus[]): StatusL
 }
 
 /** Tuile Thermomètres : actions manquantes, sonde hors tolérance, vérification en retard ou proche. */
-function thermometerLines(s: ThermometerSummary | null, statuses: readonly ThermometerStatus[]): StatusLine[] | null {
+function thermometerLines(s: ThermometerSummary | null, statuses: readonly ThermometerStatus[], pause?: OpeningPause | null): StatusLine[] | null {
   if (!s) return null
+  if (pause) {
+    // Pas encore ouvert : seuls les résultats réels restent signalés (hors tolérance, action manquante).
+    const lines = missingLine(s.missingActions)
+    for (const t of statuses) if (t.out && t.missingActions.length === 0) lines.push({ tone: 'danger', icon: <IconError size={17} className="shrink-0" />, text: `${t.name} hors tolérance` })
+    return [...lines, pauseLine(pause)]
+  }
   if (s.thermometers === 0) return [{ tone: 'warn', icon: <IconDue size={17} className="shrink-0" />, text: 'Aucune vérification enregistrée' }]
   const lines = missingLine(s.missingActions)
   for (const t of statuses) {
@@ -293,17 +305,18 @@ export interface TodayScreenProps {
 /** Accueil « Aujourd'hui » : alertes, modules HACCP puis outils. */
 export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperatures, onOpenReception, onOpenProcess, onOpenLabels, onOpenAllergens, onOpenCleaning, onOpenOil, onOpenThermometer, onOpenWaste, onOpenDocuments }: TodayScreenProps) {
   const documents = documentLines(useDocumentReminders(!!onOpenDocuments))
+  const pause = useOpeningPause()
   const { status: cleaningStatus } = useCleaningStatus(60_000)
-  const cleaning = cleaningLines(cleaningStatus)
+  const cleaning = cleaningLines(cleaningStatus, pause)
   const { summary: oilSummary, statuses: vatStatuses } = useOilStatus(60_000)
   const oil = oilLines(oilSummary, vatStatuses)
   const { summary: thermoSummary, statuses: thermoStatuses } = useThermometerStatus(60_000)
-  const thermometer = thermometerLines(thermoSummary, thermoStatuses)
+  const thermometer = thermometerLines(thermoSummary, thermoStatuses, pause)
   const { summary: labelSummary } = useLabelStatus(60_000)
   const labels = labelLines(labelSummary)
   const { summary } = useTemperatureStatus()
   const { summary: processes, data: processData } = useProcessStatus(15_000)
-  const temp = temperatureLines(summary)
+  const temp = temperatureLines(summary, pause)
   const lines = processLines(processes)
   const { summary: receptionSummary, data: receptionData, now: receptionNow } = useReceptionStatus(60_000)
   const reception = receptionLines(receptionSummary, receptionNow, receptionData?.timeZone ?? 'Europe/Paris')
@@ -314,14 +327,23 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
       : [weekWastes > 0
           ? { tone: 'muted', icon: <IconWaste size={17} className="shrink-0" />, text: `${plural(weekWastes, 'produit jeté', 'produits jetés')} en 7 jours` }
           : { tone: 'ok', icon: <IconOk size={17} className="shrink-0" />, text: 'Aucun produit jeté en 7 jours' }]
-  const reminders = cleaningStatus?.summary.checklists ?? []
+  const reminders = pause ? [] : (cleaningStatus?.summary.checklists ?? [])
   const processMissing = processes ? processes.cooling.missingActions + processes.reheating.missingActions + processes.spot.missingActions : 0
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-10 sm:px-6 sm:pt-8">
       <h1 className="mb-6 text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">Aujourd’hui</h1>
 
-      <AlertsPanel onOpenTemperatures={onOpenTemperatures} onOpenProcess={onOpenProcess} />
+      {pause && (
+        <div role="status" className="mb-4 flex items-start gap-3 rounded-2xl border border-line bg-surface px-4 py-3.5 shadow-card sm:px-5">
+          <IconDue size={22} className="mt-0.5 shrink-0 text-accent" />
+          <p className="min-w-0 flex-1 text-[16px] text-fg">
+            <span className="font-semibold">Pas encore ouvert : alertes et rappels en pause jusqu’au {pause.until}.</span>{' '}
+            <span className="text-fg-muted">Vous pouvez faire des saisies d’essai. Pour changer la date : Gestion › Réglages.</span>
+          </p>
+        </div>
+      )}
+      {pause === null && <AlertsPanel onOpenTemperatures={onOpenTemperatures} onOpenProcess={onOpenProcess} />}
 
       {summary && summary.missingActions > 0 && (
         <div role="alert" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-danger/35 bg-danger-soft px-4 py-3.5 sm:px-5">
@@ -367,7 +389,7 @@ export function TodayScreen({ onOpenSystemTest, onOpenManagement, onOpenTemperat
             description="Frigos et congélateurs"
             status={<StatusLines lines={temp} />}
             tone={tileTone(temp)}
-            ariaLabel={temperatureTileLabel(summary)}
+            ariaLabel={temperatureTileLabel(summary, pause)}
             onClick={onOpenTemperatures}
           />
           <Tile

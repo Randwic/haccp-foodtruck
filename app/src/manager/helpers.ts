@@ -2,6 +2,7 @@
 import type { EquipmentKind, RecordType } from '../../../shared/types.ts'
 import { ALLERGENS, DOCUMENT_MAX_BYTES, type Allergen, type Checklist, type ChecklistItem, type CleaningFrequency, type DocumentCategory, type DocumentRef } from '../../../shared/payloads.ts'
 import { STORAGE_KINDS } from '../../../shared/validation.ts'
+import { isValidOpeningDate } from '../../../shared/opening.ts'
 import type { ChecklistInput, CleaningTaskInput, DocumentInput, ProductInput, RecipeInput } from './api.ts'
 
 /** Nom proposé pour l'appareil : « iPad », « iPhone »… (modifiable par l'utilisateur). */
@@ -426,5 +427,12 @@ export function documentFileError(file: { type: string; size: number }): string 
   if (!documentMime(file.type)) return 'Format non accepté : PDF ou photo (JPEG, PNG, WebP) seulement.'
   if (file.size <= 0) return 'Le fichier est vide.'
   if (file.size > DOCUMENT_MAX_BYTES) return 'Fichier trop lourd (10 Mo au maximum).'
+  return null
+}
+
+/** Date d'ouverture : null (déjà ouvert) ou « AAAA-MM-JJ » réelle entre 2020 et 2100 (contrainte de la base). */
+export function openingDateError(v: string | null | undefined): string | null {
+  if (v === null || v === undefined) return null
+  if (!isValidOpeningDate(v) || v < '2020-01-01' || v > '2100-12-31') return 'Date d’ouverture invalide.'
   return null
 }

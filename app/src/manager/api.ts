@@ -63,6 +63,8 @@ export interface ManagerSettings {
   thermometer_tolerance_c: number
   /** Lot 9 : vérifier chaque thermomètre au moins tous les N jours (1..365). */
   thermometer_check_days: number
+  /** Jour d'ouverture « AAAA-MM-JJ » : avant, alertes et rappels en pause. null = déjà ouvert. */
+  opening_date?: string | null
 }
 
 /** Fournisseur saisi par le gérant (téléphone et email facultatifs : null pour effacer). */

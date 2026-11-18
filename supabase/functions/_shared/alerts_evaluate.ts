@@ -7,7 +7,8 @@ import { secretsEqual } from './crypto.ts'
 import type { EmailSender } from './email.ts'
 import { HttpError, jsonResponse, withHttp, type HttpEnv, type Logger } from './http.ts'
 import type { AlertsRepo, PushSubscriptionRow } from './repo.ts'
-import { formatLocalMoment, safeTimeZone } from './schedule.ts'
+import { formatLocalMoment, safeTimeZone, zonedTimeToDate } from './schedule.ts'
+import { isBeforeOpening, isValidOpeningDate } from '../../../shared/opening.ts'
 import type { PushMessage, WebPushSender } from './webpush.ts'
 
 export const ALERTS_SECRET_HEADER = 'x-alerts-secret'
@@ -23,6 +24,8 @@ export interface AlertsRunResult {
   resolved: number
   open: number
   notified: number
+  /** Établissement pas encore ouvert (settings.opening_date) : moteur en pause. */
+  paused?: boolean
   push: { enabled: boolean; sent: number; failed: number; removed: number }
   email: 'disabled' | 'skipped' | 'sent' | 'failed'
 }
@@ -40,6 +43,19 @@ export function pushMessageFor(a: Alert): PushMessage {
   return { title: alertTitle(a.kind), body: a.message, url: '/', tag: a.id, alert_id: a.id, kind: a.kind }
 }
 
+/**
+ * Début de la surveillance des relevés : premier enrôlement d'un appareil, et pas avant le jour
+ * d'ouverture (0 h, heure locale) — les créneaux d'avant l'ouverture ne déclenchent rien.
+ */
+export function monitoringStartOf(firstEnrolled: string | null, openingDate: string | null | undefined, timeZone: string): Date | null {
+  if (!firstEnrolled) return null
+  const enrolled = new Date(firstEnrolled)
+  if (!isValidOpeningDate(openingDate)) return enrolled
+  const [year, month, day] = openingDate.split('-').map(Number)
+  const opening = zonedTimeToDate({ year, month, day }, 0, 0, timeZone)
+  return opening.getTime() > enrolled.getTime() ? opening : enrolled
+}
+
 export async function runAlertsEvaluation(deps: AlertsRunDeps): Promise<AlertsRunResult> {
   const { repo, logger } = deps
   const now = deps.now()
@@ -53,6 +69,23 @@ export async function runAlertsEvaluation(deps: AlertsRunDeps): Promise<AlertsRu
   ])
   if (!settings) throw new HttpError(503, 'not_configured', 'paramètres absents')
   const timeZone = safeTimeZone(establishment?.timezone)
+
+  // Pas encore ouvert : aucune alerte ni notification ; celles restées ouvertes (essais) sont résolues.
+  if (isBeforeOpening(settings.opening_date, now, timeZone)) {
+    const stale = openBefore.filter((a) => a.resolved_at === null).map((a) => a.id)
+    if (stale.length > 0) await repo.resolveAlerts(stale)
+    for (const id of stale) logger.log('info', 'alert_resolved', { alert_id: id, reason: 'before_opening' })
+    return {
+      ok: true,
+      opened: 0,
+      resolved: stale.length,
+      open: 0,
+      notified: 0,
+      paused: true,
+      push: { enabled: deps.push !== null, sent: 0, failed: 0, removed: 0 },
+      email: deps.email.enabled && settings.email_alerts ? 'skipped' : 'disabled',
+    }
+  }
 
   const maxTolerance = Math.max(0, ...thresholds.map((t) => t.tolerance_minutes), 30)
   const readingsSince = new Date(now.getTime() - (ALERT_RULES.readingsLookbackHours * 60 + maxTolerance) * 60_000).toISOString()
@@ -78,7 +111,7 @@ export async function runAlertsEvaluation(deps: AlertsRunDeps): Promise<AlertsRu
     readings,
     records,
     openAlerts: openBefore,
-    monitoringStart: firstEnrolled ? new Date(firstEnrolled) : null,
+    monitoringStart: monitoringStartOf(firstEnrolled, settings.opening_date, timeZone),
   })
 
   // Résoudre d'abord (libère l'index « une alerte ouverte par sujet »), puis ouvrir.

@@ -209,6 +209,25 @@ describe('Gestion – réglages', () => {
     expect(screen.getByRole('button', { name: 'Retirer l’heure 08:00' })).toBeDisabled()
   })
 
+  it('« Pas encore ouvert » : date d’ouverture enregistrée, puis retirée ; date invalide refusée', async () => {
+    const manager = await openManagement()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Réglages' }))
+    const sw = await screen.findByRole('switch', { name: 'Pas encore ouvert' })
+    expect(sw).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(sw)
+    expect(sw).toHaveAttribute('aria-checked', 'true')
+    type('Date d’ouverture', '2027-03-01')
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les réglages' }))
+    expect(await screen.findByText('Réglages enregistrés')).toBeInTheDocument()
+    expect(await manager.getSettings()).toMatchObject({ opening_date: '2027-03-01' })
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Pas encore ouvert' }))
+    expect(screen.queryByLabelText('Date d’ouverture')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les réglages' }))
+    await waitFor(async () => expect(await manager.getSettings()).toMatchObject({ opening_date: null }))
+    await expect(manager.saveSettings({ opening_date: '2027-02-30' })).rejects.toThrow(/invalide/)
+  })
+
   it('report du créneau oublié (interrupteur) et DLC après décongélation (0 à 30 jours)', async () => {
     const manager = await openManagement()
     fireEvent.click(await screen.findByRole('tab', { name: 'Réglages' }))

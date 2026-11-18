@@ -150,4 +150,6 @@ export interface Settings {
   thermometer_check_days: number // vérification d'un thermomètre au moins tous les N jours (défaut 30), 1..365
   sensor_silent_minutes: number // capteur muet au-delà (défaut 60, 15..1440) — lot 6
   alert_repeat_minutes: number // rappel d'une alerte non prise en compte (défaut 15, 5..1440) — lot 6
+  /** Jour d'ouverture « AAAA-MM-JJ » (heure locale) : avant, alertes et rappels en pause. null / absent = déjà ouvert. */
+  opening_date?: string | null
 }

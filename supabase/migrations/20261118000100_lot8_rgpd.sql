@@ -131,15 +131,17 @@ begin
   end if;
 
   -- RGPD : nom d'un membre effacé retiré de ses lignes d'audit (display_name seulement).
-  if tg_table_name = 'audit_log' and tg_op = 'UPDATE' and v_owner
-     and old.table_name = 'staff'
-     and coalesce(current_setting('haccp.staff_forget', true), '') = old.row_id
-     and new.id = old.id and new.at = old.at and new.actor = old.actor and new.table_name = old.table_name
-     and new.row_id = old.row_id and new.action = old.action
-     and (new.old is null) = (old.old is null) and (new.new is null) = (old.new is null)
-     and (new.old is null or (new.old - 'display_name') = (old.old - 'display_name'))
-     and (new.new is null or (new.new - 'display_name') = (old.new - 'display_name')) then
-    return new;
+  -- (conditions imbriquées : old.table_name n'existe que sur audit_log)
+  if tg_table_name = 'audit_log' and tg_op = 'UPDATE' and v_owner then
+    if old.table_name = 'staff'
+       and coalesce(current_setting('haccp.staff_forget', true), '') = old.row_id
+       and new.id = old.id and new.at = old.at and new.actor = old.actor and new.table_name = old.table_name
+       and new.row_id = old.row_id and new.action = old.action
+       and (new.old is null) = (old.old is null) and (new.new is null) = (old.new is null)
+       and (new.old is null or (new.old - 'display_name') = (old.old - 'display_name'))
+       and (new.new is null or (new.new - 'display_name') = (old.new - 'display_name')) then
+      return new;
+    end if;
   end if;
 
   raise exception 'HACCP: % interdit sur %.% (registre en insertion seule)', tg_op, tg_table_schema, tg_table_name
@@ -280,11 +282,3 @@ begin
   end if;
 end;
 $$;
-
--- ---------------------------------------------------------------------------
--- 6. Vue staff_public (export) : colonnes RGPD en plus
--- ---------------------------------------------------------------------------
-create or replace view public.staff_public with (security_invoker = true) as
-  select s.id, s.display_name, s.role, s.active, s.created_at, s.updated_at,
-         s.deactivated_at, s.privacy_notice_on, s.forgotten_at
-    from public.staff s;

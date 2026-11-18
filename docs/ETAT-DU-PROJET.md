@@ -8,7 +8,8 @@
 - Fonctions Supabase **redéployées** (`deploy-supabase.sh … functions`, environnement « haccp-foodtruck » avec accès à api.supabase.com). Migrations : toutes déjà appliquées (16), rien relancé côté base, données réelles intactes.
 - `LABEL_TRACES_IN_REGISTRY = true` (traces imprimées enregistrées dans le registre).
 - Clé `sb_publishable_…` lue via l'API de gestion et posée dans `app/.env.production` (`VITE_SUPABASE_PUBLISHABLE_KEY`, l'ancienne clé anon reste en secours). Vérifié : `health` et `bootstrap-status` répondent avec la nouvelle clé seule.
-- Branche `claude/project-thread-71o4c2` : la fusion met l'app en ligne (accord de Cédric). Après fusion : vérifier sync, photos, enrôlement, connexion gérant sur l'iPad.
+- Mis en ligne (PR n°3, accord de Cédric, 03:04 UTC).
+- Puis (PR n°4) : à l'achat et en « produit jeté », le champ Produit propose les **produits de Gestion** (recherche dès les premières lettres, sans accents ; bouton « Choisir dans mes produits (N) » = liste complète). Choisir un produit reprend sa conservation. `ProductField` accepte `catalog`, `matchCatalog()` dans `processes/common.tsx`, `ReceptionData.catalog`. Demandé par Cédric (« je suis obligé de taper à la main »).
 
 ## 0. Session précédente (18/11/2026 nuit) : lot 3 bis « Achats » + corrections techniques
 Branche `claude/project-thread-s0d29q` (poussée, **pas fusionnée** : la fusion met en ligne, accord de Cédric requis). Le lot 7 était déjà fusionné dans `main`.

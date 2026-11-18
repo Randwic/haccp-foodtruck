@@ -339,10 +339,10 @@ insert into public.checklists (id, name, kind, items, active) values
      {"id": "nuisibles",     "label": "Pas de nuisibles constatés", "required": true}
    ]'::jsonb, true),
   ('00000000-0000-4000-8000-000000000552', 'Fermeture (fin de service)', 'closing', '[
-     {"id": "restes",           "label": "Restes réchauffés et tenus au chaud jetés (viande, poivrons, sauce cheddar)", "required": true},
+     {"id": "restes",           "label": "Restes réchauffés et tenus au chaud jetés (viande, poivrons, sauce cheddar) et mélange chutney-bacon", "required": true},
      {"id": "flacons",          "label": "Flacons de sauce entamés jetés (jamais reversés dans le bac)", "required": true},
-     {"id": "creme_patissiere", "label": "Crème pâtissière restante jetée", "required": true},
-     {"id": "samedi",           "label": "Samedi : sauces maison froides et chutney au bacon restants jetés", "required": false},
+     {"id": "creme_patissiere", "label": "Crème pâtissière : étiquette vérifiée, jetée si plus de 48 h", "required": true},
+     {"id": "samedi",           "label": "Samedi : sauces maison froides restantes jetées", "required": false},
      {"id": "produits_entames", "label": "Produits entamés fermés, étiquetés (date d''ouverture), au frigo", "required": true},
      {"id": "vaisselle",        "label": "Vaisselle sale dans le bac fermé", "required": true},
      {"id": "temperatures",     "label": "Températures relevées en fin de service", "required": true},

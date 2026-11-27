@@ -85,10 +85,10 @@ describe('DLC (fuseau Europe/Paris)', () => {
     expect(dlcFromDate('2026-11-18', TZ).toISOString()).toBe('2026-11-18T22:59:00.000Z')
   })
 
-  it('contrôles du contrat : après la fabrication, 90 jours au plus', () => {
+  it('contrôles du contrat : après la fabrication, 3 ans au plus', () => {
     const made = new Date('2026-11-15T10:00:00.000Z')
     expect(dlcProblem(made, new Date('2026-11-15T09:00:00.000Z'))).toMatch(/postérieure/)
-    expect(dlcProblem(made, computeDlc(made, 91 * 24))).toMatch(/90 jours/)
+    expect(dlcProblem(made, computeDlc(made, 1097 * 24))).toMatch(/3 ans/)
     expect(dlcProblem(made, computeDlc(made, 72))).toBeNull()
     expect(dlcProblem(made, null)).toMatch(/invalide/)
   })

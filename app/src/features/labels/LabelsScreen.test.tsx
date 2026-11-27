@@ -167,12 +167,12 @@ describe('parcours', () => {
     await openLabels()
     press(/^Ouverture d’un produit/)
     fireEvent.click(await screen.findByRole('button', { name: /^Ouvrir .*, lot N374/ }))
-    // DDM du 08/09/2027 : plus de 90 jours après l'ouverture (15/11/2026) → ramenée au 12/02/2027.
-    expect(await screen.findByLabelText('Date limite de consommation')).toHaveValue('2027-02-12')
-    expect(screen.getByText(/la DDM saisie aux Achats \(08\/09\/2027\) est ramenée à 90 jours/)).toBeInTheDocument()
+    // DDM lointaine (08/09/2027) : recopiée telle quelle, c'est la date du fabricant qui fait foi.
+    expect(await screen.findByLabelText('Date limite de consommation')).toHaveValue('2027-09-08')
+    expect(screen.getByText(/la DDM saisie aux Achats est recopiée/)).toBeInTheDocument()
     await printAndConfirm()
     const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
-    expect(p).toMatchObject({ lot: 'N374', dlc_at: '2027-02-12T22:59:00.000Z' })
+    expect(p).toMatchObject({ lot: 'N374', dlc_at: '2027-09-08T21:59:00.000Z' })
   })
 
   it('préparation maison : recette → allergènes calculés, DLC modifiée avant impression, lot interne', async () => {

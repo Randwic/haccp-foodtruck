@@ -61,6 +61,8 @@ export interface LabelDraft {
   lotSource?: string
   /** DLC d'origine du fabricant saisie à la réception (AAAA-MM-JJ) : la DLC après ouverture ne la dépasse pas. */
   originalDlc?: string
+  /** DDM saisie à la réception (AAAA-MM-JJ), quand il n'y a pas de DLC : recopiée pour un produit « selon l'étiquette », jamais bloquante. */
+  originalDdm?: string
 }
 
 /** Mention sous le champ de DLC quand elle est lue sur l'emballage. */
@@ -232,34 +234,43 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
   const [lot, setLot] = useState(draft.lot ?? single?.lot ?? '')
   const [lotSource, setLotSource] = useState<string | null>(draft.lotSource ?? single?.receptionId ?? null)
   const [originalDlc, setOriginalDlc] = useState<string | undefined>(draft.originalDlc ?? single?.dlc)
+  const [originalDdm, setOriginalDdm] = useState<string | undefined>(draft.originalDdm ?? (single?.dlc ? undefined : single?.ddm))
+  /** Date d'achat à recopier pour un produit « selon l'étiquette » : la DLC, sinon la DDM. */
+  const purchaseDate = originalDlc ?? originalDdm
+  const purchaseKind = originalDlc ? 'DLC' : 'DDM'
   const proposed = manual ? { dlc: null, capped: false } : capByOriginalDlc(base.dlc, originalDlc, tz)
   const dlcOrigin = proposed.capped ? `DLC d’origine du fabricant (plus courte que ${base.dlcOrigin})` : base.dlcOrigin
   /** DLC d'achat encore valable à l'ouverture (AAAA-MM-JJ), sinon undefined. */
   const usablePurchaseDlc = (d: string | undefined) => (d && dlcFromDate(d, tz).getTime() > draft.madeAt.getTime() ? d : undefined)
+  /** Dernier jour accepté sur une étiquette (au plus 90 jours après l'ouverture), AAAA-MM-JJ. */
+  const lastLabelDay = toLocalInputs(new Date(draft.madeAt.getTime() + LIMITS.labelMaxShelfLifeMs - 86_400_000), tz).date
+  /** Date d'achat telle qu'elle peut figurer sur l'étiquette : ramenée à 90 jours si elle est plus lointaine. */
+  const onLabel = (d: string) => (d > lastLabelDay ? lastLabelDay : d)
   /** Champs pré-remplis : DLC calculée (bornée par la DLC d'achat) ou, « selon l'étiquette », la DLC d'achat recopiée. */
   const prefill = (computed: Date | null, purchaseDlc: string | undefined) => {
     if (computed === null) {
       const d = usablePurchaseDlc(purchaseDlc)
-      return d ? { date: d, time: '' } : { date: '', time: '' }
+      return d ? { date: onLabel(d), time: '' } : { date: '', time: '' }
     }
     const next = capByOriginalDlc(computed, purchaseDlc, tz).dlc
     return next ? toLocalInputs(next, tz) : { date: '', time: '' }
   }
-  const initial = prefill(base.dlc, originalDlc)
+  const initial = base.dlc === null ? prefill(null, purchaseDate) : prefill(base.dlc, originalDlc)
   const [date, setDate] = useState(initial.date)
   const [time, setTime] = useState(initial.time)
   const [copies, setCopies] = useState(1)
   const [confirm, setConfirm] = useState(false)
 
   /** Choix d'un lot reçu : sa DLC d'origine peut raccourcir la DLC proposée. */
-  const chooseLot = (value: string, source: string | null, dlcOfLot: string | undefined) => {
+  const chooseLot = (value: string, source: string | null, dlcOfLot: string | undefined, ddmOfLot?: string) => {
     setLot(value)
     setLotSource(source)
     setOriginalDlc(source ? dlcOfLot : undefined)
+    setOriginalDdm(source && !dlcOfLot ? ddmOfLot : undefined)
     // Date pas encore retouchée à la main : elle suit le lot choisi.
-    const untouched = manual ? date === '' || date === originalDlc : date === initial.date && time === initial.time
+    const untouched = manual ? date === '' || (purchaseDate !== undefined && date === onLabel(purchaseDate)) : date === initial.date && time === initial.time
     if (untouched) {
-      const v = prefill(base.dlc, source ? dlcOfLot : undefined)
+      const v = manual ? prefill(null, source ? (dlcOfLot ?? ddmOfLot) : undefined) : prefill(base.dlc, source ? dlcOfLot : undefined)
       if (v.date || manual) {
         setDate(v.date)
         setTime(v.time)
@@ -369,7 +380,8 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                       onClick={() => {
                         setProductId(p.id)
                         if (draft.kind !== 'opened' || draft.product) return
-                        const v = prefill(draftFor('opened', p, draft.madeAt).dlc, originalDlc)
+                        const computed = draftFor('opened', p, draft.madeAt).dlc
+                        const v = computed === null ? prefill(null, purchaseDate) : prefill(computed, originalDlc)
                         setDate(v.date)
                         setTime(v.time)
                       }}
@@ -386,22 +398,24 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                 <IconInfo size={20} className="mt-px shrink-0 text-warn" />
                 <span>
                   Durée après ouverture <span className="font-semibold">selon l’étiquette du fabricant</span> :{' '}
-                  {originalDlc && date === originalDlc
-                    ? 'la DLC saisie aux Achats est recopiée. Raccourcissez-la si l’emballage indique une durée plus courte après ouverture.'
+                  {purchaseDate && date === onLabel(purchaseDate)
+                    ? date === purchaseDate
+                      ? `la ${purchaseKind} saisie aux Achats est recopiée. Raccourcissez-la si l’emballage indique une durée plus courte après ouverture.`
+                      : `la ${purchaseKind} saisie aux Achats (${formatLabelDateTime(dlcFromDate(purchaseDate, tz), tz).slice(0, 10)}) est ramenée à 90 jours après ouverture, le maximum d’une étiquette. Raccourcissez-la si l’emballage l’exige.`
                     : 'recopiez la date limite indiquée sur l’emballage (après ouverture).'}
                 </span>
               </p>
             )}
-            {manual && originalDlc && usablePurchaseDlc(originalDlc) && date !== originalDlc && (
+            {manual && purchaseDate && usablePurchaseDlc(purchaseDate) && date !== onLabel(purchaseDate) && (
               <div className="mb-3">
                 <Button
                   variant="secondary"
                   onClick={() => {
-                    setDate(originalDlc)
+                    setDate(onLabel(purchaseDate))
                     setTime('')
                   }}
                 >
-                  Reprendre la DLC d’achat : {formatLabelDateTime(dlcFromDate(originalDlc, tz), tz).slice(0, 10)}
+                  Reprendre la {purchaseKind} d’achat : {formatLabelDateTime(dlcFromDate(onLabel(purchaseDate), tz), tz).slice(0, 10)}
                 </Button>
                 <p className="mt-1.5 text-[14px] text-fg-muted">Seulement si l’emballage n’indique pas une durée plus courte après ouverture.</p>
               </div>
@@ -448,7 +462,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
             value={lot}
             onChange={(v) => {
               const match = lots.find((l) => l.lot === v.trim())
-              chooseLot(v, match?.receptionId ?? null, match?.dlc)
+              chooseLot(v, match?.receptionId ?? null, match?.dlc, match?.ddm)
             }}
             maxLength={LIMITS.lotMax}
             autoCapitalize="characters"
@@ -462,12 +476,12 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                       className={chipClass(lotSource === l.receptionId && lot.trim() === l.lot)}
                       aria-pressed={lotSource === l.receptionId && lot.trim() === l.lot}
                       aria-label={`Lot ${l.lot}, reçu le ${formatLabelDateTime(l.receivedAt, tz).slice(0, 5)}`}
-                      onClick={() => chooseLot(l.lot, l.receptionId, l.dlc)}
+                      onClick={() => chooseLot(l.lot, l.receptionId, l.dlc, l.ddm)}
                     >
                       {l.lot}
                       <span className="ml-1.5 font-normal opacity-80">
                         reçu {formatLabelDateTime(l.receivedAt, tz).slice(0, 5)}
-                        {l.dlc && ` · DLC ${l.dlc.slice(8, 10)}/${l.dlc.slice(5, 7)}`}
+                        {l.dlc ? ` · DLC ${l.dlc.slice(8, 10)}/${l.dlc.slice(5, 7)}` : l.ddm && ` · DDM ${l.ddm.slice(8, 10)}/${l.ddm.slice(5, 7)}`}
                       </span>
                     </button>
                   ))}

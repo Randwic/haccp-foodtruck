@@ -31,3 +31,21 @@
     page-break-after: auto;
   }
 }
+
+/* Champs date / heure sur iPhone : vides, Safari leur donne une largeur propre qui déborde de l'écran
+   et une hauteur réduite. On les ramène à la largeur de leur case. */
+@layer base {
+  input[type='date'],
+  input[type='time'] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+  }
+  input[type='date']::-webkit-date-and-time-value,
+  input[type='time']::-webkit-date-and-time-value {
+    text-align: left;
+    min-height: 1.5em;
+  }
+}

@@ -158,6 +158,23 @@ describe('parcours', () => {
     expect(p).toMatchObject({ product_id: MENU_PRODUCTS[4].id, dlc_at: '2026-12-20T22:59:00.000Z', lot: 'MY77', source_record_ids: ['11111111-0000-4000-8000-000000000004'] })
   })
 
+  it('ouverture d’un achat avec seulement une DDM (« de préférence ») : la DDM est recopiée', async () => {
+    const core = setup({
+      products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS],
+      recipes: [...DEMO_RECIPES, ...MENU_RECIPES],
+      initialRecords: [reception('11111111-0000-4000-8000-000000000005', [{ product: 'Mayonnaise (seau)', lot: 'N374', ddm: '2027-09-08', storage: 'ambient', accepted: true }])],
+    })
+    await openLabels()
+    press(/^Ouverture d’un produit/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Ouvrir .*, lot N374/ }))
+    // DDM du 08/09/2027 : plus de 90 jours après l'ouverture (15/11/2026) → ramenée au 12/02/2027.
+    expect(await screen.findByLabelText('Date limite de consommation')).toHaveValue('2027-02-12')
+    expect(screen.getByText(/la DDM saisie aux Achats \(08\/09\/2027\) est ramenée à 90 jours/)).toBeInTheDocument()
+    await printAndConfirm()
+    const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
+    expect(p).toMatchObject({ lot: 'N374', dlc_at: '2027-02-12T22:59:00.000Z' })
+  })
+
   it('préparation maison : recette → allergènes calculés, DLC modifiée avant impression, lot interne', async () => {
     const core = setup()
     await openLabels()

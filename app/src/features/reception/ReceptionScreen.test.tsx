@@ -121,6 +121,21 @@ describe('Réception d’une livraison', () => {
     expect(p.items.map((i) => i.lot)).toEqual(['L1', 'C2'])
   })
 
+  it('boutons retour : produit → liste, produits → fournisseur, fournisseur → Achats', async () => {
+    setup()
+    await startDelivery()
+    press('Ajouter le premier produit acheté')
+    await screen.findByRole('heading', { name: 'Ajouter un produit' })
+    press('Liste des produits')
+    await screen.findByRole('button', { name: 'Ajouter le premier produit acheté' })
+    press('Fournisseur et transport')
+    await screen.findByText('Fournisseur / magasin')
+    press('Achats')
+    // Fournisseur déjà choisi : confirmation avant d'abandonner.
+    press('Abandonner')
+    await screen.findByRole('heading', { name: 'Achats & réception', level: 1 })
+  })
+
   it('ligne refusée : motif obligatoire, refus mis en évidence', async () => {
     const core = setup()
     await startDelivery(PRIMEURS.name)

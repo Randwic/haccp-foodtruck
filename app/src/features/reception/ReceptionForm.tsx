@@ -85,6 +85,8 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
   const [draft, setDraft] = useState<Draft>(() => draftOf(correcting))
   const [step, setStep] = useState<Step>('delivery')
   const [editing, setEditing] = useState<{ index: number | null } | null>(null)
+  /** Compteur des saisies enchaînées : chaque nouveau produit repart d'un formulaire vide. */
+  const [round, setRound] = useState(0)
   const [addSupplier, setAddSupplier] = useState(false)
   const [extraSuppliers, setExtraSuppliers] = useState<Supplier[]>([])
   const [confirmCancel, setConfirmCancel] = useState(false)
@@ -131,6 +133,7 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
     const others = total - (current?.photo_paths?.length ?? 0)
     return (
       <ItemEditor
+        key={round}
         item={current}
         suggestions={suggestions}
         catalog={data.catalog}
@@ -146,6 +149,15 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
           set({ items })
           setEditing(null)
         }}
+        onSaveAndNext={
+          editing.index === null && draft.items.length + 1 < LIMITS.receptionItemsMax
+            ? (it) => {
+                set({ items: [...draft.items, it] })
+                setRound((r) => r + 1)
+                window.scrollTo?.({ top: 0 })
+              }
+            : undefined
+        }
       />
     )
   }

@@ -101,6 +101,26 @@ describe('Réception d’une livraison', () => {
     await waitFor(() => expect(screen.queryByText(/photos en attente d’envoi\./)).toBeNull())
   })
 
+  it('plusieurs produits d’affilée : « Valider et ajouter un autre produit » rouvre une saisie vide', async () => {
+    const core = setup()
+    await startDelivery()
+    press('Ajouter le premier produit acheté')
+    await fillItem({ product: 'Steak haché', lot: 'L1', temp: '2,8', decision: 'Accepté' })
+    press('Valider et ajouter un autre produit')
+    expect(await screen.findByRole('heading', { name: 'Ajouter un produit' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Produit')).toHaveValue('')
+    expect(screen.getByLabelText('N° de lot')).toHaveValue('')
+    await fillItem({ product: 'Cheddar', lot: 'C2', temp: '3', decision: 'Accepté' })
+    press('Valider ce produit')
+    expect(await screen.findByText(/^Lot L1 ·/)).toBeInTheDocument()
+    expect(screen.getByText(/^Lot C2 ·/)).toBeInTheDocument()
+    press('Continuer : validation')
+    press('Enregistrer l’approvisionnement')
+    await screen.findByRole('heading', { name: 'Achats & réception', level: 1 })
+    const p = (await lastOf(core, 'reception')).payload as unknown as ReceptionPayload
+    expect(p.items.map((i) => i.lot)).toEqual(['L1', 'C2'])
+  })
+
   it('ligne refusée : motif obligatoire, refus mis en évidence', async () => {
     const core = setup()
     await startDelivery(PRIMEURS.name)

@@ -4,7 +4,7 @@ import type { ReceptionItem } from '../../../../shared/payloads.ts'
 import { LIMITS } from '../../../../shared/validation.ts'
 import { Button, Notice, TemperatureInput, TextField } from '../../ui/components/index.ts'
 import { useCore } from '../../ui/CoreContext.tsx'
-import { IconBan, IconBarcode, IconCheck, IconScanText, IconFridge, IconOk, IconSnowflake, IconBox, IconWarn, type IconProps } from '../../ui/icons.tsx'
+import { IconBan, IconBarcode, IconCheck, IconPlus, IconScanText, IconFridge, IconOk, IconSnowflake, IconBox, IconWarn, type IconProps } from '../../ui/icons.tsx'
 import { PhotoPicker } from '../../ui/photos/Photos.tsx'
 import { describeThreshold, formatTemperature } from '../../ui/temperature.ts'
 import { chipClass, ProductField, StickyActions } from '../processes/common.tsx'
@@ -39,10 +39,12 @@ interface Props {
   /** Chemins déjà enregistrés (version précédente) : jamais effacés de l'appareil. */
   keepPhotos: readonly string[]
   onSave: (item: DraftItem) => void
+  /** Nouveau produit : valider et ouvrir tout de suite une saisie vide pour le suivant (absent = pas de place). */
+  onSaveAndNext?: (item: DraftItem) => void
   onCancel: () => void
 }
 
-export function ItemEditor({ item, suggestions, catalog = [], knownGtins, remainingPhotos, today, keepPhotos, onSave, onCancel }: Props) {
+export function ItemEditor({ item, suggestions, catalog = [], knownGtins, remainingPhotos, today, keepPhotos, onSave, onSaveAndNext, onCancel }: Props) {
   const ext = receptionExtensions()
   const core = useCore()
   const [product, setProduct] = useState(item?.product ?? '')
@@ -88,10 +90,11 @@ export function ItemEditor({ item, suggestions, catalog = [], knownGtins, remain
     return { ...it, ...over }
   }
 
-  const submit = () => {
+  const submit = (next = false) => {
     if (missing.length) return
     if (decision === 'accepted' && out) return setConfirmOut(true)
-    onSave(build())
+    if (next && onSaveAndNext) onSaveAndNext(build())
+    else onSave(build())
   }
 
   /**
@@ -306,9 +309,14 @@ export function ItemEditor({ item, suggestions, catalog = [], knownGtins, remain
           </div>
         ) : (
           <StickyActions>
-            <Button size="lg" block onClick={submit} disabled={missing.length > 0} icon={<IconCheck size={22} strokeWidth={2.25} />}>
+            <Button size="lg" block onClick={() => submit()} disabled={missing.length > 0} icon={<IconCheck size={22} strokeWidth={2.25} />}>
               Valider ce produit
             </Button>
+            {!item && onSaveAndNext && (
+              <Button size="lg" block variant="secondary" onClick={() => submit(true)} disabled={missing.length > 0} icon={<IconPlus size={22} strokeWidth={2.25} />}>
+                Valider et ajouter un autre produit
+              </Button>
+            )}
             {missing.length > 0 && <p className="text-[14px] text-fg-subtle">À indiquer : {missing.join(', ')}.</p>}
             <Button
               variant="ghost"

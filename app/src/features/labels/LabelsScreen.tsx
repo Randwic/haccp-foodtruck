@@ -460,10 +460,10 @@ function Picker({ kind, data, now, onPick }: { kind: LabelKind; data: LabelData;
     const base: LabelDraft = r.catalog
       ? draftFor('opened', r.catalog, madeAt)
       : { kind: 'opened', madeAt, dlc: null, dlcOrigin: MANUFACTURER_DLC_ORIGIN, sourceIds: [], thawProductName: r.product }
-    onPick({ ...base, lot: r.lot, lotSource: r.lot ? r.receptionId : undefined, originalDlc: r.dlc, sourceIds: r.lot ? [] : [r.receptionId] })
+    onPick({ ...base, lot: r.lot, lotSource: r.lot ? r.receptionId : undefined, originalDlc: r.dlc, originalDdm: r.dlc ? undefined : r.ddm, sourceIds: r.lot ? [] : [r.receptionId] })
   }
   const receivedLine = (r: ReceivedForOpening) =>
-    [r.lot && `Lot ${r.lot}`, r.dlc && `DLC d’origine ${r.dlc.slice(8, 10)}/${r.dlc.slice(5, 7)}/${r.dlc.slice(0, 4)}`].filter(Boolean).join(' · ')
+    [r.lot && `Lot ${r.lot}`, r.dlc ? `DLC d’origine ${r.dlc.slice(8, 10)}/${r.dlc.slice(5, 7)}/${r.dlc.slice(0, 4)}` : r.ddm && `DDM ${r.ddm.slice(8, 10)}/${r.ddm.slice(5, 7)}/${r.ddm.slice(0, 4)}`].filter(Boolean).join(' · ')
 
   return (
     <>

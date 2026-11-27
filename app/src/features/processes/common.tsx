@@ -13,7 +13,7 @@ import type { Urgency } from './timing.ts'
 
 export function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button variant="ghost" onClick={onClick} icon={<IconChevronLeft size={22} />} className="-ml-3 mb-2 px-3 text-accent">
+    <Button variant="ghost" onClick={onClick} icon={<IconChevronLeft size={22} />} className="-ml-3 mb-2 px-3 text-accent" data-swipe-back="">
       {label}
     </Button>
   )

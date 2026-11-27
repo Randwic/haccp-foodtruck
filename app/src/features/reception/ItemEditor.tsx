@@ -7,7 +7,7 @@ import { useCore } from '../../ui/CoreContext.tsx'
 import { IconBan, IconBarcode, IconCheck, IconPlus, IconScanText, IconFridge, IconOk, IconSnowflake, IconBox, IconWarn, type IconProps } from '../../ui/icons.tsx'
 import { PhotoPicker } from '../../ui/photos/Photos.tsx'
 import { describeThreshold, formatTemperature } from '../../ui/temperature.ts'
-import { chipClass, ProductField, StickyActions } from '../processes/common.tsx'
+import { BackButton, chipClass, ProductField, StickyActions } from '../processes/common.tsx'
 import { receptionExtensions, type LabelReading } from './extensions.ts'
 import { frenchDate, isOutOfRange, PHOTOS_PER_FIELD, REFUSAL_QUICK_REASONS, STORAGE_LABELS, STORAGE_ORDER, storageThreshold, type Storage } from './model.ts'
 
@@ -141,6 +141,13 @@ export function ItemEditor({ item, suggestions, catalog = [], knownGtins, remain
     if (!r || !applyReading(r, 'label')) setNothingRead(!r && !notReady)
   }
 
+  /** Abandon de la saisie : photos prises pendant cette saisie effacées (brouillons). */
+  const cancelEdit = () => {
+    const before = new Set([...(item?.photo_paths ?? []), ...keepPhotos])
+    for (const p of photos) if (!before.has(p)) void core.discardPhoto(p).catch(() => false)
+    onCancel()
+  }
+
   const choiceClass = (active: boolean, tone: 'ok' | 'danger') =>
     `flex min-h-16 flex-1 items-center justify-center gap-2.5 rounded-2xl border-2 px-4 text-[18px] font-semibold transition-colors active:bg-pressed ${
       active ? (tone === 'ok' ? 'border-ok bg-ok-soft text-ok' : 'border-danger bg-danger-soft text-danger') : 'border-line-strong bg-elevated text-fg'
@@ -149,7 +156,10 @@ export function ItemEditor({ item, suggestions, catalog = [], knownGtins, remain
   return (
     <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] md:gap-10 lg:grid-cols-[minmax(0,1fr)_26rem]">
       <div className="min-w-0 space-y-6">
-        <h2 className="text-[24px] leading-tight font-bold tracking-[-0.02em] text-fg">{item ? 'Modifier le produit' : 'Ajouter un produit'}</h2>
+        <div>
+          <BackButton label="Liste des produits" onClick={cancelEdit} />
+          <h2 className="text-[24px] leading-tight font-bold tracking-[-0.02em] text-fg">{item ? 'Modifier le produit' : 'Ajouter un produit'}</h2>
+        </div>
         <ProductField
           value={product}
           onChange={(v) => {
@@ -321,12 +331,7 @@ export function ItemEditor({ item, suggestions, catalog = [], knownGtins, remain
             <Button
               variant="ghost"
               block
-              onClick={() => {
-                // Photos prises pendant cette saisie abandonnée : effacées (brouillons).
-                const before = new Set([...(item?.photo_paths ?? []), ...keepPhotos])
-                for (const p of photos) if (!before.has(p)) void core.discardPhoto(p).catch(() => false)
-                onCancel()
-              }}
+              onClick={cancelEdit}
             >
               Annuler
             </Button>

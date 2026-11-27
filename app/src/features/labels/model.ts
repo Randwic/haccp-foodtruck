@@ -296,6 +296,8 @@ export interface LotSuggestion {
   receivedAt: string
   product: string
   dlc?: string
+  /** DDM (« à consommer de préférence avant ») saisie à la réception, à défaut de DLC. */
+  ddm?: string
 }
 
 /** Lots acceptés récemment pour ce produit (plus récents d'abord, sans doublon de lot). */
@@ -308,7 +310,7 @@ export function recentLots(receptions: readonly ReceptionEntry[], productName: s
       const key = it.lot.replace(/\s+/g, '').toLowerCase()
       if (seen.has(key) || out.length >= max) continue
       seen.add(key)
-      out.push({ lot: it.lot, receptionId: e.id, receivedAt: e.time, product: it.product, dlc: it.dlc })
+      out.push({ lot: it.lot, receptionId: e.id, receivedAt: e.time, product: it.product, dlc: it.dlc, ddm: it.ddm })
     }
   }
   return out
@@ -325,6 +327,8 @@ export interface ReceivedForOpening {
   lot?: string
   /** DLC d'origine du fabricant (AAAA-MM-JJ). */
   dlc?: string
+  /** DDM du fabricant (AAAA-MM-JJ), à défaut de DLC. */
+  ddm?: string
 }
 
 /**
@@ -338,13 +342,13 @@ export function receivedForOpening(receptions: readonly ReceptionEntry[], produc
   for (const e of [...receptions].sort((a, b) => b.time.localeCompare(a.time))) {
     for (const it of e.payload.items) {
       if (out.length >= max) return out
-      if (!it.accepted || it.storage === 'freezer' || (!it.lot && !it.dlc)) continue
+      if (!it.accepted || it.storage === 'freezer' || (!it.lot && !it.dlc && !it.ddm)) continue
       if (it.dlc && dlcFromDate(it.dlc, timeZone).getTime() <= now.getTime()) continue
       const catalog = productForName(products, it.product)
-      const key = `${catalog?.id ?? productTokens(it.product).join(' ')}|${norm(it.lot)}|${it.dlc ?? ''}`
+      const key = `${catalog?.id ?? productTokens(it.product).join(' ')}|${norm(it.lot)}|${it.dlc ?? ''}|${it.ddm ?? ''}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ receptionId: e.id, receivedAt: e.time, product: it.product, catalog, lot: it.lot, dlc: it.dlc })
+      out.push({ receptionId: e.id, receivedAt: e.time, product: it.product, catalog, lot: it.lot, dlc: it.dlc, ddm: it.ddm })
     }
   }
   return out

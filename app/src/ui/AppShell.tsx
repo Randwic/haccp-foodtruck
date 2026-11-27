@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useSwipeBack } from './swipeBack.ts'
 import type { Establishment, Settings, StaffMember } from '../../../shared/types.ts'
 import type { DeviceInfo } from '../core/api.ts'
 import { LockScreen } from '../features/lock/LockScreen.tsx'
@@ -76,6 +77,8 @@ export function AppShell() {
   }, [core])
 
   const enrolled = boot.state === 'ready' && boot.device !== null
+  // Glisser le doigt du bord gauche vers la droite = bouton retour de l'écran.
+  useSwipeBack(enrolled && staff !== null)
 
   // Nom d'établissement et délai de verrouillage peuvent changer (Gestion) : relus après chaque synchro.
   useEffect(() => {

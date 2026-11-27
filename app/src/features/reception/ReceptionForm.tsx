@@ -11,7 +11,7 @@ import { useCore } from '../../ui/CoreContext.tsx'
 import { IconBan, IconCheck, IconChevronRight, IconEdit, IconError, IconOk, IconPlus, IconSupplier, IconWarn } from '../../ui/icons.tsx'
 import { PhotoGallery, PhotoPicker } from '../../ui/photos/Photos.tsx'
 import { formatTemperature } from '../../ui/temperature.ts'
-import { ErrorNotice, ReasonField, useRecordSaver } from '../processes/common.tsx'
+import { BackButton, ErrorNotice, ReasonField, useRecordSaver } from '../processes/common.tsx'
 import { ItemEditor, StorageIcon, type DraftItem } from './ItemEditor.tsx'
 import { frenchDate, isOutOfRange, PHOTOS_PER_FIELD, RECEPTION_MAX_PHOTOS, productsByGtin, STORAGE_LABELS, supplierProducts, todayIso, type ReceptionEntry } from './model.ts'
 import { NewSupplierModal } from './NewSupplierModal.tsx'
@@ -393,6 +393,11 @@ export function ReceptionForm({ data, now, canAddSupplier, correcting, onSaved, 
 
   return (
     <>
+      {step === 'delivery' ? (
+        <BackButton label="Achats" onClick={cancel} />
+      ) : (
+        <BackButton label={step === 'items' ? 'Fournisseur et transport' : 'Produits'} onClick={() => setStep(step === 'items' ? 'delivery' : 'items')} />
+      )}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <h1 className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-fg sm:text-[32px]">{correcting ? 'Corriger un approvisionnement' : 'Nouvel approvisionnement'}</h1>
         <Button variant="ghost" onClick={cancel}>

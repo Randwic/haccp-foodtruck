@@ -107,6 +107,32 @@ export function CopiesStepper({ value, onChange }: { value: number; onChange: (n
   )
 }
 
+/** Choix DLC / DDM pour une date lue sur l'emballage. */
+export function DateKindChoice({ value, onChange }: { value: 'dlc' | 'ddm'; onChange: (v: 'dlc' | 'ddm') => void }) {
+  return (
+    <div className="mb-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Date indiquée sur l’emballage">
+      {(
+        [
+          ['dlc', 'DLC', 'À consommer jusqu’au'],
+          ['ddm', 'DDM', 'De préférence avant'],
+        ] as const
+      ).map(([k, short, long]) => (
+        <button
+          key={k}
+          type="button"
+          role="radio"
+          aria-checked={value === k}
+          onClick={() => onChange(k)}
+          className={`min-h-14 rounded-xl border px-3 text-left ${value === k ? 'border-accent bg-accent-soft text-fg' : 'border-line-strong bg-elevated text-fg-muted'}`}
+        >
+          <span className="block text-[16px] font-semibold">{short}</span>
+          <span className="block text-[13px]">{long}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** Champs date + heure (heure locale de l'établissement). */
 export function DlcFields({
   date,
@@ -425,28 +451,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                 <p className="mt-1.5 text-[14px] text-fg-muted">Seulement si l’emballage n’indique pas une durée plus courte après ouverture.</p>
               </div>
             )}
-            {manual && (
-              <div className="mb-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Date indiquée sur l’emballage">
-                {(
-                  [
-                    ['dlc', 'DLC', 'À consommer jusqu’au'],
-                    ['ddm', 'DDM', 'De préférence avant'],
-                  ] as const
-                ).map(([k, short, long]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    role="radio"
-                    aria-checked={dateKind === k}
-                    onClick={() => setDateKind(k)}
-                    className={`min-h-14 rounded-xl border px-3 text-left ${dateKind === k ? 'border-accent bg-accent-soft text-fg' : 'border-line-strong bg-elevated text-fg-muted'}`}
-                  >
-                    <span className="block text-[16px] font-semibold">{short}</span>
-                    <span className="block text-[13px]">{long}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {manual && <DateKindChoice value={dateKind} onChange={setDateKind} />}
             <DlcFields
               date={date}
               time={time}

@@ -27,7 +27,7 @@ import { formatIsoDate } from '../processes/timing.ts'
 import { dayLabel, whenLabel } from '../temperatures/format.ts'
 import { localDayKey, plural, startOfLocalDay } from '../temperatures/schedule.ts'
 import { useLabelHeightMm, markConsumed } from './labelSettings.ts'
-import { CopiesStepper, DlcFields, draftFor, LabelEditor, MANUFACTURER_DLC_ORIGIN, PrintButtons, useLabelPdf, type LabelDraft } from './LabelEditor.tsx'
+import { CopiesStepper, DateKindChoice, DlcFields, draftFor, LabelEditor, MANUFACTURER_DLC_ORIGIN, PrintButtons, useLabelPdf, type LabelDraft } from './LabelEditor.tsx'
 import { LabelPaper, LabelPrintSheet } from './LabelPreview.tsx'
 import {
   ALLERGEN_SHORT,
@@ -625,7 +625,7 @@ function LabelHistory({ data, now, onCorrect }: { data: LabelData; now: Date; on
   )
 }
 
-const QUICK_REASONS = ['Erreur de DLC', 'Erreur de lot', 'Nombre d’étiquettes erroné'] as const
+const QUICK_REASONS = ['Erreur de DLC', 'C’est une DDM, pas une DLC', 'Erreur de lot', 'Nombre d’étiquettes erroné'] as const
 
 function LabelCorrection({ entry, data, onCancel, onSaved }: { entry: LabelEntry; data: LabelData; onCancel: () => void; onSaved: () => void }) {
   const toast = useToast()
@@ -637,6 +637,8 @@ function LabelCorrection({ entry, data, onCancel, onSaved }: { entry: LabelEntry
   const [time, setTime] = useState(init.time)
   const [lot, setLot] = useState(p.lot ?? '')
   const [copies, setCopies] = useState(p.copies)
+  const initialKind: 'dlc' | 'ddm' = p.date_kind === 'ddm' ? 'ddm' : 'dlc'
+  const [dateKind, setDateKind] = useState<'dlc' | 'ddm'>(initialKind)
   const [reason, setReason] = useState('')
   const dlc = fromLocalInputs(date, time, tz)
   const problem = dlcProblem(new Date(p.made_at), dlc)
@@ -645,9 +647,11 @@ function LabelCorrection({ entry, data, onCancel, onSaved }: { entry: LabelEntry
     const l = lot.trim().slice(0, LIMITS.lotMax)
     if (l) r.lot = l
     else delete r.lot
+    if (dateKind === 'ddm') r.date_kind = 'ddm'
+    else delete r.date_kind
     return r
   }
-  const changed = !problem && (dlc!.toISOString() !== p.dlc_at || lot.trim() !== (p.lot ?? '') || copies !== p.copies)
+  const changed = !problem && (dlc!.toISOString() !== p.dlc_at || lot.trim() !== (p.lot ?? '') || copies !== p.copies || dateKind !== initialKind)
   const submit = async () => {
     if (!changed || !reason.trim()) return
     const rec = await save('correction', { reason: reason.trim(), replacement: { ...replacement() } }, { supersedes_id: entry.latest.id, ctx: { supersededType: 'label_printed' } })
@@ -674,7 +678,10 @@ function LabelCorrection({ entry, data, onCancel, onSaved }: { entry: LabelEntry
         </div>
       </div>
       <div className="space-y-6">
-        <DlcFields date={date} time={time} onDate={setDate} onTime={setTime} error={problem} />
+        <div>
+          <DateKindChoice value={dateKind} onChange={setDateKind} />
+          <DlcFields date={date} time={time} onDate={setDate} onTime={setTime} error={problem} legend={dateKind === 'ddm' ? 'À consommer de préférence avant' : undefined} />
+        </div>
         <TextField label="N° de lot" value={lot} onChange={setLot} maxLength={LIMITS.lotMax} autoCapitalize="characters" />
         <CopiesStepper value={copies} onChange={setCopies} />
         <ErrorNotice error={error} />

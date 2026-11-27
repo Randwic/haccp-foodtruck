@@ -390,6 +390,21 @@ describe('historique et correction', () => {
     press('Terminé')
     expect(await screen.findByLabelText('DLC d’origine 18/11/2026 09:00, corrigée')).toBeInTheDocument()
   })
+
+  it('corriger une DLC en DDM (même date) : correction valide, étiquette réimprimée en DDM', async () => {
+    const id = '44444444-0000-4000-8000-000000000002'
+    const core = setup({ initialRecords: [seed(id, label({ made_at: '2026-11-15T08:00:00.000Z', dlc_at: '2027-09-08T21:59:00.000Z' }))] })
+    await openLabels()
+    press(/^Historique/)
+    press('Corriger (Cheddar en tranches)')
+    fireEvent.click(await screen.findByRole('radio', { name: /^DDM/ }))
+    press('C’est une DDM, pas une DLC')
+    press('Enregistrer la correction')
+    expect(await screen.findByRole('heading', { name: 'Réimprimer l’étiquette corrigée' })).toBeInTheDocument()
+    const c = (await core.listRecords({ type: 'correction' }))[0]
+    expect(validatePayload('correction', c.payload, { supersededType: 'label_printed' }).ok).toBe(true)
+    expect(c.payload.replacement).toMatchObject({ dlc_at: '2027-09-08T21:59:00.000Z', date_kind: 'ddm' })
+  })
 })
 
 describe('tableau des allergènes', () => {

@@ -156,7 +156,7 @@ trajet court) ? », « Emballages intacts ? » ; contrat `reception` inchangé (
 - **Calcul pur** (`model.ts`, testé dans `labels.test.ts`) : DLC = début + durée de vie en heures réelles
   (`computeDlc`, changements d'heure compris), saisie date/heure locale ↔ UTC (`fromLocalInputs`/`toLocalInputs`,
   fuseau de l'établissement), DLC d'une décongélation du module Procédés = 23:59 du jour indiqué (`dlcFromDate`),
-  contrôles du contrat (`dlcProblem` : après la fabrication, ≤ 3 ans, garde-fou contre une faute de frappe), allergènes d'une recette = union ingrédients +
+  contrôles du contrat (`dlcProblem` : après la fabrication, ≤ 90 jours), allergènes d'une recette = union ingrédients +
   supplémentaires dans l'ordre de l'annexe II (`recipeAllergens`, `allergenSources`), étiquettes reconstruites
   (`buildLabels` : corrections en chaîne, perte liée par `related_record_id`), échéances (`dueState`/`dueItems` :
   dépassée, aujourd'hui, demain en jours locaux), lots reçus pour un produit (`recentLots`, libellés rapprochés par mots :

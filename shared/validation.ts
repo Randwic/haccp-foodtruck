@@ -114,8 +114,8 @@ export const LIMITS = {
   labelNameMax: 80,
   labelCopiesMax: 20,
   labelSourceRecordsMax: 20,
-  /** dlc_at − made_at : au plus 3 ans (garde-fou contre une faute de frappe ; la date du fabricant fait foi). */
-  labelMaxShelfLifeMs: 1096 * 24 * 3_600_000,
+  /** dlc_at − made_at : au plus 90 jours. */
+  labelMaxShelfLifeMs: 90 * 24 * 3_600_000,
   /** Lot 5 (nettoyage, checklists, huiles) — bornes de shared/payloads.ts. */
   cleaningCommentMax: 300,
   cleaningPhotosMax: 3,
@@ -768,7 +768,7 @@ function checkLabel(p: Record<string, unknown>): string | null {
   const made = new Date(p.made_at as string).getTime()
   const dlc = new Date(p.dlc_at as string).getTime()
   if (dlc <= made) return 'payload.dlc_at : doit être postérieure à made_at'
-  if (dlc - made > LIMITS.labelMaxShelfLifeMs) return 'payload.dlc_at : au plus 3 ans après made_at'
+  if (dlc - made > LIMITS.labelMaxShelfLifeMs) return 'payload.dlc_at : au plus 90 jours après made_at'
   return null
 }
 

@@ -155,11 +155,11 @@ export function weekdayOf(d: Date | string, timeZone: string): string {
   return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', timeZone }).format(new Date(d))
 }
 
-/** Règles du contrat : DLC strictement après la fabrication, au plus 3 ans après (garde-fou contre une faute de frappe). */
+/** Règles du contrat : DLC strictement après la fabrication, au plus 90 jours après. */
 export function dlcProblem(madeAt: Date, dlc: Date | null): string | null {
   if (!dlc) return 'Date ou heure invalide.'
   if (dlc.getTime() <= madeAt.getTime()) return 'La DLC doit être postérieure à la date d’ouverture / de fabrication.'
-  if (dlc.getTime() - madeAt.getTime() > LIMITS.labelMaxShelfLifeMs) return 'La date limite ne peut pas dépasser 3 ans : vérifiez l’année.'
+  if (dlc.getTime() - madeAt.getTime() > LIMITS.labelMaxShelfLifeMs) return 'La DLC ne peut pas dépasser 90 jours.'
   return null
 }
 

@@ -682,15 +682,15 @@ describe('validatePayload — label_printed (lot 4)', () => {
     expectFail(v({ ...opened, product_id: '0000000A-0000-4000-8000-00000000000B' }))
     expectFail(v({ ...prepared, recipe_id: 'abc' }))
   })
-  it('dates ISO canoniques, dlc_at strictement après made_at et au plus 3 ans après', () => {
+  it('dates ISO canoniques, dlc_at strictement après made_at et au plus 90 jours après', () => {
     expectFail(v({ ...opened, made_at: '2026-11-14T10:00:00Z' }), 'invalid_payload', /made_at/)
     expectFail(v({ ...opened, dlc_at: '2026-11-17' }), 'invalid_payload', /dlc_at/)
     expectFail(v({ ...opened, dlc_at: '2026-11-17T11:00:00.000+01:00' }), 'invalid_payload', /dlc_at/)
     expectFail(v({ ...opened, dlc_at: opened.made_at }), 'invalid_payload', /postérieure/)
     expectFail(v({ ...opened, dlc_at: '2026-11-14T09:59:59.999Z' }), 'invalid_payload', /postérieure/)
     expect(v({ ...opened, dlc_at: '2026-11-14T10:00:00.001Z' }).ok).toBe(true)
-    expect(v({ ...opened, dlc_at: '2029-11-14T10:00:00.000Z' }).ok).toBe(true) // 1096 jours pile
-    expectFail(v({ ...opened, dlc_at: '2029-11-14T10:00:00.001Z' }), 'invalid_payload', /3 ans/)
+    expect(v({ ...opened, dlc_at: '2027-02-12T10:00:00.000Z' }).ok).toBe(true) // 90 jours pile
+    expectFail(v({ ...opened, dlc_at: '2027-02-12T10:00:00.001Z' }), 'invalid_payload', /90 jours/)
   })
   it('allergènes : 14 codes du règlement, sans doublon', () => {
     const all = ['gluten', 'crustaces', 'oeufs', 'poissons', 'arachides', 'soja', 'lait', 'fruits_a_coque', 'celeri', 'moutarde', 'sesame', 'sulfites', 'lupin', 'mollusques']

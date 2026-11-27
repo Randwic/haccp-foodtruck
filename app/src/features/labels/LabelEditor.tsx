@@ -242,9 +242,9 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
   const dlcOrigin = proposed.capped ? `DLC d’origine du fabricant (plus courte que ${base.dlcOrigin})` : base.dlcOrigin
   /** DLC d'achat encore valable à l'ouverture (AAAA-MM-JJ), sinon undefined. */
   const usablePurchaseDlc = (d: string | undefined) => (d && dlcFromDate(d, tz).getTime() > draft.madeAt.getTime() ? d : undefined)
-  /** Dernier jour accepté sur une étiquette (garde-fou du contrat : 3 ans après l'ouverture), AAAA-MM-JJ. */
+  /** Dernier jour accepté sur une étiquette (au plus 90 jours après l'ouverture), AAAA-MM-JJ. */
   const lastLabelDay = toLocalInputs(new Date(draft.madeAt.getTime() + LIMITS.labelMaxShelfLifeMs - 86_400_000), tz).date
-  /** Date d'achat telle qu'elle peut figurer sur l'étiquette : ramenée au garde-fou si elle est plus lointaine. */
+  /** Date d'achat telle qu'elle peut figurer sur l'étiquette : ramenée à 90 jours si elle est plus lointaine. */
   const onLabel = (d: string) => (d > lastLabelDay ? lastLabelDay : d)
   /** Champs pré-remplis : DLC calculée (bornée par la DLC d'achat) ou, « selon l'étiquette », la DLC d'achat recopiée. */
   const prefill = (computed: Date | null, purchaseDlc: string | undefined) => {
@@ -401,7 +401,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                   {purchaseDate && date === onLabel(purchaseDate)
                     ? date === purchaseDate
                       ? `la ${purchaseKind} saisie aux Achats est recopiée. Raccourcissez-la si l’emballage indique une durée plus courte après ouverture.`
-                      : `la ${purchaseKind} saisie aux Achats (${formatLabelDateTime(dlcFromDate(purchaseDate, tz), tz).slice(0, 10)}) dépasse 3 ans : vérifiez l’année, la date est ramenée au maximum d’une étiquette.`
+                      : `la ${purchaseKind} saisie aux Achats (${formatLabelDateTime(dlcFromDate(purchaseDate, tz), tz).slice(0, 10)}) est ramenée à 90 jours après ouverture, le maximum d’une étiquette. Raccourcissez-la si l’emballage l’exige.`
                     : 'recopiez la date limite indiquée sur l’emballage (après ouverture).'}
                 </span>
               </p>

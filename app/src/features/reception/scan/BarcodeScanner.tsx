@@ -1,4 +1,4 @@
-// Lecteur de code-barres plein écran : caméra arrière en direct (ZXing), avec repli « prendre une photo »
+// Lecteur de code-barres plein écran : caméra arrière en direct, en haute définition (ZXing), avec repli « prendre une photo »
 // si la caméra est refusée ou indisponible. Rien n'est envoyé : tout est décodé sur l'appareil.
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Modal, Notice } from '../../../ui/components/index.ts'
@@ -20,37 +20,81 @@ export function BarcodeScanner({ onResult }: BarcodeScannerProps) {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    let controls: { stop: () => void } | null = null
+    let stream: MediaStream | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
     let cancelled = false
+    const stop = () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      stream?.getTracks().forEach((t) => t.stop())
+    }
     ;(async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('no camera')
-        const { BrowserMultiFormatReader } = await import('@zxing/browser')
-        const reader = new BrowserMultiFormatReader(await barcodeHints(), { delayBetweenScanAttempts: 150 })
-        const c = await reader.decodeFromConstraints({ video: { facingMode: { ideal: 'environment' } }, audio: false }, video.current!, (result) => {
-          if (!result || done.current) return
-          const r = readingFromBarcode(result.getText())
-          if (!r) {
-            setHint('Code lu, mais ce n’est pas un code-barres de produit. Visez le code-barres principal.')
-            return
-          }
-          done.current = true
-          controls?.stop()
-          onResult(r)
+        // Haute définition demandée : par défaut Safari donne 640 × 480, trop peu pour les fines barres
+        // d'un code EAN tenu à 10–20 cm (moins de 2 pixels par barre : rien n'est jamais lu).
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
         })
-        if (cancelled) c.stop()
-        else {
-          controls = c
-          setCamera('on')
+        if (cancelled) return stop()
+        const track = stream.getVideoTracks()[0]
+        // Mise au point continue (ignorée sans erreur là où ce n'est pas proposé).
+        void track?.applyConstraints({ advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet] }).catch(() => {})
+        const v = video.current!
+        v.srcObject = stream
+        await v.play().catch(() => {})
+        const [{ MultiFormatReader, BinaryBitmap, HybridBinarizer }, { HTMLCanvasElementLuminanceSource }, hints] = await Promise.all([
+          import('@zxing/library'),
+          import('@zxing/browser'),
+          barcodeHints(),
+        ])
+        if (cancelled) return stop()
+        const reader = new MultiFormatReader()
+        reader.setHints(hints)
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+        setCamera('on')
+        let n = 0
+        const tick = () => {
+          if (cancelled || done.current) return
+          const w = v.videoWidth
+          const h = v.videoHeight
+          if (w && h) {
+            // Le plus souvent : bande centrale (là où est la ligne rouge) à pleine résolution, plus rapide ;
+            // une fois sur trois : l'image entière, pour un code-barres décentré.
+            const full = n++ % 3 === 2
+            const [sx, sy, sw, sh] = full ? [0, 0, w, h] : [Math.round(w * 0.05), Math.round(h * 0.2), Math.round(w * 0.9), Math.round(h * 0.6)]
+            const k = full ? Math.min(1, 1280 / Math.max(w, h)) : 1
+            canvas.width = Math.round(sw * k)
+            canvas.height = Math.round(sh * k)
+            ctx.drawImage(v, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+            let text: string | null = null
+            try {
+              text = reader.decode(new BinaryBitmap(new HybridBinarizer(new HTMLCanvasElementLuminanceSource(canvas))), hints).getText()
+            } catch {
+              // rien sur cette image : on réessaie sur la suivante
+            }
+            if (text) {
+              const r = readingFromBarcode(text)
+              if (r) {
+                done.current = true
+                stop()
+                onResult(r)
+                return
+              }
+              setHint('Code lu, mais ce n’est pas un code-barres de produit. Visez le code-barres principal.')
+            }
+          }
+          timer = setTimeout(tick, 80)
         }
+        tick()
       } catch {
         if (!cancelled) setCamera('unavailable')
+        stop()
       }
     })()
-    return () => {
-      cancelled = true
-      controls?.stop()
-    }
+    return stop
   }, [onResult])
 
   const onPhoto = async (e: ChangeEvent<HTMLInputElement>) => {

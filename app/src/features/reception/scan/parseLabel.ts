@@ -152,17 +152,22 @@ function gtinIn(text: string): string | null {
 }
 
 /**
- * Lot sans mot-clé, imprimé à côté de la date (jet d'encre : « MG26298R99A 27/11/26 », ou la ligne
- * « 22982629304 » sous « 27 11 26 07:31 ») : le plus long code de 6 à 20 caractères contenant au moins
- * 3 chiffres, sur la ligne de la date ou juste à côté, hors date, heure et code-barres.
+ * Lot sans mot-clé, imprimé à côté de la date (jet d'encre : « MG26298R99A 27/11/26 », la ligne
+ * « 22982629304 » sous « 27 11 26 07:31 », ou « N374 14:00 » sous « 08/09/27 ») : le plus long code de
+ * 4 à 20 caractères contenant au moins 3 chiffres, sur la ligne de la date ou juste à côté, hors date,
+ * heure, année seule et code-barres. Une lettre seule suivie de chiffres (« N 374 ») est recollée.
  */
 function lotNearDates(lines: string[], dateLines: number[]): string | null {
   let best: string | null = null
   const near = new Set(dateLines.flatMap((i) => [i - 1, i, i + 1]).filter((i) => i >= 0 && i < lines.length))
-  for (const i of near) {
-    const f = fold(lines[i]).replace(/(?<![0-9])\d{1,2} ?[./ -] ?\d{1,2} ?[./ -] ?\d{2,4}(?![0-9])/g, ' ').replace(/\d{1,2}[:H]\d{2}/g, ' ')
+  for (const i of [...near].sort((a, b) => a - b)) {
+    const f = fold(lines[i])
+      .replace(/(?<![0-9])\d{1,2} ?[./ -] ?\d{1,2} ?[./ -] ?\d{2,4}(?![0-9])/g, ' ')
+      .replace(/\d{1,2} ?[:H] ?\d{2}(?![0-9])/g, ' ')
+      .replace(/(?<![A-Z0-9])([A-Z]) (?=\d)/g, '$1')
     for (const tok of f.split(/[^A-Z0-9]+/)) {
-      if (tok.length < 6 || tok.length > 20 || (tok.match(/\d/g) ?? []).length < 3) continue
+      if (tok.length < 4 || tok.length > 20 || (tok.match(/\d/g) ?? []).length < 3) continue
+      if (/^(?:19|20)\d{2}$/.test(tok)) continue // année seule
       if (/^\d+$/.test(tok) && normalizeGtin(tok)) continue // code-barres imprimé
       if (!best || tok.length > best.length) best = tok
     }
@@ -218,7 +223,12 @@ export function parseLabelText(text: string, opts: ParseOptions = {}): LabelRead
     }
   })
   // Une seule date sans mot-clé, dans le futur : très probablement la date limite (à vérifier).
-  if (!r.dlc && !r.ddm && unlabeled.length === 1 && (!opts.today || unlabeled[0] >= opts.today)) r.dlc = unlabeled[0]
+  if (!r.dlc && !r.ddm && unlabeled.length === 1 && (!opts.today || unlabeled[0] >= opts.today)) {
+    // L'étiquette annonce « à consommer de préférence avant » (sans « jusqu'au ») : c'est une DDM.
+    const f = fold(text)
+    if (DDM_KEYS.test(f) && !DLC_KEYS.test(f.replace(/CONSOMMER ?DE ?PREFERENCE/g, ' '))) r.ddm = unlabeled[0]
+    else r.dlc = unlabeled[0]
+  }
   if (!r.dlc && !r.ddm) {
     const dm = dayMonthDate(text, opts.today)
     if (dm) r.dlc = dm

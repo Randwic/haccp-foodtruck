@@ -57,9 +57,9 @@ export function warmUpLabelReader(): void {
 }
 
 /** Image redimensionnée sur un canvas (orientation de l'appareil photo respectée). */
-async function toCanvas(photo: Blob): Promise<HTMLCanvasElement> {
+async function toCanvas(photo: Blob, maxSide = MAX_SIDE): Promise<HTMLCanvasElement> {
   const bmp = await createImageBitmap(photo, { imageOrientation: 'from-image' })
-  const k = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height))
+  const k = Math.min(1, maxSide / Math.max(bmp.width, bmp.height))
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(bmp.width * k)
   canvas.height = Math.round(bmp.height * k)
@@ -98,7 +98,8 @@ export async function decodeBarcodeFromCanvas(canvas: HTMLCanvasElement): Promis
 }
 
 export async function decodeBarcodeFromImage(photo: Blob): Promise<LabelReading | null> {
-  const text = await decodeBarcodeFromCanvas(await toCanvas(photo))
+  // Photo réduite d'abord (rapide) ; sinon pleine résolution (code-barres petit ou pris de loin).
+  const text = (await decodeBarcodeFromCanvas(await toCanvas(photo))) ?? (await decodeBarcodeFromCanvas(await toCanvas(photo, 4096)))
   return text ? readingFromBarcode(text) : null
 }
 

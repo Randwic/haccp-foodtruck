@@ -142,6 +142,14 @@ export function formatLabelDateTime(d: Date | string, timeZone: string): string 
   const p = zonedParts(new Date(d), timeZone)
   return `${pad(p.day)}/${pad(p.month)}/${p.year} ${pad(p.hour)}:${pad(p.minute)}`
 }
+/** « DLC » ou « DDM » selon l'étiquette enregistrée. */
+export function dateKindOf(p: { date_kind?: 'dlc' | 'ddm' }): 'DLC' | 'DDM' {
+  return p.date_kind === 'ddm' ? 'DDM' : 'DLC'
+}
+/** Date limite affichée dans les listes, année comprise : « 08/09/2027 23:59 » (DLC) ou « 08/09/2027 » (DDM). */
+export function formatLimit(p: { dlc_at: string; date_kind?: 'dlc' | 'ddm' }, timeZone: string): string {
+  return p.date_kind === 'ddm' ? formatLabelDate(p.dlc_at, timeZone) : formatLabelDateTime(p.dlc_at, timeZone)
+}
 export function formatLabelDate(d: Date | string, timeZone: string): string {
   const p = zonedParts(new Date(d), timeZone)
   return `${pad(p.day)}/${pad(p.month)}/${p.year}`
@@ -202,6 +210,7 @@ export function asLabel(p: unknown): LabelPrintedPayload | null {
   if (str(p.product_id)) out.product_id = p.product_id
   if (str(p.recipe_id)) out.recipe_id = p.recipe_id
   if (str(p.lot)) out.lot = p.lot
+  if (p.date_kind === 'ddm') out.date_kind = 'ddm'
   if (Array.isArray(p.may_contain)) {
     const traces = orderAllergens(p.may_contain.filter(str)).filter((a) => !out.allergens.includes(a))
     if (traces.length) out.may_contain = traces
@@ -399,6 +408,8 @@ export interface LabelContent {
   name: string
   madeAt: string
   dlcAt: string
+  /** Nature de la date : DLC (défaut) ou DDM du fabricant (« à consommer de préférence avant »). */
+  dateKind?: 'dlc' | 'ddm'
   storage: StorageMode
   allergens: Allergen[]
   /** « Traces possibles » (peut en contenir), imprimées sous les allergènes. Hors payload : reprises du catalogue. */
@@ -420,5 +431,5 @@ export function contentFromPayload(p: LabelPrintedPayload, operator: string, tim
     traces = recipe ? recipeTraces(recipe, catalog.products, catalog.recipes) : product ? product.may_contain ?? [] : []
   }
   traces = traces.filter((a) => !p.allergens.includes(a))
-  return { kind: p.kind, name: p.name, madeAt: p.made_at, dlcAt: p.dlc_at, storage: p.storage, allergens: p.allergens, traces, lot: p.lot, operator, timeZone }
+  return { kind: p.kind, name: p.name, madeAt: p.made_at, dlcAt: p.dlc_at, dateKind: p.date_kind === 'ddm' ? 'ddm' : 'dlc', storage: p.storage, allergens: p.allergens, traces, lot: p.lot, operator, timeZone }
 }

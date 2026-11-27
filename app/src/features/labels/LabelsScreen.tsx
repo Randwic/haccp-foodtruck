@@ -35,7 +35,9 @@ import {
   dlcFromDate,
   dlcProblem,
   finishedThaws,
+  dateKindOf,
   formatLabelDateTime,
+  formatLimit,
   formatShelfLife,
   fromLocalInputs,
   KIND_MADE_LABEL,
@@ -284,7 +286,7 @@ function LabelsHome(props: {
                     · {KIND_MADE_LABEL[l.payload.kind].replace(' le', '')} à {formatTime(l.payload.made_at, tz)} · {plural(l.payload.copies, 'étiquette', 'étiquettes')}
                   </span>
                 </span>
-                <span className="text-[16px] font-semibold text-fg tabular-nums">DLC {formatLabelDateTime(l.payload.dlc_at, tz).slice(0, 5)} {formatTime(l.payload.dlc_at, tz)}</span>
+                <span className="text-[16px] font-semibold text-fg tabular-nums">{dateKindOf(l.payload)} {formatLimit(l.payload, tz)}</span>
               </li>
             ))}
           </ul>
@@ -308,7 +310,7 @@ function DueRow({ item, tz, onWaste, onConsumed }: { item: DueItem; tz: string; 
           </Badge>
         </div>
         <p className="mt-0.5 text-[15px] text-fg-muted tabular-nums">
-          DLC <span className={`font-semibold ${item.state === 'expired' ? 'text-danger' : 'text-fg'}`}>{formatLabelDateTime(p.dlc_at, tz).replace(' ', ' à ')}</span>
+          {dateKindOf(p)} <span className={`font-semibold ${item.state === 'expired' ? 'text-danger' : 'text-fg'}`}>{formatLimit(p, tz).replace(' ', ' à ')}</span>
           {p.lot ? ` · lot ${p.lot}` : ''} · {STORAGE_LABELS[p.storage]}
         </p>
       </div>
@@ -358,7 +360,7 @@ function WasteModal({ item, tz, onClose, onSaved }: { item: DueItem; tz: string;
       <div className="space-y-5">
         <p className="text-[17px] text-fg">
           <span className="font-semibold">{p.name}</span>
-          {p.lot ? ` · lot ${p.lot}` : ''} — DLC {formatLabelDateTime(p.dlc_at, tz).replace(' ', ' à ')}
+          {p.lot ? ` · lot ${p.lot}` : ''} — {dateKindOf(p)} {formatLimit(p, tz).replace(' ', ' à ')}
         </p>
         <p className="text-[15px] text-fg-muted">Motif : date dépassée. La perte est reliée à l’étiquette dans le registre (traçabilité).</p>
         <TextField label="Quantité (facultatif)" value={quantity} onChange={setQuantity} maxLength={LIMITS.quantityMax} placeholder="Ex. : 1/2 bocal, 300 g" />
@@ -576,7 +578,7 @@ function LabelHistory({ data, now, onCorrect }: { data: LabelData; now: Date; on
                       {KIND_MADE_LABEL[l.payload.kind]} {formatLabelDateTime(l.payload.made_at, tz).replace(' ', ' à ')} · {plural(l.payload.copies, 'étiquette', 'étiquettes')} · {author(l.authorId)}
                     </p>
                     <p className="mt-2 flex flex-wrap items-baseline gap-x-3 text-[17px] text-fg tabular-nums">
-                      <span className="font-semibold">DLC</span>
+                      <span className="font-semibold">{dateKindOf(l.payload)}</span>
                       {l.versions.slice(0, -1).map((v) =>
                         v.payload.dlc_at !== l.payload.dlc_at ? (
                           <s key={v.record.id} className="text-fg-subtle" aria-label={`DLC d’origine ${formatLabelDateTime(v.payload.dlc_at, tz)}, corrigée`}>
@@ -660,7 +662,7 @@ function LabelCorrection({ entry, data, onCancel, onSaved }: { entry: LabelEntry
         <div className="mt-4 rounded-2xl border border-line bg-surface p-4 shadow-card">
           <p className="text-[17px] font-semibold text-fg">{p.name}</p>
           <p className="mt-0.5 text-[15px] text-fg-muted tabular-nums">
-            {KIND_MADE_LABEL[p.kind]} {formatLabelDateTime(p.made_at, tz).replace(' ', ' à ')} · DLC enregistrée {formatLabelDateTime(p.dlc_at, tz).replace(' ', ' à ')}
+            {KIND_MADE_LABEL[p.kind]} {formatLabelDateTime(p.made_at, tz).replace(' ', ' à ')} · {dateKindOf(p)} enregistrée {formatLimit(p, tz).replace(' ', ' à ')}
             {p.lot ? ` · lot ${p.lot}` : ''}
           </p>
         </div>

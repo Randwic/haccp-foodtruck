@@ -137,7 +137,7 @@ describe('parcours', () => {
     expect(screen.getByRole('button', { name: 'Impression directe' })).toBeDisabled()
   })
 
-  it('ouverture « selon l’étiquette » d’un produit reçu : la DLC d’achat se reprend en un toucher', async () => {
+  it('ouverture « selon l’étiquette » d’un produit reçu : la DLC d’achat est recopiée toute seule', async () => {
     const core = setup({
       products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS],
       recipes: [...DEMO_RECIPES, ...MENU_RECIPES],
@@ -146,7 +146,11 @@ describe('parcours', () => {
     await openLabels()
     press(/^Ouverture d’un produit/)
     fireEvent.click(await screen.findByRole('button', { name: /^Ouvrir Mayonnaise \(seau\) reçu .*, lot MY77/ }))
-    expect(await screen.findByLabelText('Date limite de consommation')).toHaveValue('')
+    expect(await screen.findByLabelText('Date limite de consommation')).toHaveValue('2026-12-20')
+    expect(screen.getByText(/la DLC saisie aux Achats est recopiée/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Reprendre la DLC d’achat/ })).not.toBeInTheDocument()
+    // Date raccourcie à la main, puis remise d'un toucher.
+    fireEvent.change(screen.getByLabelText('Date limite de consommation'), { target: { value: '2026-11-20' } })
     press(/^Reprendre la DLC d’achat : 20\/12\/2026/)
     expect(screen.getByLabelText('Date limite de consommation')).toHaveValue('2026-12-20')
     await printAndConfirm()

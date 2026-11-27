@@ -238,6 +238,9 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
   /** Date d'achat à recopier pour un produit « selon l'étiquette » : la DLC, sinon la DDM. */
   const purchaseDate = originalDlc ?? originalDdm
   const purchaseKind = originalDlc ? 'DLC' : 'DDM'
+  /** Nature de la date imprimée : une DDM d'achat reste une DDM ; modifiable seulement pour une date lue sur l'emballage. */
+  const [dateKind, setDateKind] = useState<'dlc' | 'ddm'>(manual && !originalDlc && originalDdm ? 'ddm' : 'dlc')
+  const kindNow: 'dlc' | 'ddm' = manual ? dateKind : 'dlc'
   const proposed = manual ? { dlc: null, capped: false } : capByOriginalDlc(base.dlc, originalDlc, tz)
   const dlcOrigin = proposed.capped ? `DLC d’origine du fabricant (plus courte que ${base.dlcOrigin})` : base.dlcOrigin
   /** DLC d'achat encore valable à l'ouverture (AAAA-MM-JJ), sinon undefined. */
@@ -267,6 +270,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
     setLotSource(source)
     setOriginalDlc(source ? dlcOfLot : undefined)
     setOriginalDdm(source && !dlcOfLot ? ddmOfLot : undefined)
+    if (manual) setDateKind(source && !dlcOfLot && ddmOfLot ? 'ddm' : 'dlc')
     // Date pas encore retouchée à la main : elle suit le lot choisi.
     const untouched = manual ? date === '' || (purchaseDate !== undefined && date === onLabel(purchaseDate)) : date === initial.date && time === initial.time
     if (untouched) {
@@ -296,9 +300,9 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
   const content = useMemo<LabelContent | null>(
     () =>
       name && dlc && !problem
-        ? { kind: draft.kind, name, madeAt: draft.madeAt.toISOString(), dlcAt: dlc.toISOString(), storage, allergens, traces, lot: trimmedLot || undefined, operator, timeZone: tz }
+        ? { kind: draft.kind, name, madeAt: draft.madeAt.toISOString(), dlcAt: dlc.toISOString(), dateKind: kindNow, storage, allergens, traces, lot: trimmedLot || undefined, operator, timeZone: tz }
         : null,
-    [name, dlc?.getTime(), problem, draft.kind, draft.madeAt, storage, allergens, traces, trimmedLot, operator, tz],
+    [name, dlc?.getTime(), kindNow, problem, draft.kind, draft.madeAt, storage, allergens, traces, trimmedLot, operator, tz],
   )
   const { layout, pdf, fontError } = useLabelPdf(content, copies, heightMm)
   const needsProduct = draft.kind !== 'prepared' && !product
@@ -313,6 +317,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
       made_at: content.madeAt,
       dlc_at: content.dlcAt,
       allergens: content.allergens,
+      ...(content.dateKind === 'ddm' ? { date_kind: 'ddm' as const } : {}),
       storage: content.storage,
       copies,
     }
@@ -420,12 +425,34 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                 <p className="mt-1.5 text-[14px] text-fg-muted">Seulement si l’emballage n’indique pas une durée plus courte après ouverture.</p>
               </div>
             )}
+            {manual && (
+              <div className="mb-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Date indiquée sur l’emballage">
+                {(
+                  [
+                    ['dlc', 'DLC', 'À consommer jusqu’au'],
+                    ['ddm', 'DDM', 'De préférence avant'],
+                  ] as const
+                ).map(([k, short, long]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={dateKind === k}
+                    onClick={() => setDateKind(k)}
+                    className={`min-h-14 rounded-xl border px-3 text-left ${dateKind === k ? 'border-accent bg-accent-soft text-fg' : 'border-line-strong bg-elevated text-fg-muted'}`}
+                  >
+                    <span className="block text-[16px] font-semibold">{short}</span>
+                    <span className="block text-[13px]">{long}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <DlcFields
               date={date}
               time={time}
               onDate={setDate}
               onTime={setTime}
-              legend={manual ? 'DLC lue sur l’emballage' : undefined}
+              legend={manual ? `${kindNow === 'ddm' ? 'DDM' : 'DLC'} lue sur l’emballage` : undefined}
               timeOptional={manual}
               error={problem && (date || time || originalExpired) ? problem : null}
             />
@@ -532,7 +559,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                 <span className="font-semibold">
                   {copies} × {name}
                 </span>{' '}
-                — DLC {dlc ? formatLabelDateTime(dlc, tz).replace(' ', ' à ') : ''}
+                — {kindNow === 'ddm' ? `DDM ${dlc ? formatLabelDateTime(dlc, tz).slice(0, 10) : ''}` : `DLC ${dlc ? formatLabelDateTime(dlc, tz).replace(' ', ' à ') : ''}`}
               </span>
             </p>
             <p className="mt-3 text-[15px] text-fg-muted">L’étiquette est enregistrée dans le registre (traçabilité) seulement si elle est bien sortie de l’imprimante.</p>

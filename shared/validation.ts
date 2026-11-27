@@ -84,6 +84,7 @@ export const STORAGE_KINDS = ['fridge', 'freezer', 'ambient'] as const satisfies
 export const WASTE_REASONS = ['expired', 'non_compliant', 'temperature', 'damaged', 'recall', 'other'] as const satisfies readonly WastePayload['reason'][]
 /** Lot 4 : nature d'une étiquette imprimée. */
 export const LABEL_KINDS = ['opened', 'prepared', 'thawed'] as const satisfies readonly LabelPrintedPayload['kind'][]
+export const LABEL_DATE_KINDS = ['dlc', 'ddm'] as const satisfies readonly NonNullable<LabelPrintedPayload['date_kind']>[]
 /** Lot 5 : méthode de mesure des composés polaires, nature d'une checklist. */
 export const OIL_METHODS = ['tester', 'strip'] as const satisfies readonly OilCheckPayload['method'][]
 /** Lot 9 : méthode de vérification d'un thermomètre. */
@@ -545,6 +546,7 @@ const SCHEMAS: Record<SchemaType, Record<string, FieldSpec>> = {
     name: { check: str({ max: LIMITS.labelNameMax, nonEmpty: true }) },
     made_at: { check: isoTimeField },
     dlc_at: { check: isoTimeField },
+    date_kind: { check: oneOf(LABEL_DATE_KINDS), optional: true },
     allergens: { check: allergensField },
     may_contain: { check: allergensField, optional: true },
     storage: { check: oneOf(STORAGE_KINDS) },

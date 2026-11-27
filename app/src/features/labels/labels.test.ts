@@ -253,6 +253,14 @@ describe('PDF', () => {
     expect(texts.join(' ')).toMatch(/JUSQU’AU MERCREDI/)
   })
 
+  it('DDM du fabricant : mention « de préférence » et date sans heure', async () => {
+    const fonts = await loadLabelFonts()
+    const texts = layoutLabel({ ...content, dlcAt: '2027-09-08T21:59:00.000Z', dateKind: 'ddm' }, fonts.measure).ops.flatMap((o) => (o.kind === 'text' ? [o.text] : []))
+    expect(texts).toContain('08/09/2027')
+    expect(texts.join(' ')).toMatch(/DDM · DE PRÉFÉRENCE AVANT LE MERCREDI/)
+    expect(texts.join(' ')).not.toMatch(/JUSQU’AU/)
+  })
+
   it('hauteur configurable ; contenu trop long : réduit puis signalé', async () => {
     const fonts = await loadLabelFonts()
     const big = layoutLabel({ ...content, allergens: ['gluten', 'crustaces', 'oeufs', 'poissons', 'arachides', 'soja', 'lait', 'fruits_a_coque', 'celeri', 'moutarde', 'sesame', 'sulfites', 'lupin', 'mollusques'] }, fonts.measure, 62)

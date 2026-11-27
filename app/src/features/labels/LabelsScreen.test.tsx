@@ -172,7 +172,25 @@ describe('parcours', () => {
     expect(screen.getByText(/la DDM saisie aux Achats est recopiée/)).toBeInTheDocument()
     await printAndConfirm()
     const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
-    expect(p).toMatchObject({ lot: 'N374', dlc_at: '2027-09-08T21:59:00.000Z' })
+    expect(p).toMatchObject({ lot: 'N374', dlc_at: '2027-09-08T21:59:00.000Z', date_kind: 'ddm' })
+    // Liste « Imprimées aujourd'hui » : DDM, avec l'année.
+    expect(await screen.findByText('DDM 08/09/2027')).toBeInTheDocument()
+  })
+
+  it('date lue sur l’emballage : DLC par défaut, DDM au choix', async () => {
+    const core = setup({
+      products: [...DEMO_PRODUCTS, ...MENU_PRODUCTS],
+      recipes: [...DEMO_RECIPES, ...MENU_RECIPES],
+      initialRecords: [reception('11111111-0000-4000-8000-000000000006', [{ product: 'Mayonnaise (seau)', lot: 'D12', dlc: '2027-01-10', storage: 'ambient', accepted: true }])],
+    })
+    await openLabels()
+    press(/^Ouverture d’un produit/)
+    fireEvent.click(await screen.findByRole('button', { name: /^Ouvrir .*, lot D12/ }))
+    expect(await screen.findByRole('radio', { name: /^DLC/ })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: /^DDM/ }))
+    await printAndConfirm()
+    const p = (await lastLabel(core)).payload as unknown as LabelPrintedPayload
+    expect(p).toMatchObject({ lot: 'D12', date_kind: 'ddm' })
   })
 
   it('préparation maison : recette → allergènes calculés, DLC modifiée avant impression, lot interne', async () => {

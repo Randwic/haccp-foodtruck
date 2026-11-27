@@ -678,6 +678,11 @@ describe('validatePayload — label_printed (lot 4)', () => {
       expectFail(v(p), 'invalid_payload', new RegExp(`${k} : obligatoire`))
     }
   })
+  it('date_kind facultatif : dlc ou ddm', () => {
+    expect(v({ ...opened, date_kind: 'ddm' }).ok).toBe(true)
+    expect(v({ ...opened, date_kind: 'dlc' }).ok).toBe(true)
+    expectFail(v({ ...opened, date_kind: 'dluo' }), 'invalid_payload', /date_kind/)
+  })
   it('identifiants : uuid en minuscules', () => {
     expectFail(v({ ...opened, product_id: '0000000A-0000-4000-8000-00000000000B' }))
     expectFail(v({ ...prepared, recipe_id: 'abc' }))

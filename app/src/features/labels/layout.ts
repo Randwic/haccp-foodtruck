@@ -1,7 +1,7 @@
 // Mise en page de l'étiquette (fonction pure) : une liste d'éléments positionnés en points (1 pt = 1/72 po),
 // origine en haut à gauche. L'aperçu (SVG) et le PDF dessinent EXACTEMENT ces éléments : l'aperçu est fidèle.
 import type { FontWeight, Measure } from './fonts.ts'
-import { ALLERGEN_SHORT, formatLabelDateTime, KIND_MADE_LABEL, STORAGE_PRINT, weekdayOf, type LabelContent } from './model.ts'
+import { ALLERGEN_SHORT, formatLabelDate, formatLabelDateTime, KIND_MADE_LABEL, STORAGE_PRINT, weekdayOf, type LabelContent } from './model.ts'
 
 export const MM = 72 / 25.4
 /** Rouleau Brother DK 62 mm (continu, amovible ou soluble). */
@@ -166,9 +166,11 @@ function layoutAt(content: LabelContent, W: number, H: number, s: number, measur
   const pad = 3 * s
   const line = 1.6 * s
   const caption = 6.4 * s
-  const capText = `À CONSOMMER JUSQU’AU ${weekdayOf(content.dlcAt, tz).toUpperCase()}`
+  // DDM du fabricant : mention « de préférence » et date seule (pas d'heure).
+  const ddm = content.dateKind === 'ddm'
+  const capText = ddm ? `DDM · DE PRÉFÉRENCE AVANT LE ${weekdayOf(content.dlcAt, tz).toUpperCase()}` : `À CONSOMMER JUSQU’AU ${weekdayOf(content.dlcAt, tz).toUpperCase()}`
   const capSize = Math.min(caption, (cw - 2 * pad) / measure(capText, 1, 'bold'))
-  const dlcText = formatLabelDateTime(content.dlcAt, tz)
+  const dlcText = ddm ? formatLabelDate(content.dlcAt, tz) : formatLabelDateTime(content.dlcAt, tz)
   const dlcSize = Math.min(21 * s, (cw - 2 * pad) / measure(dlcText, 1, 'black'))
   const frameH = pad + capSize * 1.05 + 2 * s + dlcSize * 0.78 + pad + line / 2
   ops.push({ kind: 'frame', x: mx + line / 2, y: y + line / 2, w: cw - line, h: frameH - line, line })

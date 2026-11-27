@@ -203,6 +203,7 @@ export interface LabelPrintedPayload {
   name: string // libellé imprimé, 1..80
   made_at: string // ISO UTC canonique : ouverture / fabrication / fin de décongélation
   dlc_at: string // ISO UTC canonique : date-heure limite calculée
+  date_kind?: 'dlc' | 'ddm' // nature de la date imprimée ; absent = DLC. 'ddm' : « à consommer de préférence avant » (date du fabricant)
   allergens: Allergen[] // tels qu'imprimés (gras sur l'étiquette)
   may_contain?: Allergen[] // « traces possibles » telles qu'imprimées (sans les allergènes présents) ; absent = aucune
   storage: StorageMode

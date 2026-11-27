@@ -234,7 +234,18 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
   const [originalDlc, setOriginalDlc] = useState<string | undefined>(draft.originalDlc ?? single?.dlc)
   const proposed = manual ? { dlc: null, capped: false } : capByOriginalDlc(base.dlc, originalDlc, tz)
   const dlcOrigin = proposed.capped ? `DLC d’origine du fabricant (plus courte que ${base.dlcOrigin})` : base.dlcOrigin
-  const initial = proposed.dlc ? toLocalInputs(proposed.dlc, tz) : { date: '', time: '' }
+  /** DLC d'achat encore valable à l'ouverture (AAAA-MM-JJ), sinon undefined. */
+  const usablePurchaseDlc = (d: string | undefined) => (d && dlcFromDate(d, tz).getTime() > draft.madeAt.getTime() ? d : undefined)
+  /** Champs pré-remplis : DLC calculée (bornée par la DLC d'achat) ou, « selon l'étiquette », la DLC d'achat recopiée. */
+  const prefill = (computed: Date | null, purchaseDlc: string | undefined) => {
+    if (computed === null) {
+      const d = usablePurchaseDlc(purchaseDlc)
+      return d ? { date: d, time: '' } : { date: '', time: '' }
+    }
+    const next = capByOriginalDlc(computed, purchaseDlc, tz).dlc
+    return next ? toLocalInputs(next, tz) : { date: '', time: '' }
+  }
+  const initial = prefill(base.dlc, originalDlc)
   const [date, setDate] = useState(initial.date)
   const [time, setTime] = useState(initial.time)
   const [copies, setCopies] = useState(1)
@@ -245,10 +256,11 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
     setLot(value)
     setLotSource(source)
     setOriginalDlc(source ? dlcOfLot : undefined)
-    if (!manual && date === initial.date && time === initial.time) {
-      const next = capByOriginalDlc(base.dlc, source ? dlcOfLot : undefined, tz).dlc
-      if (next) {
-        const v = toLocalInputs(next, tz)
+    // Date pas encore retouchée à la main : elle suit le lot choisi.
+    const untouched = manual ? date === '' || date === originalDlc : date === initial.date && time === initial.time
+    if (untouched) {
+      const v = prefill(base.dlc, source ? dlcOfLot : undefined)
+      if (v.date || manual) {
         setDate(v.date)
         setTime(v.time)
       }
@@ -357,8 +369,7 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
                       onClick={() => {
                         setProductId(p.id)
                         if (draft.kind !== 'opened' || draft.product) return
-                        const next = capByOriginalDlc(draftFor('opened', p, draft.madeAt).dlc, originalDlc, tz).dlc
-                        const v = next ? toLocalInputs(next, tz) : { date: '', time: '' }
+                        const v = prefill(draftFor('opened', p, draft.madeAt).dlc, originalDlc)
                         setDate(v.date)
                         setTime(v.time)
                       }}
@@ -374,11 +385,14 @@ export function LabelEditor({ draft, data, onCancel, onSaved, header }: { draft:
               <p className="mb-3 flex items-start gap-2 rounded-xl border border-warn/35 bg-warn-soft px-4 py-3 text-[15px] leading-snug text-fg">
                 <IconInfo size={20} className="mt-px shrink-0 text-warn" />
                 <span>
-                  Durée après ouverture <span className="font-semibold">selon l’étiquette du fabricant</span> : recopiez la date limite indiquée sur l’emballage (après ouverture).
+                  Durée après ouverture <span className="font-semibold">selon l’étiquette du fabricant</span> :{' '}
+                  {originalDlc && date === originalDlc
+                    ? 'la DLC saisie aux Achats est recopiée. Raccourcissez-la si l’emballage indique une durée plus courte après ouverture.'
+                    : 'recopiez la date limite indiquée sur l’emballage (après ouverture).'}
                 </span>
               </p>
             )}
-            {manual && originalDlc && dlcFromDate(originalDlc, tz).getTime() > draft.madeAt.getTime() && (
+            {manual && originalDlc && usablePurchaseDlc(originalDlc) && date !== originalDlc && (
               <div className="mb-3">
                 <Button
                   variant="secondary"

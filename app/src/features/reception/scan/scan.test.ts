@@ -99,6 +99,16 @@ describe('sorties du moteur de lecture moderne', () => {
   it('« J0712 » sans barre', () => {
     expect(parseLabelText('J0712\nMILSANI\nFromage BLANC', { today })).toEqual({ dlc: '2026-12-07' })
   })
+  it('lot court sans mot-clé sous la date (« N374 14:00 »), DDM annoncée plus haut', () => {
+    const t = "À consommer de préférence avant le/\nN° de lot : voir sur l'étiquette.\nConditions de conservation : avant\nVolume net : 0,5L\n08/09/27\nN374 14:00"
+    expect(parseLabelText(t, { today })).toEqual({ ddm: '2027-09-08', lot: 'N374' })
+    // Lecture en points : lettre détachée, heure collée ou espacée.
+    expect(parseLabelText('08/09/27\nN 374 14 : 00', { today })).toEqual({ dlc: '2027-09-08', lot: 'N374' })
+    expect(parseLabelText('08/09/27\nN37414:00', { today })).toEqual({ dlc: '2027-09-08', lot: 'N374' })
+  })
+  it('pas de lot pris dans une année ou une heure seules', () => {
+    expect(parseLabelText('A consommer jusqu’au 27/11/2026\n2026 14:00', { today })).toEqual({ dlc: '2026-11-27' })
+  })
   it('une vraie date l’emporte sur un nombre qui ressemble à une date collée', () => {
     expect(parseLabelText('Lot 271126\nDLC 30/11/2026', { today })).toEqual({ dlc: '2026-11-30', lot: '271126' })
   })

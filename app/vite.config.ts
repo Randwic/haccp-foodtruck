@@ -50,6 +50,8 @@ function ocrAssets(): Plugin {
 }
 
 export default defineConfig({
+  // Version affichée dans l'Aide (date de construction) : voir src/ui/appVersion.ts.
+  define: { __APP_BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
   plugins: [
     react(),
     tailwindcss(),

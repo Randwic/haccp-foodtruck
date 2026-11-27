@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { IconChevronDown, IconChevronUp, IconGuide, IconOk } from '../../ui/icons.tsx'
 import { BackButton, PageTitle, SectionLabel } from '../processes/common.tsx'
+import { appVersionLabel } from '../../ui/appVersion.ts'
 import { AUTOMATIC, helpTimeline, type HelpOptions, type HelpPeriod } from './timeline.ts'
 
 /** Guide complet, servi par l'app (app/public/guide/). Gardé en cache après la première ouverture. */
@@ -52,6 +53,7 @@ export function HelpScreen({ onBack, backLabel = 'Accueil', options }: { onBack:
       <p className="mt-8 text-[15px] text-fg-muted">
         Le guide complet explique chaque écran pas à pas, avec des images. Il s’ouvre avec Internet la première fois, puis reste disponible sur l’iPad.
       </p>
+      {appVersionLabel() && <p className="mt-8 text-center text-[14px] text-fg-subtle">Version de l’application : {appVersionLabel()}</p>}
     </main>
   )
 }

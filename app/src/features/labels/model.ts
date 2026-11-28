@@ -342,18 +342,38 @@ export interface ReceivedForOpening {
 
 /**
  * Achats récents à ouvrir : lignes acceptées avec un lot ou une DLC, hors surgelés (→ décongélation)
- * et hors DLC d'origine dépassée (produit à ne pas ouvrir). Plus récents d'abord, sans doublon.
+ * hors DLC d'origine dépassée (produit à ne pas ouvrir) et hors achats déjà ouverts (étiquette d'ouverture
+ * imprimée depuis cette réception). Plus récents d'abord, sans doublon.
  */
-export function receivedForOpening(receptions: readonly ReceptionEntry[], products: readonly Product[], now: Date, timeZone: string, max = 12): ReceivedForOpening[] {
+export function receivedForOpening(
+  receptions: readonly ReceptionEntry[],
+  products: readonly Product[],
+  now: Date,
+  timeZone: string,
+  labels: readonly LabelEntry[] = [],
+  max = 12,
+): ReceivedForOpening[] {
   const out: ReceivedForOpening[] = []
   const seen = new Set<string>()
   const norm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase()
+  // Étiquettes d'ouverture déjà imprimées, par réception d'origine (traçabilité source_record_ids).
+  const openedFrom = new Map<string, LabelPrintedPayload[]>()
+  for (const l of labels) {
+    if (l.payload.kind !== 'opened') continue
+    for (const id of l.payload.source_record_ids ?? []) openedFrom.set(id, [...(openedFrom.get(id) ?? []), l.payload])
+  }
+  const alreadyOpened = (receptionId: string, it: ReceptionEntry['payload']['items'][number], catalog: Product | null) =>
+    (openedFrom.get(receptionId) ?? []).some((p) =>
+      it.lot && p.lot ? norm(p.lot) === norm(it.lot) : (catalog !== null && p.product_id === catalog.id) || sameProduct(p.name, it.product),
+    )
   for (const e of [...receptions].sort((a, b) => b.time.localeCompare(a.time))) {
     for (const it of e.payload.items) {
       if (out.length >= max) return out
       if (!it.accepted || it.storage === 'freezer' || (!it.lot && !it.dlc && !it.ddm)) continue
       if (it.dlc && dlcFromDate(it.dlc, timeZone).getTime() <= now.getTime()) continue
       const catalog = productForName(products, it.product)
+      // Déjà ouvert (étiquette imprimée depuis cet achat) : il n'est plus « à ouvrir ».
+      if (alreadyOpened(e.id, it, catalog)) continue
       const key = `${catalog?.id ?? productTokens(it.product).join(' ')}|${norm(it.lot)}|${it.dlc ?? ''}|${it.ddm ?? ''}`
       if (seen.has(key)) continue
       seen.add(key)

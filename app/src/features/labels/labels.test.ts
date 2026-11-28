@@ -205,6 +205,41 @@ describe('achats repris à l’ouverture', () => {
     expect(out[0].catalog?.id).toBe(SAUCE.id)
   })
 
+  it('un achat déjà ouvert (étiquette imprimée depuis cette réception) n’est plus proposé', () => {
+    const items = [
+      { product: 'Sauce burger 1 L', lot: 'SB1', dlc: '2026-11-30', storage: 'fridge', accepted: true },
+      { product: 'Cornichons', lot: 'CO7', dlc: '2027-03-01', storage: 'ambient', accepted: true },
+    ]
+    const r1 = rec('reception', '2026-11-10T08:00:00.000Z', { supplier_id: 's', vehicle_ok: true, packaging_ok: true, items: [items[0]] })
+    const r2 = rec('reception', '2026-11-12T08:00:00.000Z', { supplier_id: 's', vehicle_ok: true, packaging_ok: true, items })
+    const label = (lot: string | undefined, product: Product, source: string) =>
+      rec('label_printed', '2026-11-14T10:00:00.000Z', {
+        kind: 'opened',
+        product_id: product.id,
+        name: product.name,
+        made_at: '2026-11-14T10:00:00.000Z',
+        dlc_at: '2026-11-17T10:00:00.000Z',
+        allergens: [],
+        storage: 'fridge',
+        ...(lot ? { lot } : {}),
+        source_record_ids: [source],
+        copies: 1,
+      })
+    const receptions = buildReceptions([r1, r2])
+    // Avant ouverture : sauce (réception la plus récente) et cornichons.
+    expect(receivedForOpening(receptions, DEMO_PRODUCTS, now, TZ).map((r) => r.receptionId)).toEqual([r2.id, r2.id])
+    // Sauce de la réception r2 ouverte : elle disparaît ; le pot identique reçu le 10/11 (pas encore ouvert) revient.
+    const opened = buildLabels([label('SB1', SAUCE, r2.id)])
+    const out = receivedForOpening(receptions, DEMO_PRODUCTS, now, TZ, opened)
+    expect(out.map((r) => [r.product, r.receptionId])).toEqual([
+      ['Cornichons', r2.id],
+      ['Sauce burger 1 L', r1.id],
+    ])
+    // Les deux sauces et les cornichons ouverts : plus rien à proposer.
+    const all = buildLabels([label('SB1', SAUCE, r2.id), label('SB1', SAUCE, r1.id), label(undefined, CORNICHONS, r2.id)])
+    expect(receivedForOpening(receptions, DEMO_PRODUCTS, now, TZ, all)).toEqual([])
+  })
+
   it('DLC après ouverture : jamais après la DLC d’origine', () => {
     const proposed = new Date('2026-11-18T09:30:00.000Z')
     expect(capByOriginalDlc(proposed, '2026-11-20', TZ)).toEqual({ dlc: proposed, capped: false })

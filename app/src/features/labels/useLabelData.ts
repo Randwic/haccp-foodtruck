@@ -12,6 +12,7 @@ import { buildLabels, dueItems, LABEL_RECEPTION_DAYS, LABEL_RECORD_TYPES, summar
 /** Étiquettes chargées : 32 jours (échéances des produits à longue durée de vie, historique 7 jours). */
 export const LABEL_LOAD_DAYS = 32
 export const LABEL_HISTORY_DAYS = 7
+const LONG_TYPES = new Set<string>(['reception', 'label_printed', 'correction'])
 
 export interface LabelData {
   timeZone: string
@@ -20,6 +21,8 @@ export interface LabelData {
   recipes: Recipe[]
   staff: StaffMember[]
   labels: LabelEntry[]
+  /** Étiquettes d'ouverture sur la même période que les achats : un achat déjà ouvert n'est plus proposé. */
+  openingLabels: LabelEntry[]
   receptions: ReceptionEntry[]
   thaws: ThawBatch[]
 }
@@ -39,16 +42,20 @@ export function useLabelData() {
         core.listRecipes({ includeInactive: true }),
         core.listStaff(),
         core.getEstablishment(),
-        ...LABEL_RECORD_TYPES.map((type) => core.listRecords({ type, since: type === 'reception' ? receptionSince : since })),
+        // Achats et étiquettes (avec leurs corrections) relus sur 120 jours : savoir quels achats sont déjà ouverts.
+        ...LABEL_RECORD_TYPES.map((type) => core.listRecords({ type, since: LONG_TYPES.has(type) ? receptionSince : since })),
       ])
       const records = lists.flat()
       const wastes = buildWastes(records)
+      const allLabels = buildLabels(records, wastes)
+      const sinceMs = Date.parse(since)
       setData({
         timeZone: establishment?.timezone || DEFAULT_TIMEZONE,
         products,
         recipes,
         staff,
-        labels: buildLabels(records, wastes),
+        labels: allLabels.filter((l) => Date.parse(l.time) >= sinceMs),
+        openingLabels: allLabels.filter((l) => l.payload.kind === 'opened'),
         receptions: buildReceptions(records),
         thaws: buildThawBatches(records),
       })

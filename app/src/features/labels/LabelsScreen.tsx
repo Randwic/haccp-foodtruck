@@ -417,7 +417,7 @@ function Picker({ kind, data, now, onPick }: { kind: LabelKind; data: LabelData;
   const recipes = data.recipes.filter((r) => r.active && r.kind === 'preparation' && r.shelf_life_hours !== null)
   const dlcText = (p: Product) => (hoursOf(p) === null ? 'selon l’étiquette du fabricant' : `${kind === 'opened' ? 'ouverture' : 'décongélation'} + ${formatShelfLife(hoursOf(p))}`)
   const thaws = kind === 'thawed' ? finishedThaws(data.thaws, now) : []
-  const received = kind === 'opened' ? receivedForOpening(data.receptions, products, now, tz) : []
+  const received = kind === 'opened' ? receivedForOpening(data.receptions, products, now, tz, data.openingLabels) : []
 
   const productCard = (p: Product) => (
     <li key={p.id}>
